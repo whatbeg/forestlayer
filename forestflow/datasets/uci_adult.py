@@ -15,8 +15,8 @@ from .dataset import get_data_base
 
 
 def load_data(data_path="adult.data", features="features", one_hot=True):
-    data_path = os.path.join(get_data_base(), data_path)
-    features = os.path.join(get_data_base(), features)
+    data_path = os.path.join(get_data_base(), "uci_adult", data_path)
+    features = os.path.join(get_data_base(), "uci_adult", features)
     feature_parsers = []
     with open(features) as f:
         for row in f.readlines():
@@ -26,7 +26,7 @@ def load_data(data_path="adult.data", features="features", one_hot=True):
         rows = [row.strip().split(',') for row in f.readlines() if len(row.strip()) > 0 and not row.startswith("|")]
         n_train = len(rows)
         if one_hot:
-            train_dim = np.sum([f_parser.get_featuredim for f_parser in feature_parsers])
+            train_dim = np.sum([f_parser.get_featuredim() for f_parser in feature_parsers])
             X = np.zeros((n_train, train_dim), dtype=np.float32)
         else:
             X = np.zeros((n_train, 1), dtype=np.float32)
@@ -36,11 +36,11 @@ def load_data(data_path="adult.data", features="features", one_hot=True):
             f_offset = 0
             for j in range(14):
                 if one_hot:
-                    f_dim = feature_parsers[j].get_fdim()
+                    f_dim = feature_parsers[j].get_featuredim()
                     X[i, f_offset:f_offset + f_dim] = feature_parsers[j].get_data(row[j].strip())
                     f_offset += f_dim
                 else:
-                    X[i, j] = feature_parsers[j].get_float(row[j].strip())
+                    X[i, j] = feature_parsers[j].get_continuous(row[j].strip())
             y[i] = 0 if row[-1].strip().startswith("<=50K") else 1
         return X, y
 

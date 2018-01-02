@@ -9,13 +9,21 @@ UCI_ADULT Example.
 
 from __future__ import print_function
 from forestflow.datasets import uci_adult
-from forestflow.layers import Input, Graph
-from forestflow.utils.metrics import accuracy_pb
+import ray
 import time
 
+ray.init()
+
+
+@ray.remote(num_cpus=2)
+def load_uci_data(filename):
+    return uci_adult.load_data(filename)
+
+
 start_time = time.time()
-(x_train, y_train) = uci_adult.load_data("adult.data")
-(x_test, y_test) = uci_adult.load_data("adult.test")
+
+data = [load_uci_data.remote(f) for f in ("adult_4x.data", "adult_4x.test")]
+(x_train, y_train), (x_test, y_test) = ray.get(data)
 
 print(x_train.shape[0], 'train samples')
 print(x_test.shape[0], 'test samples')
@@ -23,14 +31,3 @@ print(x_train.shape[1], 'features')
 
 end_time = time.time()
 print('time cost: {}'.format(end_time - start_time))
-
-x = Input(x_train.shape, name='input')
-print(x)
-
-model = Graph()
-model.add(x)
-model.build()
-model.fit(x_train, y_train)
-pred = model.predict(x_test)
-eval_ans = model.evaluate(accuracy_pb, x_test, y_test)
-print(eval_ans)

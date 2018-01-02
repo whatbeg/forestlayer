@@ -90,6 +90,8 @@ class Graph(object):
         inputs = self.predict_proba(inputs)
         for i, inp in enumerate(inputs):
             inputs[i] = pb2pred(inp)
+        if len(inputs) == 1:
+            return inputs[0]
         return inputs
 
     def predict_proba(self, inputs):
@@ -106,9 +108,12 @@ class Graph(object):
         return inputs
 
     def evaluate(self, eval_metrics, inputs, labels):
+        # make eval_metrics iterative
+        if isinstance(eval_metrics, (list, tuple)) is not True:
+            eval_metrics = [eval_metrics]
         metric_result = []
         for metric in eval_metrics:
-            res = metric(self.predict(inputs), labels)
+            res = metric(labels, self.predict(inputs))
             metric_result.append(res)
         return metric_result
 

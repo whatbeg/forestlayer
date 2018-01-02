@@ -18,7 +18,7 @@ class FeatureParser(object):
             self.feature_dim = 1
         else:
             self.feature_type = "categorical"
-            feature_names = [f.strip() for f in feature_spec]
+            feature_names = [f.strip() for f in feature_spec.split(',')]
             feature_names = ["?"] + feature_names
             self.name2id = dict(zip(feature_names, range(len(feature_names))))
             self.feature_dim = len(self.name2id)
@@ -29,7 +29,7 @@ class FeatureParser(object):
             return float(f_data)
         return float(self.name2id[f_data])
 
-    def get_categorical(self, f_data):
+    def get_data(self, f_data):
         f_data = f_data.strip()
         if self.feature_type == "continuous":
             return float(f_data)

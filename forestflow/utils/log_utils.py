@@ -3,11 +3,12 @@ import os
 import os.path as osp
 import time
 import logging
+from utils import get_log_base
 
 logging.basicConfig(format="[ %(asctime)s][%(module)s.%(funcName)s] %(message)s")
 
 DEFAULT_LEVEL = logging.INFO
-DEFAULT_LOGGING_DIR = osp.join("logs", "forestflow")
+DEFAULT_LOGGING_DIR = osp.join(get_log_base(), "forestflow")
 fh = None
 
 
