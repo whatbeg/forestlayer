@@ -99,7 +99,7 @@ class Pooling(object):
             self.name = "pool/" + "{}x{}".format(win_x, win_y)
 
     def fit_transform(self, X):
-        LOGGER.info("Multi-grain Scan pooling [{}] is running...".format(self.name))
+        # LOGGER.info("Multi-grain Scan pooling [{}] is running...".format(self.name))
         return self._transform(X)
 
     def _transform(self, X):
@@ -121,7 +121,7 @@ class Pooling(object):
                     else:
                         raise ValueError('Unknown pool strategy!')
 
-        LOGGER.info("[{} Pooled shape {}]".format(self.name, X_pool.shape))
+        # LOGGER.info("[{} Pooled {} to shape {}]".format(self.name, X.shape, X_pool.shape))
         return X_pool
 
 

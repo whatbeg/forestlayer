@@ -131,6 +131,8 @@ class KFoldWrapper(object):
         return y_proba_train, y_probas_test
 
     def transform(self, test_sets):
+        if test_sets is None or test_sets == []:
+            return []
         y_probas = []
         for k, est in enumerate(self.fit_estimators):
             for vi, (prefix, X_test, y_test) in enumerate(test_sets):

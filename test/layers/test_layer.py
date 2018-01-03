@@ -20,8 +20,11 @@ from keras.datasets import mnist
 X = np.reshape(x_train, (60000, -1, 28, 28))
 X = X[:200, :, :, :]
 y_train = y_train[:200]
+X_test = np.reshape(x_test[:100], (100, -1, 28, 28))
+y_test = y_test[:100]
 
 print('X: ', X.shape, 'y: ', y_train.shape)
+print('X_test: ', X_test.shape, 'y: ', y_test.shape)
 
 windows = [Window(7, 7, 2, 2, 0, 0), Window(11, 11, 2, 2, 0, 0)]
 
@@ -44,19 +47,21 @@ mgs = MultiGrainScanLayer(input_shape=X.shape,
                           est_for_windows=est_for_windows,
                           n_class=10)
 
-res = mgs.fit_transform(X, y_train)
+res_train, res_test = mgs.fit_transform(X, y_train, X_test, y_test)
 
-# print('mgs result: ', )
-# for i, r in enumerate(res):
-#     print('mgs result {}: '.format(i))
+# print('mgs train result: ', )
+# for i, r in enumerate(res_train):
+#     print('mgs train result {}: '.format(i))
 #     for j in r:
 #         print(j.shape)
+# print(len(res_train), len(res_train[0]))
+# print(len(res_test), len(res_test[0]))
 
 pools = [[Pooling(2, 2, "max"), Pooling(2, 2, "max")], [Pooling(2, 2, "max"), Pooling(2, 2, "max")]]
 
 poolayer = PoolingLayer(pools=pools)
 
-res = poolayer.fit_transform(res)
+res_train, res_test = poolayer.fit_transform(res_train, None, res_test, None)
 
 # for i, r in enumerate(res):
 #     print('mgs result {}: '.format(i))
@@ -65,11 +70,13 @@ res = poolayer.fit_transform(res)
 
 concat_layer = ConcatLayer()
 
-res = concat_layer.fit_transform(res)
+res_train, res_test = concat_layer.fit_transform(res_train, None, res_test)
 
-# for i, r in enumerate(res):
-#     print('mgs result {}: '.format(i))
+# for i, r in enumerate(res_train):
+#     print('mgs train result {}: '.format(i))
 #     print(r.shape)
-
-
+#
+# for i, r in enumerate(res_test):
+#     print('mgs test result {}: '.format(i))
+#     print(r.shape)
 

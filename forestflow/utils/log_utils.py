@@ -59,6 +59,14 @@ def list2str(lis, dim):
             for j in l:
                 result += '{} '.format(j.shape)
             result += '], '
+        elif dim == 3:
+            result += '['
+            for j in l:
+                result += '['
+                for k in j:
+                    result += '{} '.format(k.shape)
+                result += '], '
+            result += '], '
         else:
             raise NotImplementedError
     result += ']'

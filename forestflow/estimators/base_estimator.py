@@ -22,7 +22,7 @@ class BaseEstimator(object):
         return self.est_class(**self.est_args)
 
     def fit(self, X, y, cache_dir=None):
-        LOGGER.info('X_train.shape={}, y_train.shape={}'.format(X.shape, y.shape))
+        # LOGGER.info('X_train.shape={}, y_train.shape={}'.format(X.shape, y.shape))
         cache_path = self._cache_path(cache_dir=cache_dir)
         # cache it
         if is_path_exists(cache_path):
