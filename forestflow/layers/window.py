@@ -3,6 +3,10 @@
 multi-grain scan windows.
 """
 
+# Copyright 2017 Authors NJU PASA BigData Laboratory.
+# Authors: Qiu Hu <huqiu00#163.com>
+# License: Apache-2.0
+
 import numpy as np
 from joblib import Parallel, delayed
 from ..utils.log_utils import get_logger
@@ -41,33 +45,31 @@ def get_windows(X, win_x, win_y, stride_x=1, stride_y=1, pad_x=0, pad_y=0):
     assert len(X.shape) == 4
     n, c, h, w = X.shape
     if pad_y > 0:
-        X = np.concatenate(( X, np.zeros((n, c, pad_y, w),dtype=X.dtype) ), axis=2)
-        X = np.concatenate(( np.zeros((n, c, pad_y, w),dtype=X.dtype), X ), axis=2)
+        X = np.concatenate((X, np.zeros((n, c, pad_y, w), dtype=X.dtype)), axis=2)
+        X = np.concatenate((np.zeros((n, c, pad_y, w), dtype=X.dtype), X), axis=2)
     n, c, h, w = X.shape
     if pad_x > 0:
-        X = np.concatenate(( X, np.zeros((n, c, h, pad_x),dtype=X.dtype) ), axis=3)
-        X = np.concatenate(( np.zeros((n, c, h, pad_x),dtype=X.dtype), X ), axis=3)
+        X = np.concatenate((X, np.zeros((n, c, h, pad_x), dtype=X.dtype)), axis=3)
+        X = np.concatenate((np.zeros((n, c, h, pad_x), dtype=X.dtype), X), axis=3)
     n, c, h, w = X.shape
     nc = win_y * win_x * c
     nh = (h - win_y) / stride_y + 1
     nw = (w - win_x) / stride_x + 1
-    X_win = np.empty(( nc, n * nh * nw ), dtype=np.float32)
+    X_win = np.empty((nc, n * nh * nw), dtype=np.float32)
     LOGGER.info("get_windows_start: X.shape={}, X_win.shape={}, nw={}, nh={}, channel={},"
                 " win = ({} x {}), stride = ({} x {})".format(
         X.shape, X_win.shape, nw, nh, c, win_x, win_y, stride_x, stride_y))
     Parallel(n_jobs=-1, backend="threading", verbose=0)(
             delayed(get_windows_channel)(X, X_win, des_id, nw, nh, win_x, win_y, stride_x, stride_y)
             for des_id in range(c * win_x * win_y))
-    LOGGER.info("get_windows_end")
     X_win = X_win.transpose((1, 0))
     X_win = X_win.reshape((n, nh, nw, nc))
+    LOGGER.info("get_windows_end: X.shape={}, X_win.shape={}".format(X.shape, X_win.shape))
     return X_win
 
 
 class Window(object):
-    def __init__(self, X, win_x=None, win_y=None, stride_x=1, stride_y=1, pad_x=0, pad_y=0, name=None):
-        assert X is not None
-        self.X = X
+    def __init__(self, win_x=None, win_y=None, stride_x=1, stride_y=1, pad_x=0, pad_y=0, name=None):
         assert win_x is not None and win_y is not None, "win_x, win_y should not be None!"
         self.win_x = win_x
         self.win_y = win_y
@@ -80,9 +82,9 @@ class Window(object):
         else:
             self.name = "win/" + "{}x{}".format(win_x, win_y)
 
-    def fit_transform(self):
+    def fit_transform(self, X):
         LOGGER.info("Multi-grain Scan window [{}] is fitting...".format(self.name))
-        return get_windows(self.X, self.win_x, self.win_y, self.stride_x, self.stride_y, self.pad_x, self.pad_y)
+        return get_windows(X, self.win_x, self.win_y, self.stride_x, self.stride_y, self.pad_x, self.pad_y)
 
 
 class Pooling(object):

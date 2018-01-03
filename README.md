@@ -18,6 +18,9 @@ You can refer to [Deep Forest Paper](https://arxiv.org/abs/1702.08835), [Ray Pro
 
 ## Citation
 
+If you find it is useful, please cite our paper in your project and paper.
+
+
 ## License
 
 ForestFlow is released under the Apache 2.0 license.

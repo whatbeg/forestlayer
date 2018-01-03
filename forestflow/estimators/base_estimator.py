@@ -11,15 +11,15 @@ LOGGER = get_logger('estimators.base_estimator')
 
 
 class BaseEstimator(object):
-    def __init__(self, est_class=None, name=None, **est_args):
+    def __init__(self, est_class=None, name=None, est_args=None):
         self.name = name
         self.est_class = est_class
-        self.est_args = dict(est_args)
+        self.est_args = est_args if est_args is not None else {}
         self.cache_suffix = '.pkl'
         self.est = None
 
     def _init_estimators(self):
-        return self.est_class(self.est_args)
+        return self.est_class(**self.est_args)
 
     def fit(self, X, y, cache_dir=None):
         LOGGER.info('X_train.shape={}, y_train.shape={}'.format(X.shape, y.shape))
@@ -109,6 +109,7 @@ class BaseEstimator(object):
     def _predict_proba(self, est, X):
         return est.predict_proba(X)
 
-
+    def copy(self):
+        return BaseEstimator(est_class=self.est_class, **self.est_args)
 
 

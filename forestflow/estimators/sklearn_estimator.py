@@ -32,27 +32,30 @@ class SKlearnBaseEstimator(BaseEstimator):
     def _load_model_from_disk(self, cache_path):
         return joblib.load(cache_path)
 
+    def copy(self):
+        return SKlearnBaseEstimator(est_class=self.est_class, **self.est_args)
+
 
 class RFClassifier(SKlearnBaseEstimator):
-    def __init__(self, name, **est_args):
+    def __init__(self, name, kwargs):
         from sklearn.ensemble import RandomForestClassifier
-        super(RFClassifier, self).__init__(RandomForestClassifier, name, **est_args)
+        super(RFClassifier, self).__init__(RandomForestClassifier, name, kwargs)
 
     def _default_predict_batch_size(self, est, X):
         return forest_predict_batch_size(est, X)
 
 
 class CompletelyRFClassifier(SKlearnBaseEstimator):
-    def __init__(self, name, **est_args):
+    def __init__(self, name, kwargs):
         from sklearn.ensemble import ExtraTreesClassifier
-        super(CompletelyRFClassifier, self).__init__(ExtraTreesClassifier, name, **est_args)
+        super(CompletelyRFClassifier, self).__init__(ExtraTreesClassifier, name, kwargs)
 
     def _default_predict_batch_size(self, est, X):
         return forest_predict_batch_size(est, X)
 
 
 class GBDTClassifier(SKlearnBaseEstimator):
-    def __init__(self, name, **est_args):
+    def __init__(self, name, kwargs):
         from sklearn.ensemble import GradientBoostingClassifier
-        super(GBDTClassifier, self).__init__(GradientBoostingClassifier, name, **est_args)
+        super(GBDTClassifier, self).__init__(GradientBoostingClassifier, name, kwargs)
 

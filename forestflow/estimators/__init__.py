@@ -29,8 +29,10 @@ def get_estimator(name, est_type, est_args):
     return est_class(name, est_args)
 
 
-def get_estimator_kfold(name, n_folds, est_type, est_args, seed=None):
+def get_estimator_kfold(name, n_folds, est_type, eval_metrics=None, seed=None, est_args=None):
     if est_type == "XGBoostClassifier":
-        return XGBoostClassifier(name, n_folds, seed=seed, **est_args)
+        return XGBoostClassifier(name, n_folds, seed=seed, est_args=est_args)
     est_class = est_class_from_type(est_type)
-    return KFoldWrapper(name, n_folds, est_class, seed=seed, eval_metrics=[('accuracy', accuracy_pb)], **est_args)
+    if eval_metrics is None:
+        eval_metrics = [('accuracy', accuracy_pb)]
+    return KFoldWrapper(name, n_folds, est_class, seed=seed, eval_metrics=eval_metrics, est_args=est_args)

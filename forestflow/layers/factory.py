@@ -7,7 +7,7 @@ Factory methods to Layers.
 # Authors: Qiu Hu <huqiu00#163.com>
 # License: Apache-2.0
 
-from .core import *
+from .layer import *
 
 
 def Input(shape=None, input_tensors=None, name=None, dtype=None):

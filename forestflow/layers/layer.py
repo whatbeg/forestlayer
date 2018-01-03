@@ -9,7 +9,7 @@ Base layers definition
 
 import random as rnd
 import numpy as np
-from ..utils.log_utils import get_logger
+from ..utils.log_utils import get_logger, list2str
 from .. import backend as F
 
 LOGGER = get_logger('layer')
@@ -130,7 +130,7 @@ class InputLayer(Layer):
 
 class MultiGrainScanLayer(Layer):
     def __init__(self, input_shape=None, batch_size=None, dtype=None, name=None,
-                 windows=None, est_for_windows=None, pools=None, n_class=None):
+                 windows=None, est_for_windows=None, n_class=None):
         if not name:
             prefix = 'multi_grain_scan'
             name = prefix + '_' + str(id(self))
@@ -139,8 +139,6 @@ class MultiGrainScanLayer(Layer):
         self.batch_size = batch_size
         self.windows = windows  # [Win, Win, Win, ...]
         self.est_for_windows = est_for_windows  # [[est1, est2], [est1, est2], [est1, est2], ...]
-        # [[pool/7x7/est1, pool/7x7/est2], [pool/11x11/est1, pool/11x11/est1], [pool/13x13/est1, pool/13x13/est1], ...]
-        self.poolings = pools
         assert n_class is not None
         self.n_class = n_class
 
@@ -150,40 +148,44 @@ class MultiGrainScanLayer(Layer):
     def __call__(self, X, **kwargs):
         pass
 
-    def scan(self, window):
-        return window.fit_transform()
+    def scan(self, window, X):
+        return window.fit_transform(X)
 
     def fit(self, X, y):
         pass
 
-    def fit_transform(self, x_train, y_train, x_test=None, y_test=None):
+    def fit_transform(self, inputs, labels, test_sets=None):
+        if not isinstance(inputs, (list, tuple)):
+            inputs = [inputs]
+        if not isinstance(labels, (list, tuple)):
+            labels = [labels]
+        if len(inputs) != 1 or len(labels) != 1:
+            raise ValueError("Multi grain scan Layer only supports exactly one input now!")
         X_wins = []
         for win in self.windows:
-            X_wins.append(self.scan(win))
-        LOGGER.info('X_wins: {}'.format(win.shape for win in X_wins))
+            X_wins.append(self.scan(win, inputs[0]))
+        LOGGER.info('X_wins: {}'.format([win.shape for win in X_wins]))
         X_win_ests = []
         for wi, ests_for_win in enumerate(self.est_for_windows):
             if not isinstance(ests_for_win, (list, tuple)):
                 ests_for_win = [ests_for_win]
             ret_ests_for_win = []
+            # X_wins[wi] = (60000, 11, 11, 49)
+            _, nh, nw, _ = X_wins[wi].shape
+            X_wins[wi] = X_wins[wi].reshape((X_wins[wi].shape[0], -1, X_wins[wi].shape[-1]))  # (60000, 121, 49)
+            y_win = labels[0][:, np.newaxis].repeat(X_wins[wi].shape[1], axis=1)
             for est in ests_for_win:
-                # X_wins[wi] = (60000, 11, 11, 49)
-                _, nh, nw, _ = X_wins[wi].shape
-                X_wins[wi] = X_wins[wi].reshape((X_wins[wi][0], -1, X_wins[wi][-1]))  # (60000, 121, 49)
-                y_win = y_train[:, np.newaxis].repeat(X_wins[wi].shape[1], axis=1)
-                y_proba = est.fit_transform(X_wins[wi], y_win, y_win[:, 0])  # (60000, 121, 10)
-                y_proba = y_proba.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))  # (60000, 10, 11, 11)
-                ret_ests_for_win.append(y_proba)
+                # (60000, 121, 10)
+                y_proba_train, y_probas_test = est.fit_transform(X_wins[wi], y_win, y_win[:, 0], test_sets)
+                y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                for i in range(len(y_probas_test)):
+                    # (60000, 10, 11, 11)
+                    y_probas_test[i] = y_probas_test[i].reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                ret_ests_for_win.append(y_proba_train)
             X_win_ests.append(ret_ests_for_win)
         if len(X_win_ests) == 0:
             return X_wins
-        LOGGER.info('X_win_ests: {}'.format([j.shape for j in sub_res] for sub_res in X_win_ests))
-        for pi, pool in enumerate(self.poolings):
-            if not isinstance(pool, (list, tuple)):
-                pool = [pool]
-            for pj, pl in enumerate(pool):
-                X_win_ests[pi][pj] = pl.fit_transform(X_win_ests[pi][pj])
-        LOGGER.info('X_win_ests pooled: {}'.format([j.shape for j in sub_res] for sub_res in X_win_ests))
+        LOGGER.info('X_win_ests: {}'.format(list2str(X_win_ests, 2)))
         return X_win_ests
 
     def transform(self, X, y=None):
@@ -197,6 +199,87 @@ class MultiGrainScanLayer(Layer):
 
     def __str__(self):
         return self.__class__.__name__
+
+
+class PoolingLayer(Layer):
+    def __init__(self, input_shape=None, batch_size=None, dtype=None, name=None, pools=None):
+        super(PoolingLayer, self).__init__(input_shape=input_shape, batch_size=batch_size, dtype=dtype, name=name)
+        # [[pool/7x7/est1, pool/7x7/est2], [pool/11x11/est1, pool/11x11/est1], [pool/13x13/est1, pool/13x13/est1], ...]
+        self.pools = pools
+
+    def call(self, X, **kwargs):
+        pass
+
+    def __call__(self, *args, **kwargs):
+        pass
+
+    def transform(self, inputs, labels=None):
+        pass
+
+    def evaluate(self, inputs, labels):
+        pass
+
+    def fit_transform(self, inputs, labels=None):
+        # inputs shape: [[(60000, 10, 11, 11), (60000, 10, 11, 11)], [.., ..], ...]
+        if len(self.pools) != len(inputs):
+            raise ValueError('len(pools) does not equal to len(inputs), you must set right pools!')
+        for pi, pool in enumerate(self.pools):
+            if not isinstance(pool, (list, tuple)):
+                pool = [pool]
+            if len(pool) != len(inputs[pi]):
+                raise ValueError('len(pools[{}]) does not equal to'
+                                 ' len(inputs[{}]), you must set right pools!'.format(pi, pi))
+            for pj, pl in enumerate(pool):
+                inputs[pi][pj] = pl.fit_transform(inputs[pi][pj])
+        LOGGER.info('X_win_ests pooled: {}'.format(list2str(inputs, 2)))
+        return inputs
+
+    def predict(self, inputs):
+        pass
+
+    def fit(self, inputs, labels):
+        pass
+
+
+class ConcatLayer(Layer):
+    def __init__(self, input_shape=None, batch_size=None, dtype=None, name=None, axis=-1):
+        super(ConcatLayer, self).__init__(input_shape=input_shape, batch_size=batch_size, dtype=dtype, name=name)
+        # [[pool/7x7/est1, pool/7x7/est2], [pool/11x11/est1, pool/11x11/est1], [pool/13x13/est1, pool/13x13/est1], ...]
+        # to
+        # [Concat(axis=axis), Concat(axis=axis), Concat(axis=axis), ...]
+        self.axis = axis
+
+    def call(self, X, **kwargs):
+        pass
+
+    def __call__(self, *args, **kwargs):
+        pass
+
+    def transform(self, inputs, labels=None):
+        pass
+
+    def evaluate(self, inputs, labels=None):
+        pass
+
+    def fit_transform(self, inputs, labels=None):
+        # inputs shape: [[(60000, 10, 6, 6), (60000, 10, 6, 6)], [.., ..], ...]
+        concat_data = []
+        for bottoms in inputs:
+            if self.axis == -1:
+                for i, bottom in enumerate(bottoms):
+                    bottoms[i] = bottom.reshape((bottom.shape[0], -1))
+                concat_res = np.concatenate(bottoms, 1)
+            else:
+                concat_res = np.concatenate(bottoms, self.axis)
+            concat_data.append(concat_res)
+        LOGGER.info("concat data shape: {}".format(list2str(concat_data, 1)))
+        return concat_data
+
+    def predict(self, inputs):
+        pass
+
+    def fit(self, inputs, labels=None):
+        pass
 
 
 

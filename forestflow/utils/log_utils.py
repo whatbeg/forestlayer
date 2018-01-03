@@ -47,3 +47,19 @@ def get_logger(name="forestflow", level=None):
     if fh is not None:
         logger.addHandler(fh)
     return logger
+
+
+def list2str(lis, dim):
+    result = "["
+    for l in lis:
+        if dim == 1:
+            result += '{},'.format(l.shape)
+        elif dim == 2:
+            result += '['
+            for j in l:
+                result += '{} '.format(j.shape)
+            result += '], '
+        else:
+            raise NotImplementedError
+    result += ']'
+    return result

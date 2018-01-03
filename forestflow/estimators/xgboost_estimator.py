@@ -14,11 +14,11 @@ LOGGER = get_logger('estimators.xgboost_estimator')
 
 
 class XGBoostClassifier(object):
-    def __init__(self, name, n_folds, seed, **est_args):
+    def __init__(self, name, n_folds, seed, est_args):
         self.name = name
         self.n_folds = n_folds
         self.seed = seed
-        self.est_args = dict(est_args)
+        self.est_args = est_args if est_args is not None else {}
         self.fit_estimators = [None for _ in range(n_folds)]
 
     # TODO: Complete XGBoostClassifier
