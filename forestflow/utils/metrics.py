@@ -1,4 +1,8 @@
 # -*- coding:utf-8 -*-
+"""
+Metrics.
+"""
+
 import numpy as np
 from sklearn import metrics
 

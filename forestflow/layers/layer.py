@@ -156,7 +156,7 @@ class MultiGrainScanLayer(Layer):
     def fit(self, X, y):
         pass
 
-    def fit_transform(self, X, y):
+    def fit_transform(self, x_train, y_train, x_test=None, y_test=None):
         X_wins = []
         for win in self.windows:
             X_wins.append(self.scan(win))
@@ -170,8 +170,8 @@ class MultiGrainScanLayer(Layer):
                 # X_wins[wi] = (60000, 11, 11, 49)
                 _, nh, nw, _ = X_wins[wi].shape
                 X_wins[wi] = X_wins[wi].reshape((X_wins[wi][0], -1, X_wins[wi][-1]))  # (60000, 121, 49)
-                y_win = y[:, np.newaxis].repeat(X_wins[wi].shape[1], axis=1)
-                y_proba = est.fit_transform(X_wins[wi], y_win, y_win)  # (60000, 121, 10)
+                y_win = y_train[:, np.newaxis].repeat(X_wins[wi].shape[1], axis=1)
+                y_proba = est.fit_transform(X_wins[wi], y_win, y_win[:, 0])  # (60000, 121, 10)
                 y_proba = y_proba.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))  # (60000, 10, 11, 11)
                 ret_ests_for_win.append(y_proba)
             X_win_ests.append(ret_ests_for_win)
