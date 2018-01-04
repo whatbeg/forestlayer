@@ -8,7 +8,6 @@ Base layers definition
 # License: Apache-2.0
 
 from __future__ import print_function
-import random as rnd
 import numpy as np
 import copy
 from ..utils.log_utils import get_logger, list2str
@@ -418,6 +417,71 @@ class AutoCascadeLayer(Layer):
 
     def evaluate(self, inputs, labels):
         pass
+
+
+class CascadeLayer(Layer):
+    def __init__(self, est_config, kwargs):
+        self.est_config = est_config
+        allowed_args = {'n_classes',
+                        'data_save_dir',
+                        'name',
+                        'input_shape',
+                        'output_shape',
+                        'batch_size',
+                        'dtype',
+                        }
+
+        for kwarg in kwargs:
+            if kwarg not in allowed_args:
+                LOGGER.warn("Unidentified argument {}, ignore it!".format(kwarg))
+        name = kwargs.get('name')
+        dtype = kwargs.get('dtype')
+        super(CascadeLayer, self).__init__(name=name, dtype=dtype)
+        self.n_classes = kwargs.get('n_classes')
+        self.data_save_dir = kwargs.get('data_save_dir')
+
+    def call(self, inputs, **kwargs):
+        return inputs
+
+    def __call__(self, inputs, **kwargs):
+        self.call(inputs, **kwargs)
+
+    def fit(self, inputs, labels):
+        raise NotImplementedError
+
+    def fit_transform(self, x_train, y_train, x_test=None, y_test=None):
+        """
+        Fit and Transform datasets, return two list: train_outputs, test_outputs
+        :param x_train: train datasets
+        :param y_train: train labels
+        :param x_test: test datasets
+        :param y_test: test labels
+        :return: train_output, test_output
+        """
+        if isinstance(x_train, (list, tuple)):
+            x_train = None if len(x_train) == 0 else x_train[0]
+        if isinstance(x_test, (list, tuple)):
+            x_test = None if len(x_test) == 0 else x_test[0]
+        LOGGER.info('X_train.shape={},y_train.shape={} / X_test.shape={},y_test.shape={}'.format(
+            x_train.shape, y_train.shape, x_test.shape, y_test.shape
+        ))
+        n_trains = x_train.shape[0]
+        n_tests = x_test.shape[0]
+        n_classes = self.n_classes
+        if n_classes is None:
+            n_classes = np.unique(y_train)
+
+    def _init_estimators(self, ):
+        pass
+
+    def transform(self, inputs, labels=None):
+        raise NotImplementedError
+
+    def predict(self, inputs):
+        raise NotImplementedError
+
+    def evaluate(self, inputs, labels):
+        raise NotImplementedError
 
 
 def _to_snake_case(name):

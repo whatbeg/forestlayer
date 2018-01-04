@@ -9,7 +9,7 @@ Test Suites of layers.window.
 
 from __future__ import print_function
 import numpy as np
-from forestflow.layers.window import Window, Pooling
+from forestlayer.layers.window import Window, Pooling
 from keras.datasets import mnist
 
 

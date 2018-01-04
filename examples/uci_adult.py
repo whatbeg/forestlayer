@@ -8,9 +8,9 @@ UCI_ADULT Example.
 # License: Apache-2.0
 
 from __future__ import print_function
-from forestflow.datasets import uci_adult
-from forestflow.layers import Input, Graph
-from forestflow.utils.metrics import accuracy_pb
+from forestlayer.datasets import uci_adult
+from forestlayer.layers import Input, Graph
+from forestlayer.utils.metrics import accuracy_pb
 import time
 
 start_time = time.time()

@@ -9,7 +9,7 @@ UCI_ADULT dataset loading.
 
 from keras.utils.data_utils import get_file
 import os
-from forestflow.preprocessing import FeatureParser
+from forestlayer.preprocessing import FeatureParser
 import numpy as np
 from .dataset import get_data_base
 

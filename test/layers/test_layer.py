@@ -9,9 +9,9 @@ Test Suites of layers.layer.
 
 from __future__ import print_function
 import numpy as np
-from forestflow.layers.window import Window, Pooling
-from forestflow.layers.layer import MultiGrainScanLayer, PoolingLayer, ConcatLayer
-from forestflow.estimators import get_estimator_kfold
+from forestlayer.layers.window import Window, Pooling
+from forestlayer.layers.layer import MultiGrainScanLayer, PoolingLayer, ConcatLayer
+from forestlayer.estimators import get_estimator_kfold
 from keras.datasets import mnist
 
 

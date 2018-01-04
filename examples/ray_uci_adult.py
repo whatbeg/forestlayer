@@ -8,7 +8,7 @@ UCI_ADULT Example.
 # License: Apache-2.0
 
 from __future__ import print_function
-from forestflow.datasets import uci_adult
+from forestlayer.datasets import uci_adult
 import ray
 import time
 

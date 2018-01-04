@@ -9,8 +9,8 @@ MNIST Example.
 
 from __future__ import print_function
 
-from forestflow.layers import Input
-from forestflow.layers import Graph
+from forestlayer.layers import Input
+from forestlayer.layers import Graph
 from keras.datasets import mnist
 
 
