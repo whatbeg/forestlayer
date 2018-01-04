@@ -1,6 +1,6 @@
 <a href="https://github.com/whatbeg/forestflow">
 <div align="center">
-	<img src="http://7xsl28.com1.z0.glb.clouddn.com/forestlayer.jpg" width="20%" height="12%"/>
+	<img src="http://7xsl28.com1.z0.glb.clouddn.com/forestlayer.jpg" width="30%" height="18%"/>
 </div>
 </a>
 
