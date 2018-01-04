@@ -119,7 +119,7 @@ class KFoldWrapper(object):
                 else:
                     y_probas_test[vi] += y_proba
         if inverse and self.n_folds > 1:
-            y_proba_train = (self.n_folds - 1)
+            y_proba_train /= (self.n_folds - 1)
         for y_proba in y_probas_test:
             y_proba /= self.n_folds
 

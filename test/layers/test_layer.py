@@ -10,8 +10,9 @@ Test Suites of layers.layer.
 from __future__ import print_function
 import numpy as np
 from forestlayer.layers.window import Window, Pooling
-from forestlayer.layers.layer import MultiGrainScanLayer, PoolingLayer, ConcatLayer
+from forestlayer.layers.layer import MultiGrainScanLayer, PoolingLayer, ConcatLayer, CascadeLayer
 from forestlayer.estimators import get_estimator_kfold
+from forestlayer.utils.storage_utils import get_data_save_base
 from keras.datasets import mnist
 
 
@@ -35,8 +36,8 @@ args = {
     'min_samples_leaf': 10
 }
 
-rf1 = get_estimator_kfold('rf1', 3, 'RandomForestClassifier', est_args=args)
-rf2 = get_estimator_kfold('rf2', 3, 'CompletelyRandomForestClassifier', est_args=args)
+rf1 = get_estimator_kfold('rf1', 3, 'RF', est_args=args)
+rf2 = get_estimator_kfold('rf2', 3, 'CRF', est_args=args)
 
 est_for_windows = [[rf1, rf2], [rf1.copy(), rf2.copy()]]
 
@@ -80,3 +81,36 @@ res_train, res_test = concat_layer.fit_transform(res_train, None, res_test)
 #     print('mgs test result {}: '.format(i))
 #     print(r.shape)
 
+
+def get_est_args(est_type):
+    est_args = {
+        'est_type': est_type,
+        'n_folds': 3,
+        'n_estimators': 500,
+        'max_depth': 100,
+        'n_jobs': -1,
+        'min_samples_leaf': 10
+    }
+    return est_args
+
+
+est_configs = [
+    get_est_args('CRF'),
+    get_est_args('CRF'),
+    get_est_args('RF'),
+    get_est_args('RF')
+]
+
+kwargs = {
+    'n_classes': 10,
+    'data_save_dir': get_data_save_base() + 'cascade',
+    'layer_id': 1,
+    'keep_in_mem': True,
+    'dtype': np.float32,
+}
+
+cascade = CascadeLayer(est_configs=est_configs, kwargs=kwargs)
+
+res_train, res_test = cascade.fit_transform(res_train[0], y_train, res_test[0], y_test)
+
+print(res_train.shape, res_test.shape)

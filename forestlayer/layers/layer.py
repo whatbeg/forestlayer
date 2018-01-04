@@ -11,6 +11,8 @@ from __future__ import print_function
 import numpy as np
 import copy
 from ..utils.log_utils import get_logger, list2str
+from ..estimators import get_estimator_kfold
+from ..utils.metrics import accuracy_pb, auc
 from .. import backend as F
 
 LOGGER = get_logger('layer')
@@ -350,14 +352,14 @@ class ConcatLayer(Layer):
         pass
 
 
-class AutoCascadeLayer(Layer):
-    def __init__(self, estimators, kwargs):
+class AutoGrowingCascadeLayer(Layer):
+    def __init__(self, est_configs, kwargs):
         """
         early_stopping_rounds: int
             when not None , means when the accuracy does not increase in
             early_stopping_rounds, the cascade level will stop automatically growing
-        estimators: estimator
-            identify the estimator to construct this layer
+        est_configs: list of estimator arguments
+            identify the estimator configuration to construct at this layer
         max_layers: int
             maximum number of cascade layers allowed for experiments,
             0 means do NOT use Early Stopping to automatically find the layer number
@@ -375,7 +377,7 @@ class AutoCascadeLayer(Layer):
             each data_save_rounds save the intermediate results in data_save_dir
             if data_save_rounds = 0, then no savings for intermediate results
         """
-        self.estimators = estimators
+        self.est_configs = est_configs
         allowed_args = {'early_stop_rounds',
                         'max_layer',
                         'n_classes',
@@ -394,20 +396,46 @@ class AutoCascadeLayer(Layer):
                 LOGGER.warn("Unidentified argument {}, ignore it!".format(kwarg))
         name = kwargs.get('name')
         dtype = kwargs.get('dtype')
-        super(AutoCascadeLayer, self).__init__(name=name, dtype=dtype)
+        super(AutoGrowingCascadeLayer, self).__init__(name=name, dtype=dtype)
         self.name = name
         self.early_stop_rounds = kwargs.get('early_stop_rounds', 4)
         self.max_layers = kwargs.get('max_layers', 100)
         self.n_classes = kwargs.get('n_classes')
+        # if look_index_cycle is None, you need set look_index_cycle in fit / fit_transform
         self.look_index_cycle = kwargs.get('look_index_cycle')
         self.data_save_rounds = kwargs.get('data_save_rounds')
         self.data_save_dir = kwargs.get('data_save_dir')
+        self.layer_fit_estimators = []
+        self.n_layers = 0
 
     def fit(self, inputs, labels):
         pass
 
-    def fit_transform(self, x_trains, y_trains, x_tests=None, y_tests=None):
-        pass
+    def fit_transform(self, x_trains, y_train, x_tests=None, y_test=None):
+        """
+        NOTE: Only support ONE x_train and one x_test, so y_train is a single numpy array instead of list of it.
+        :param x_trains:
+        :param y_train:
+        :param x_tests:
+        :param y_test:
+        :return:
+        """
+        if not isinstance(x_trains, (list, tuple)):
+            x_trains = [x_trains]
+        if not isinstance(x_tests, (list, tuple)):
+            x_tests = [x_tests]
+        n_groups_train = len(x_trains)
+        n_groups_test = len(x_tests)
+        n_trains = len(y_train)
+        n_tests = len(y_test)
+        assert n_groups_train == n_groups_test, 'n_group_train must equal to n_group_test now! Sorry about that!'
+        if self.look_index_cycle is None:
+            self.look_index_cycle = [[i,] for i in range(n_groups_train)]
+        x_cur_train = np.zeros((n_trains, 0), dtype=np.float32)
+        x_cur_test = np.zeros((n_tests, 0), dtype=np.float32)
+
+        while True:
+            pass
 
     def predict(self, inputs):
         pass
@@ -418,13 +446,42 @@ class AutoCascadeLayer(Layer):
     def evaluate(self, inputs, labels):
         pass
 
+    @property
+    def num_layers(self):
+        return self.n_layers
+
 
 class CascadeLayer(Layer):
-    def __init__(self, est_config, kwargs):
-        self.est_config = est_config
+    def __init__(self, est_configs, kwargs):
+        """Cascade Layer
+
+        # Arguments:
+            name
+            est_configs
+            n_classes
+            layer_id
+            data_save_dir
+            metrics
+            seed
+            keep_in_mem
+        # Properties
+            eval_metrics
+            fit_estimators
+            train_avg_metric
+            test_avg_metric
+
+        # Raises
+            RuntimeError: if estimator.fit_transform returns None data
+            ValueError: if estimator.fit_transform returns wrong shape data
+        """
+        self.est_configs = est_configs
         allowed_args = {'n_classes',
                         'data_save_dir',
                         'name',
+                        'layer_id',
+                        'seed',
+                        'metrics',
+                        'keep_in_mem',
                         'input_shape',
                         'output_shape',
                         'batch_size',
@@ -434,11 +491,30 @@ class CascadeLayer(Layer):
         for kwarg in kwargs:
             if kwarg not in allowed_args:
                 LOGGER.warn("Unidentified argument {}, ignore it!".format(kwarg))
+        self.layer_id = kwargs.get('layer_id')
         name = kwargs.get('name')
+        if not name:
+            name = 'layer-{}'.format(self.layer_id)
         dtype = kwargs.get('dtype')
         super(CascadeLayer, self).__init__(name=name, dtype=dtype)
         self.n_classes = kwargs.get('n_classes')
         self.data_save_dir = kwargs.get('data_save_dir')
+        self.seed = kwargs.get('seed')
+        self.metrics = kwargs.get('metrics')
+        if self.metrics == 'predict':
+            self.eval_metrics = [('predict', accuracy_pb)]
+        elif self.metrics == 'auc':
+            self.eval_metrics = [('auc', auc)]
+        else:
+            self.eval_metrics = [('predict', accuracy_pb)]
+        self.keep_in_mem = kwargs.get('keep_in_mem')
+        if self.keep_in_mem is None:
+            self.keep_in_mem = True
+        # whether this layer the last layer of Auto-growing cascade layer
+        self.complete = False
+        self.fit_estimators = [None for _ in range(self.n_estimators)]
+        self.train_avg_metric = None
+        self.test_avg_metric = None
 
     def call(self, inputs, **kwargs):
         return inputs
@@ -452,6 +528,7 @@ class CascadeLayer(Layer):
     def fit_transform(self, x_train, y_train, x_test=None, y_test=None):
         """
         Fit and Transform datasets, return two list: train_outputs, test_outputs
+        NOTE: Only one train set and one test set.
         :param x_train: train datasets
         :param y_train: train labels
         :param x_test: test datasets
@@ -470,9 +547,70 @@ class CascadeLayer(Layer):
         n_classes = self.n_classes
         if n_classes is None:
             n_classes = np.unique(y_train)
+        x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=np.float32)
+        x_proba_test = np.zeros((n_tests, n_classes * self.n_estimators), dtype=np.float32)
+        eval_proba_train = np.zeros((n_trains, n_classes))
+        eval_proba_test = np.zeros((n_tests, n_classes))
+        # fit estimators, get probas
+        for ei, est_config in enumerate(self.est_configs):
+            est = self._init_estimators(self.layer_id, ei)
+            # fit and transform
+            y_proba_train, y_proba_test = est.fit_transform(x_train, y_train, y_train,
+                                                            test_sets=[('test', x_test, y_test)])
+            # if only one element on test_sets, return one test result like y_proba_train
+            if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
+                y_proba_test = y_proba_test[0]
+            # print(y_proba_train.shape, y_proba_test.shape)
+            if y_proba_train is None:
+                raise RuntimeError("layer - {} - estimator - {} fit FAILED!".format(self.layer_id, ei))
+            if y_proba_train.shape != (n_trains, n_classes):
+                raise ValueError('output probability shape incorrect!,'
+                                 ' should be {}, but {}'.format((n_trains, n_classes), y_proba_train.shape))
+            if y_proba_test.shape != (n_tests, n_classes):
+                raise ValueError('output probability shape incorrect!'
+                                 ' should be {}, but {}'.format((n_trains, n_classes), y_proba_train.shape))
+            self.fit_estimators = est
+            x_proba_train[:, ei*n_classes:ei*n_classes + n_classes] = y_proba_train
+            x_proba_test[:, ei*n_classes:ei*n_classes + n_classes] = y_proba_test
+            eval_proba_train += y_proba_train
+            eval_proba_test += y_proba_test
+        eval_proba_train /= self.n_estimators
+        eval_proba_test /= self.n_estimators
+        train_avg_acc = calc_accuracy(y_train, np.argmax(eval_proba_train, axis=1),
+                                      'layer - {} - [train] average'.format(self.layer_id))
+        test_avg_acc = calc_accuracy(y_test, np.argmax(eval_proba_test, axis=1),
+                                     'layer - {} - [test] average'.format(self.layer_id))
+        self.train_avg_metric = train_avg_acc
+        self.test_avg_metric = test_avg_acc
+        return x_proba_train, x_proba_test
 
-    def _init_estimators(self, ):
-        pass
+    @property
+    def n_estimators(self):
+        """
+        Number of estimators of this layer
+        :return:
+        """
+        return len(self.est_configs)
+
+    def _init_estimators(self, layer_id, est_id):
+        est_args = self.est_configs[est_id].copy()
+        est_name = 'layer - {} - estimator - {} - {}folds'.format(layer_id, est_id, est_args['n_folds'])
+        n_folds = int(est_args['n_folds'])
+        est_args.pop('n_folds')
+        est_type = est_args['est_type']
+        est_args.pop('est_type')
+        # seed
+        if self.seed is not None:
+            seed = (self.seed + hash("[estimator] {}".format(est_name))) % 1000000007
+        else:
+            seed = None
+        return get_estimator_kfold(name=est_name,
+                                   n_folds=n_folds,
+                                   est_type=est_type,
+                                   eval_metrics=self.eval_metrics,
+                                   seed=seed,
+                                   keep_in_mem=self.keep_in_mem,
+                                   est_args=est_args)
 
     def transform(self, inputs, labels=None):
         raise NotImplementedError
@@ -493,3 +631,16 @@ def _to_snake_case(name):
     if insecure[0] != '_':
         return insecure
     return 'private' + insecure
+
+
+def calc_accuracy(y_true, y_pred, name, prefix=""):
+    acc = 100. * np.sum(np.asarray(y_true) == y_pred) / len(y_true)
+    LOGGER.info('{}Accuracy({})={:.2f}%'.format(prefix, name, acc))
+    return acc
+
+
+def calc_auc(y_true, y_pred, name, prefix=""):
+    auc_res = auc(y_true, y_pred)
+    LOGGER.info('{}Accuracy({})={:.2f}%'.format(prefix, name, auc_res*100.0))
+    return auc_res
+

@@ -26,3 +26,7 @@ def check_dir(path):
     d = osp.abspath(osp.join(path, osp.pardir))
     if not osp.exists(d):
         os.makedirs(d)
+
+
+def get_data_save_base():
+    return osp.abspath(osp.join(__file__, osp.pardir, osp.pardir, osp.pardir, "data-save"))
