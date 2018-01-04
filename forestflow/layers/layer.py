@@ -39,6 +39,7 @@ class Layer(object):
     def __init__(self, **kwargs):
 
         allowed_kwargs = {'input_shape',
+                          'output_shape',
                           'batch_size',
                           'dtype',
                           'name'}
@@ -49,7 +50,7 @@ class Layer(object):
         name = kwargs.get('name')
         if not name:
             prefix = self.__class__.__name__
-            name = prefix + "_" + str(rnd.randint)
+            name = _to_snake_case(prefix) + "_" + str(id(self))
         self.name = name
 
         if 'input_shape' in kwargs:
@@ -350,6 +351,81 @@ class ConcatLayer(Layer):
         pass
 
 
+class AutoCascadeLayer(Layer):
+    def __init__(self, estimators, kwargs):
+        """
+        early_stopping_rounds: int
+            when not None , means when the accuracy does not increase in
+            early_stopping_rounds, the cascade level will stop automatically growing
+        estimators: estimator
+            identify the estimator to construct this layer
+        max_layers: int
+            maximum number of cascade layers allowed for experiments,
+            0 means do NOT use Early Stopping to automatically find the layer number
+        n_classes: int
+            Number of classes
+        look_index_cycle (2d list): default=None
+            specification for layer i, look for the array in look_index_cycle[i % len(look_index_cycle)]
+            default = None <=> [[i,] for i in range(n_groups)]
+            .e.g.
+                look_index_cycle = [[0,1],[2,3],[0,1,2,3]]
+                means layer 1 look for the grained 0,1; layer 2 look for grained 2,3;
+                layer 3 look for every grained, and layer 4 cycles back as layer 1
+        data_save_rounds: int [default=0]
+        data_save_dir: str [default=None]
+            each data_save_rounds save the intermediate results in data_save_dir
+            if data_save_rounds = 0, then no savings for intermediate results
+        """
+        self.estimators = estimators
+        allowed_args = {'early_stop_rounds',
+                        'max_layer',
+                        'n_classes',
+                        'look_index_cycle',
+                        'data_save_rounds',
+                        'data_save_dir',
+                        'name',
+                        'input_shape',
+                        'output_shape',
+                        'batch_size',
+                        'dtype',
+                        }
+
+        for kwarg in kwargs:
+            if kwarg not in allowed_args:
+                LOGGER.warn("Unidentified argument {}, ignore it!".format(kwarg))
+        name = kwargs.get('name')
+        dtype = kwargs.get('dtype')
+        super(AutoCascadeLayer, self).__init__(name=name, dtype=dtype)
+        self.name = name
+        self.early_stop_rounds = kwargs.get('early_stop_rounds', 4)
+        self.max_layers = kwargs.get('max_layers', 100)
+        self.n_classes = kwargs.get('n_classes')
+        self.look_index_cycle = kwargs.get('look_index_cycle')
+        self.data_save_rounds = kwargs.get('data_save_rounds')
+        self.data_save_dir = kwargs.get('data_save_dir')
+
+    def fit(self, inputs, labels):
+        pass
+
+    def fit_transform(self, x_trains, y_trains, x_tests=None, y_tests=None):
+        pass
+
+    def predict(self, inputs):
+        pass
+
+    def transform(self, inputs, labels=None):
+        pass
+
+    def evaluate(self, inputs, labels):
+        pass
 
 
-
+def _to_snake_case(name):
+    import re
+    intermediate = re.sub('(.)([A-Z][a-z0-9]+)', r'\1_\2', name)
+    insecure = re.sub('([a-z])([A-Z])', r'\1_\2', intermediate).lower()
+    # If the class is private the name starts with "_" which is not secure
+    # for creating scopes. We prefix the name with "private" in this case.
+    if insecure[0] != '_':
+        return insecure
+    return 'private' + insecure

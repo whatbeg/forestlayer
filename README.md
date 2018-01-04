@@ -1,3 +1,5 @@
+<center> ![](http://7xsl28.com1.z0.glb.clouddn.com/logo-42872831.png) </center>
+
 # ForestFlow
 
 ForestFlow is a scalable, fast deep forest learning library based on Scikit-learn and Ray.
