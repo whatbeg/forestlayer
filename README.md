@@ -1,7 +1,6 @@
-<center> ![](http://7xsl28.com1.z0.glb.clouddn.com/logo-42872831.png) </center>
 <a href="https://github.com/whatbeg/forestflow">
 <div align="center">
-	<img src="http://7xsl28.com1.z0.glb.clouddn.com/logo-42872831.png" width="50%" height="30%"/>
+	<img src="http://7xsl28.com1.z0.glb.clouddn.com/logo-42872831.png" width="20%" height="12%"/>
 </div>
 </a>
 
