@@ -9,6 +9,7 @@ Storage Utilities, include cache utilities.
 
 import os.path as osp
 import os
+import pickle
 
 
 def name2path(name):
@@ -23,10 +24,16 @@ def is_path_exists(path):
 
 
 def check_dir(path):
+    if path is None:
+        return
     d = osp.abspath(osp.join(path, osp.pardir))
     if not osp.exists(d):
         os.makedirs(d)
 
 
 def get_data_save_base():
-    return osp.abspath(osp.join(__file__, osp.pardir, osp.pardir, osp.pardir, "data-save"))
+    return osp.abspath(osp.join(__file__, osp.pardir, osp.pardir, osp.pardir, "run_data"))
+
+
+def get_model_save_base():
+    return osp.abspath(osp.join(__file__, osp.pardir, osp.pardir, osp.pardir, "run_model"))

@@ -104,3 +104,4 @@ ENV/
 .idea/
 
 data/
+run_data/

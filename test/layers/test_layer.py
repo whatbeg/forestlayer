@@ -9,8 +9,9 @@ Test Suites of layers.layer.
 
 from __future__ import print_function
 import numpy as np
+import os.path as osp
 from forestlayer.layers.window import Window, Pooling
-from forestlayer.layers.layer import MultiGrainScanLayer, PoolingLayer, ConcatLayer, CascadeLayer
+from forestlayer.layers.layer import MultiGrainScanLayer, PoolingLayer, ConcatLayer, CascadeLayer, AutoGrowingCascadeLayer
 from forestlayer.estimators import get_estimator_kfold
 from forestlayer.utils.storage_utils import get_data_save_base
 from keras.datasets import mnist
@@ -101,7 +102,7 @@ est_configs = [
     get_est_args('RF')
 ]
 
-kwargs = {
+cascade_kwargs = {
     'n_classes': 10,
     'data_save_dir': get_data_save_base() + 'cascade',
     'layer_id': 1,
@@ -109,8 +110,26 @@ kwargs = {
     'dtype': np.float32,
 }
 
-cascade = CascadeLayer(est_configs=est_configs, kwargs=kwargs)
+# cascade = CascadeLayer(est_configs=est_configs, kwargs=kwargs)
+#
+# res_train, res_test = cascade.fit_transform(res_train[0], y_train, res_test[0], y_test)
+#
+# print(res_train.shape, res_test.shape)
 
-res_train, res_test = cascade.fit_transform(res_train[0], y_train, res_test[0], y_test)
+auto_cascade_kwargs = {
+    'early_stop_rounds': 4,
+    'max_layers': 0,
+    'stop_by_test': False,
+    'n_classes': 10,
+    'data_save_rounds': 4,
+    'data_save_dir': osp.join(get_data_save_base(), 'auto_cascade'),
+    'keep_in_mem': True,
+    'dtype': np.float32,
+}
+
+auto_cascade = AutoGrowingCascadeLayer(est_configs=est_configs, kwargs=auto_cascade_kwargs)
+
+res_train, res_test = auto_cascade.fit_transform(res_train, y_train, res_test)
 
 print(res_train.shape, res_test.shape)
+

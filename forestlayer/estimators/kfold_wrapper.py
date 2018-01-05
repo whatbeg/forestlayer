@@ -125,6 +125,7 @@ class KFoldWrapper(object):
 
         # log
         self.log_eval_metrics(self.name, y, y_proba_train, "train")
+        # y_test can be None
         for vi, (test_name, X_test, y_test) in enumerate(test_sets):
             if y_test is not None:
                 self.log_eval_metrics(self.name, y_test, y_probas_test[vi], test_name)
