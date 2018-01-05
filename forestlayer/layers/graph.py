@@ -16,11 +16,6 @@ LOGGER = get_logger('forestflow.layers.graph')
 class Graph(object):
     def __init__(self):
         self.layers = []
-        self.inputs_shape = []
-        self.outputs_shape = []
-        self.input_tensors = []
-        self.output_tensors = []
-        self.built = False
         self.FIT = False
 
     def call(self):
@@ -38,44 +33,40 @@ class Graph(object):
             self.layers[-2].output_layer = layer
 
     def build(self):
-        for layer in self.layers:
-            if layer.input_layer is not None:
-                assert layer.input_layer.output_shape == layer.input_shape
-            if layer.output_layer is not None:
-                assert layer.output_layer.input_shape == layer.output_shape
-        self.built = True
         LOGGER.info("graph build finished!")
         LOGGER.info(self.to_debug_string())
 
-    def fit(self, inputs, labels):
-        if self.built is False:
-            raise RuntimeError('You must build the graph before fit')
-        if not isinstance(inputs, (list, tuple)):
-            inputs = [inputs]
-        self.input_tensors = inputs
+    def fit(self, x_trains, y_trains):
+        self.build()
+        if not isinstance(x_trains, (list, tuple)):
+            inputs = [x_trains]
+        else:
+            inputs = x_trains
         for layer in self.layers:
-            prev_inputs = inputs
-            inputs = layer.fit_transform(prev_inputs, labels)
-            del prev_inputs
+            inputs = layer.fit(inputs, y_trains)
         LOGGER.info("graph fit finished!")
         self.FIT = True
+        return self
 
-    def fit_transform(self, inputs, labels):
-        if self.built is False:
-            raise RuntimeError('You must build the graph before fit')
-        if not isinstance(inputs, (list, tuple)):
-            inputs = [inputs]
+    def fit_transform(self, x_trains, y_trains, x_tests=None, y_tests=None):
+        self.build()
+        if not isinstance(x_trains, (list, tuple)):
+            x_trains = [x_trains]
+        if not isinstance(y_trains, (list, tuple)):
+            y_trains = [y_trains]
+        if x_tests is not None and not isinstance(x_tests, (list, tuple)):
+            x_tests = [x_tests]
+        if y_tests is not None and not isinstance(y_tests, (list, tuple)):
+            y_tests = [y_tests]
         for layer in self.layers:
-            prev_inputs = inputs
-            inputs = layer.fit_transform(prev_inputs, labels)
-            del prev_inputs
+            LOGGER.info(" -------------- Now fitting layer [{}] --------------".format(layer))
+            x_trains, x_tests = layer.fit_transform(x_trains, y_trains, x_tests, y_tests)
         LOGGER.info("graph fit_transform finished!")
         self.FIT = True
-        return inputs
+        return x_trains, x_tests
 
     def transform(self, inputs):
-        if self.built is False:
-            raise RuntimeError('You must build the graph before fit')
+        # TODO
         if not isinstance(inputs, (list, tuple)):
             inputs = [inputs]
         for layer in self.layers:
@@ -87,6 +78,7 @@ class Graph(object):
         return inputs
 
     def predict(self, inputs):
+        # TODO
         inputs = self.predict_proba(inputs)
         for i, inp in enumerate(inputs):
             inputs[i] = pb2pred(inp)
@@ -95,9 +87,7 @@ class Graph(object):
         return inputs
 
     def predict_proba(self, inputs):
-        if self.built is False:
-            raise RuntimeError('You must build and fit the graph before predict')
-        if self.fit is False:
+        if self.FIT is False:
             raise RuntimeError('You must fit the graph before predict')
         if not isinstance(inputs, (list, tuple)):
             inputs = [inputs]
@@ -108,6 +98,7 @@ class Graph(object):
         return inputs
 
     def evaluate(self, eval_metrics, inputs, labels):
+        # TODO
         # make eval_metrics iterative
         if isinstance(eval_metrics, (list, tuple)) is not True:
             eval_metrics = [eval_metrics]
@@ -123,7 +114,6 @@ class Graph(object):
             debug_str += "{}".format(layer)
             if i != len(self.layers)-1:
                 debug_str += " -> "
-        debug_str += '\n'
         return debug_str
 
 

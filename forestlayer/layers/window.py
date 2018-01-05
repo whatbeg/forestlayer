@@ -42,7 +42,7 @@ def get_windows(X, win_x, win_y, stride_x=1, stride_y=1, pad_x=0, pad_y=0):
     :param pad_y:
     :return: numpy.ndarray. n x nh x nw x nc
     """
-    assert len(X.shape) == 4
+    assert len(X.shape) == 4, 'len(X.shape) should be 4, but {}'.format(X.shape)
     n, c, h, w = X.shape
     if pad_y > 0:
         X = np.concatenate((X, np.zeros((n, c, pad_y, w), dtype=X.dtype)), axis=2)

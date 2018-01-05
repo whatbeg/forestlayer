@@ -9,9 +9,12 @@ UCI_ADULT Example.
 
 from __future__ import print_function
 from forestlayer.datasets import uci_adult
-from forestlayer.layers import Input, Graph
+from forestlayer.layers import Graph, AutoGrowingCascadeLayer
+from forestlayer.utils.storage_utils import get_data_save_base
 from forestlayer.utils.metrics import accuracy_pb
 import time
+import numpy as np
+import os.path as osp
 
 start_time = time.time()
 (x_train, y_train) = uci_adult.load_data("adult.data")
@@ -24,13 +27,41 @@ print(x_train.shape[1], 'features')
 end_time = time.time()
 print('time cost: {}'.format(end_time - start_time))
 
-x = Input(x_train.shape, name='input')
-print(x)
+
+def get_est_args(est_type):
+    est_args = {
+        'est_type': est_type,
+        'n_folds': 3,
+        'n_estimators': 500,
+        'max_depth': 100,
+        'n_jobs': -1,
+        'min_samples_leaf': 10
+    }
+    return est_args
+
+
+est_configs = [
+    get_est_args('CRF'),
+    get_est_args('CRF'),
+    get_est_args('RF'),
+    get_est_args('RF')
+]
+
+auto_cascade_kwargs = {
+    'early_stop_rounds': 4,
+    'max_layers': 0,
+    'stop_by_test': False,
+    'n_classes': 2,
+    'data_save_rounds': 4,
+    'data_save_dir': osp.join(get_data_save_base(), 'uci_adult', 'auto_cascade'),
+    'keep_in_mem': True,
+    'dtype': np.float32,
+}
+
+agc = AutoGrowingCascadeLayer(est_configs=est_configs, kwargs=auto_cascade_kwargs)
 
 model = Graph()
-model.add(x)
+model.add(agc)
 model.build()
-model.fit(x_train, y_train)
-pred = model.predict(x_test)
-eval_ans = model.evaluate(accuracy_pb, x_test, y_test)
-print(eval_ans)
+model.fit_transform(x_train, y_train, x_test, y_test)
+

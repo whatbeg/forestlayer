@@ -12,9 +12,9 @@ import numpy as np
 import copy
 import datetime
 from ..utils.log_utils import get_logger, list2str
-from forestlayer.utils.storage_utils import *
-from ..estimators import get_estimator_kfold
+from ..utils.storage_utils import *
 from ..utils.metrics import accuracy_pb, auc
+from ..estimators import get_estimator_kfold
 from .. import backend as F
 
 LOGGER = get_logger('layer')
@@ -40,10 +40,11 @@ class Layer(object):
         from_config(config)
     """
     def __init__(self, **kwargs):
-
-        allowed_kwargs = {'input_shape',
-                          'output_shape',
-                          'batch_size',
+        """
+        Initialize a layer.
+        :param kwargs:
+        """
+        allowed_kwargs = {'batch_size',
                           'dtype',
                           'name'}
         for kwarg in kwargs:
@@ -55,17 +56,6 @@ class Layer(object):
             prefix = self.__class__.__name__
             name = _to_snake_case(prefix) + "_" + str(id(self))
         self.name = name
-
-        if 'input_shape' in kwargs:
-            self.input_shape = kwargs.get('input_shape')
-        else:
-            self.input_shape = None
-
-        if 'output_shape' in kwargs:
-            self.output_shape = kwargs.get('output_shape')
-        else:
-            self.output_shape = None
-
         # Set dtype.
         dtype = kwargs.get('dtype')
         if dtype is None:
@@ -74,18 +64,24 @@ class Layer(object):
         self.input_layer = None
         self.output_layer = None
 
-    def call(self, inputs, **kwargs):
-        return inputs
+    def call(self, x_trains):
+        raise NotImplementedError
 
-    def __call__(self, inputs, **kwargs):
-        self.call(inputs, **kwargs)
+    def __call__(self, x_trains):
+        raise NotImplementedError
 
-    def fit(self, inputs, labels):
+    def fit(self, x_trains, y_trains):
+        """
+        Fit datasets, return a list or single ndarray: train_outputs
+        :param x_trains: train data
+        :param y_trains: train labels
+        :return: train_outputs
+        """
         raise NotImplementedError
 
     def fit_transform(self, x_trains, y_trains, x_tests=None, y_tests=None):
         """
-        Fit and Transform datasets, return two list: train_outputs, test_outputs
+        Fit and Transform datasets, return two lists or two single ndarrays: train_outputs, test_outputs
         :param x_trains: train datasets
         :param y_trains: train labels
         :param x_tests: test datasets
@@ -108,6 +104,7 @@ class Layer(object):
 
 
 class InputLayer(Layer):
+    # TODO: think whether it's redundant
     def __init__(self, input_shape=None, batch_size=None, dtype=None, name=None):
         if not name:
             prefix = 'input'
@@ -118,14 +115,14 @@ class InputLayer(Layer):
         self.num_est = 0
         self.estimators = []
 
-    def call(self, inputs, **kwargs):
-        return inputs
+    def call(self, x_trains):
+        return x_trains
 
-    def __call__(self, inputs, **kwargs):
-        self.call(inputs)
+    def __call__(self, x_trains):
+        self.call(x_trains)
 
-    def fit(self, inputs, labels):
-        return inputs
+    def fit(self, x_trains, y_trains):
+        return x_trains
 
     def fit_transform(self, x_trains, y_trains, x_tests=None, y_tests=None):
         return x_trains, x_tests
@@ -144,51 +141,48 @@ class InputLayer(Layer):
 
 
 class MultiGrainScanLayer(Layer):
-    def __init__(self, input_shape=None, batch_size=None, dtype=None, name=None,
+    def __init__(self, batch_size=None, dtype=None, name=None,
                  windows=None, est_for_windows=None, n_class=None):
         if not name:
             prefix = 'multi_grain_scan'
             name = prefix + '_' + str(id(self))
-        super(MultiGrainScanLayer, self).__init__(dtype=dtype, name=name)
-        self.input_shape = input_shape
+        super(MultiGrainScanLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
         self.batch_size = batch_size
         self.windows = windows  # [Win, Win, Win, ...]
         self.est_for_windows = est_for_windows  # [[est1, est2], [est1, est2], [est1, est2], ...]
         assert n_class is not None
         self.n_class = n_class
 
-    def call(self, X, **kwargs):
+    def call(self, x_trains, **kwargs):
         pass
 
-    def __call__(self, X, **kwargs):
+    def __call__(self, x_trains, **kwargs):
         pass
 
-    def scan(self, window, X):
-        return window.fit_transform(X)
+    def scan(self, window, x):
+        return window.fit_transform(x)
 
-    def fit(self, X, y):
+    def fit(self, x_trains, y_trains):
         pass
 
     def fit_transform(self, x_trains, y_trains, x_tests=None, y_tests=None):
-        if not isinstance(x_trains, (list, tuple)):
-            x_trains = [x_trains]
-        if not isinstance(y_trains, (list, tuple)):
-            y_trains = [y_trains]
-        if not isinstance(x_tests, (list, tuple)) and x_tests is not None:
+        if isinstance(x_trains, (list, tuple)):
+            assert len(x_trains) == 1, "Multi grain scan Layer only supports exactly one input now!"
+            x_trains = x_trains[0]
+        if isinstance(y_trains, (list, tuple)):
+            assert len(y_trains) == 1, "Multi grain scan Layer only supports exactly one input now!"
+            y_trains = y_trains[0]
+        if x_tests is not None and not isinstance(x_tests, (list, tuple)):
             x_tests = [x_tests]
-        if not isinstance(y_tests, (list, tuple)) and y_tests is not None:
+        if y_tests is not None and not isinstance(y_tests, (list, tuple)):
             y_tests = [y_tests]
-        if len(x_trains) != 1 or len(y_trains) != 1:
-            raise ValueError("Multi grain scan Layer only supports exactly one input now!")
-        if len(x_tests) != 1 or len(y_tests) != 1:
-            raise ValueError("Multi grain scan Layer only supports exactly one input now!")
-        x_tests = [] if x_tests is None else x_tests
-        y_tests = [] if y_tests is None else y_tests
+        if x_tests is None:
+            x_tests = []
         # Construct test sets
         x_wins_train = []
         x_wins_test = []
         for win in self.windows:
-            x_wins_train.append(self.scan(win, x_trains[0]))
+            x_wins_train.append(self.scan(win, x_trains))
         for win in self.windows:
             tmp_wins_test = []
             for test_data in x_tests:
@@ -197,7 +191,10 @@ class MultiGrainScanLayer(Layer):
         # [[win, win], [win, win], ...], len = len(test_sets)
         # test_sets = [('testOfWin{}'.format(i), x, y) for i, x, y in enumerate(zip(x_wins_test, y_tests))]
         LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
-        LOGGER.info('X_wins of tests[0]: {}'.format([win.shape for win in x_wins_test[0]]))
+        log_info = 'X_wins of tests: '
+        for i in range(len(x_wins_test)):
+            log_info += '{}, '.format([win.shape for win in x_wins_test[i]])
+        LOGGER.info(log_info)
         x_win_est_train = []
         x_win_est_test = []
         for wi, ests_for_win in enumerate(self.est_for_windows):
@@ -209,12 +206,15 @@ class MultiGrainScanLayer(Layer):
             _, nh, nw, _ = x_wins_train[wi].shape
             # (60000, 121, 49)
             x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
-            y_win = y_trains[0][:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
+            y_win = y_trains[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
             for ti, ts in enumerate(x_wins_test[wi]):
                 x_wins_test[wi][ti] = ts.reshape((ts.shape[0], -1, ts.shape[-1]))
-            tmp_y_tests = copy.deepcopy(y_tests)
-            for i, y_test in enumerate(y_tests):
-                tmp_y_tests[i] = y_test[:, np.newaxis].repeat(x_wins_test[wi][i].shape[1], axis=1)
+            if y_tests is None:
+                tmp_y_tests = [None for _ in range(len(x_wins_test))]
+            else:
+                tmp_y_tests = copy.deepcopy(y_tests)
+                for i, y_test in enumerate(y_tests):
+                    tmp_y_tests[i] = y_test[:, np.newaxis].repeat(x_wins_test[wi][i].shape[1], axis=1)
             test_sets = [('testOfWin{}'.format(wi), tw, tmp_y_tests[i]) for i, tw in enumerate(x_wins_test[wi])]
             # print(y_win.shape)
             # for k in test_sets:
@@ -253,18 +253,18 @@ class MultiGrainScanLayer(Layer):
 
 
 class PoolingLayer(Layer):
-    def __init__(self, input_shape=None, batch_size=None, dtype=None, name=None, pools=None):
-        super(PoolingLayer, self).__init__(input_shape=input_shape, batch_size=batch_size, dtype=dtype, name=name)
+    def __init__(self, batch_size=None, dtype=None, name=None, pools=None):
+        super(PoolingLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
         # [[pool/7x7/est1, pool/7x7/est2], [pool/11x11/est1, pool/11x11/est1], [pool/13x13/est1, pool/13x13/est1], ...]
         self.pools = pools
 
-    def call(self, X, **kwargs):
+    def call(self, x_trains, **kwargs):
         pass
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, x_trains):
         pass
 
-    def fit(self, inputs, labels):
+    def fit(self, x_trains, y_trains):
         pass
 
     def fit_transform(self, x_trains, y_trains, x_tests=None, y_tests=None):
@@ -298,8 +298,8 @@ class PoolingLayer(Layer):
 
 
 class ConcatLayer(Layer):
-    def __init__(self, input_shape=None, batch_size=None, dtype=None, name=None, axis=-1):
-        super(ConcatLayer, self).__init__(input_shape=input_shape, batch_size=batch_size, dtype=dtype, name=name)
+    def __init__(self, batch_size=None, dtype=None, name=None, axis=-1):
+        super(ConcatLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
         # [[pool/7x7/est1, pool/7x7/est2], [pool/11x11/est1, pool/11x11/est1], [pool/13x13/est1, pool/13x13/est1], ...]
         # to
         # [Concat(axis=axis), Concat(axis=axis), Concat(axis=axis), ...]
@@ -319,7 +319,7 @@ class ConcatLayer(Layer):
 
     def fit_transform(self, x_trains, y_trains, x_tests=None, y_tests=None):
         # inputs shape: [[(60000, 10, 6, 6), (60000, 10, 6, 6)], [.., ..], ...]
-        concat_data = []
+        concat_train = []
         for bottoms in x_trains:
             if self.axis == -1:
                 for i, bottom in enumerate(bottoms):
@@ -327,8 +327,8 @@ class ConcatLayer(Layer):
                 concat_res = np.concatenate(bottoms, 1)
             else:
                 concat_res = np.concatenate(bottoms, self.axis)
-            concat_data.append(concat_res)
-        LOGGER.info("concat data shape: {}".format(list2str(concat_data, 1)))
+            concat_train.append(concat_res)
+        LOGGER.info("concat train shape: {}".format(list2str(concat_train, 1)))
         x_tests = [] if x_tests is None else x_tests
         if len(x_tests) > 0 and len(x_tests[0][0]) != 1:
             raise ValueError("Now Concat Layer only supports one test_data in test_set")
@@ -345,7 +345,7 @@ class ConcatLayer(Layer):
                 concat_res = np.concatenate(bottoms, self.axis)
             concat_test.append(concat_res)
         LOGGER.info("concat test data shape: {}".format(list2str(concat_test, 1)))
-        return concat_data, concat_test
+        return concat_train, concat_test
 
     def predict(self, inputs):
         pass
@@ -385,8 +385,6 @@ class CascadeLayer(Layer):
                         'seed',
                         'metrics',
                         'keep_in_mem',
-                        'input_shape',
-                        'output_shape',
                         'batch_size',
                         'dtype',
                         }
@@ -447,8 +445,12 @@ class CascadeLayer(Layer):
             return self._fit_transform(x_train, y_train), None
         if isinstance(x_train, (list, tuple)):
             x_train = None if len(x_train) == 0 else x_train[0]
+        if isinstance(y_train, (list, tuple)):
+            y_train = None if len(y_train) == 0 else y_train[0]
         if isinstance(x_test, (list, tuple)):
             x_test = None if len(x_test) == 0 else x_test[0]
+        if isinstance(y_test, (list, tuple)):
+            y_test = None if len(y_test) == 0 else y_test[0]
         if y_test is None:
             y_test_shape = (0,)
         else:
@@ -614,8 +616,6 @@ class AutoGrowingCascadeLayer(Layer):
                         'keep_in_mem',
                         'stop_by_test',
                         'name',
-                        'input_shape',
-                        'output_shape',
                         'batch_size',
                         'dtype',
                         }
@@ -645,6 +645,12 @@ class AutoGrowingCascadeLayer(Layer):
         return CascadeLayer(est_configs=self.est_configs,
                             kwargs=kwargs)
 
+    def call(self, x_trains):
+        pass
+
+    def __call__(self, *args, **kwargs):
+        pass
+
     def fit(self, inputs, labels):
         pass
 
@@ -661,6 +667,11 @@ class AutoGrowingCascadeLayer(Layer):
             return self._fit_transform(x_trains, y_train), None
         if not isinstance(x_trains, (list, tuple)):
             x_trains = [x_trains]
+        # only supports one y_train
+        if isinstance(y_train, (list, tuple)):
+            y_train = y_train[0]
+        if y_test is not None and isinstance(y_test, (list, tuple)):
+            y_test = y_test[0]
         if not isinstance(x_tests, (list, tuple)):
             x_tests = [x_tests]
         n_groups_train = len(x_trains)
@@ -676,7 +687,8 @@ class AutoGrowingCascadeLayer(Layer):
         group_starts, group_ends, group_dims = [], [], []
         # train set
         for i, x_train in enumerate(x_trains):
-            assert x_train.shape[0] == n_trains
+            assert x_train.shape[0] == n_trains, 'x_train.shape[0] = {} not equal to {}'.format(
+                x_train.shape[0], n_trains)
             x_train = x_train.reshape(n_trains, -1)
             group_dims.append(x_train.shape[1])
             group_starts.append(i if i == 0 else group_ends[i - 1])
@@ -689,7 +701,7 @@ class AutoGrowingCascadeLayer(Layer):
             assert x_test.shape[1] == group_dims[i]
             x_test_group = np.hstack((x_test_group, x_test))
 
-        LOGGER.info('group_starts={}'.format(group_dims))
+        LOGGER.info('group_starts={}'.format(group_starts))
         LOGGER.info('group_dims={}'.format(group_dims))
         LOGGER.info('X_train_group={}, X_test_group={}'.format(x_train_group.shape, x_test_group.shape))
 

@@ -1,6 +1,6 @@
 # -*- coding:utf-8 -*-
 """
-Test Suites of layers.layer.
+Test Suites of layers.graph.
 """
 
 # Copyright 2017 Authors NJU PASA BigData Laboratory.
@@ -12,6 +12,7 @@ import numpy as np
 import os.path as osp
 from forestlayer.layers.window import Window, Pooling
 from forestlayer.layers.layer import MultiGrainScanLayer, PoolingLayer, ConcatLayer, CascadeLayer, AutoGrowingCascadeLayer
+from forestlayer.layers.graph import Graph
 from forestlayer.estimators import get_estimator_kfold
 from forestlayer.utils.storage_utils import get_data_save_base
 from keras.datasets import mnist
@@ -42,45 +43,17 @@ rf2 = get_estimator_kfold('rf2', 3, 'CRF', est_args=args)
 
 est_for_windows = [[rf1, rf2], [rf1.copy(), rf2.copy()]]
 
-mgs = MultiGrainScanLayer(input_shape=X.shape,
-                          batch_size=None,
+mgs = MultiGrainScanLayer(batch_size=None,
                           dtype=np.float32,
                           windows=windows,
                           est_for_windows=est_for_windows,
                           n_class=10)
 
-res_train, res_test = mgs.fit_transform(X, y_train, X_test, y_test)
-
-# print('mgs train result: ', )
-# for i, r in enumerate(res_train):
-#     print('mgs train result {}: '.format(i))
-#     for j in r:
-#         print(j.shape)
-# print(len(res_train), len(res_train[0]))
-# print(len(res_test), len(res_test[0]))
-
 pools = [[Pooling(2, 2, "max"), Pooling(2, 2, "max")], [Pooling(2, 2, "max"), Pooling(2, 2, "max")]]
 
 poolayer = PoolingLayer(pools=pools)
 
-res_train, res_test = poolayer.fit_transform(res_train, None, res_test, None)
-
-# for i, r in enumerate(res):
-#     print('mgs result {}: '.format(i))
-#     for j in r:
-#         print(j.shape)
-
 concat_layer = ConcatLayer()
-
-res_train, res_test = concat_layer.fit_transform(res_train, None, res_test)
-
-# for i, r in enumerate(res_train):
-#     print('mgs train result {}: '.format(i))
-#     print(r.shape)
-#
-# for i, r in enumerate(res_test):
-#     print('mgs test result {}: '.format(i))
-#     print(r.shape)
 
 
 def get_est_args(est_type):
@@ -104,17 +77,11 @@ est_configs = [
 
 cascade_kwargs = {
     'n_classes': 10,
-    'data_save_dir': osp.join(get_data_save_base(), 'test_layer', 'cascade'),
+    'data_save_dir': osp.join(get_data_save_base(), 'test_graph', 'cascade'),
     'layer_id': 1,
     'keep_in_mem': True,
     'dtype': np.float32,
 }
-
-# cascade = CascadeLayer(est_configs=est_configs, kwargs=kwargs)
-#
-# res_train, res_test = cascade.fit_transform(res_train[0], y_train, res_test[0], y_test)
-#
-# print(res_train.shape, res_test.shape)
 
 auto_cascade_kwargs = {
     'early_stop_rounds': 4,
@@ -122,14 +89,16 @@ auto_cascade_kwargs = {
     'stop_by_test': False,
     'n_classes': 10,
     'data_save_rounds': 4,
-    'data_save_dir': osp.join(get_data_save_base(), 'test_layer', 'auto_cascade'),
+    'data_save_dir': osp.join(get_data_save_base(), 'test_graph', 'auto_cascade'),
     'keep_in_mem': True,
     'dtype': np.float32,
 }
 
 auto_cascade = AutoGrowingCascadeLayer(est_configs=est_configs, kwargs=auto_cascade_kwargs)
 
-res_train, res_test = auto_cascade.fit_transform(res_train, y_train, res_test)
-
-print(res_train.shape, res_test.shape)
-
+model = Graph()
+model.add(mgs)
+model.add(poolayer)
+model.add(concat_layer)
+model.add(auto_cascade)
+model.fit_transform(X, y_train, X_test)
