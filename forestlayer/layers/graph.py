@@ -9,6 +9,7 @@ DAG definition
 
 from ..utils import get_logger
 from ..backend import pb2pred
+import copy
 
 LOGGER = get_logger('forestflow.layers.graph')
 
@@ -41,9 +42,14 @@ class Graph(object):
         if not isinstance(x_trains, (list, tuple)):
             inputs = [x_trains]
         else:
-            inputs = x_trains
+            inputs = copy.deepcopy(x_trains)
+        if not isinstance(y_trains, (list, tuple)):
+            labels = [y_trains]
+        else:
+            labels = copy.deepcopy(y_trains)
         for layer in self.layers:
-            inputs = layer.fit(inputs, y_trains)
+            LOGGER.info(" -------------- Now fitting layer [{}] --------------".format(layer))
+            inputs = layer.fit(inputs, labels)
         LOGGER.info("graph fit finished!")
         self.FIT = True
         return self
