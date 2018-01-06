@@ -124,5 +124,8 @@ class Pooling(object):
         # LOGGER.info("[{} Pooled {} to shape {}]".format(self.name, X.shape, X_pool.shape))
         return X_pool
 
+    def transform(self, X):
+        return self._transform(X)
+
 
 

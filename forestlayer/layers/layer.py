@@ -91,7 +91,7 @@ class Layer(object):
         """
         raise NotImplementedError
 
-    def transform(self, inputs, labels=None):
+    def transform(self, inputs):
         raise NotImplementedError
 
     def predict(self, inputs):
@@ -274,11 +274,38 @@ class MultiGrainScanLayer(Layer):
             LOGGER.info('x_win_est_test[1].shape: {}'.format(list2str(x_win_est_test[1], 2)))
         return x_win_est_train, x_win_est_test
 
-    def transform(self, inputs, labels=None):
-        pass
+    def transform(self, x_trains):
+        if isinstance(x_trains, (list, tuple)):
+            assert len(x_trains) == 1, "Multi grain scan Layer only supports exactly one input now!"
+            x_trains = x_trains[0]
+        # Construct test sets
+        x_wins_train = []
+        for win in self.windows:
+            x_wins_train.append(self.scan(win, x_trains))
+        # [[win, win], [win, win], ...], len = len(test_sets)
+        LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
+        x_win_est_train = []
+        for wi, ests_for_win in enumerate(self.est_for_windows):
+            if not isinstance(ests_for_win, (list, tuple)):
+                ests_for_win = [ests_for_win]
+            win_est_train = []
+            # X_wins[wi] = (60000, 11, 11, 49)
+            _, nh, nw, _ = x_wins_train[wi].shape
+            # (60000, 121, 49)
+            x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
+            for est in ests_for_win:
+                # (60000, 121, 10)
+                y_proba_train = est.transform(x_wins_train[wi])
+                y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                win_est_train.append(y_proba_train)
+            x_win_est_train.append(win_est_train)
+        if len(x_win_est_train) == 0:
+            return x_wins_train
+        LOGGER.info('[transform] win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
+        return x_win_est_train
 
-    def predict(self, inputs):
-        pass
+    def predict(self, X):
+        return self.transform(X)
 
     def evaluate(self, inputs, labels):
         pass
@@ -336,14 +363,26 @@ class PoolingLayer(Layer):
             LOGGER.info('x_tests pooled: {}'.format(list2str(x_tests, 3)))
         return x_trains, x_tests
 
-    def transform(self, inputs, labels=None):
-        pass
+    def transform(self, x_trains):
+        # inputs shape: [[(60000, 10, 11, 11), (60000, 10, 11, 11)], [.., ..], ...]
+        if len(self.pools) != len(x_trains):
+            raise ValueError('len(pools) does not equal to len(inputs), you must set right pools!')
+        for pi, pool in enumerate(self.pools):
+            if not isinstance(pool, (list, tuple)):
+                pool = [pool]
+            if len(pool) != len(x_trains[pi]):
+                raise ValueError('len(pools[{}]) does not equal to'
+                                 ' len(inputs[{}]), you must set right pools!'.format(pi, pi))
+            for pj, pl in enumerate(pool):
+                x_trains[pi][pj] = pl.transform(x_trains[pi][pj])
+        LOGGER.info('[transform] x_trains pooled: {}'.format(list2str(x_trains, 2)))
+        return x_trains
 
     def evaluate(self, inputs, labels):
         pass
 
-    def predict(self, inputs):
-        pass
+    def predict(self, X):
+        return self.transform(X)
 
 
 class ConcatLayer(Layer):
@@ -360,13 +399,7 @@ class ConcatLayer(Layer):
     def __call__(self, *args, **kwargs):
         pass
 
-    def transform(self, inputs, labels=None):
-        pass
-
-    def evaluate(self, inputs, labels=None):
-        pass
-
-    def fit(self, x_trains, y_trains=None):
+    def _fit(self, x_trains):
         # inputs shape: [[(60000, 10, 6, 6), (60000, 10, 6, 6)], [.., ..], ...]
         concat_train = []
         for bottoms in x_trains:
@@ -377,6 +410,18 @@ class ConcatLayer(Layer):
             else:
                 concat_res = np.concatenate(bottoms, self.axis)
             concat_train.append(concat_res)
+        return concat_train
+
+    def transform(self, x_trains):
+        concat_train = self._fit(x_trains)
+        LOGGER.info("[transform] concat train shape: {}".format(list2str(concat_train, 1)))
+        return concat_train
+
+    def evaluate(self, inputs, labels=None):
+        pass
+
+    def fit(self, x_trains, y_trains=None):
+        concat_train = self._fit(x_trains)
         LOGGER.info("concat train shape: {}".format(list2str(concat_train, 1)))
         return concat_train
 
@@ -412,8 +457,8 @@ class ConcatLayer(Layer):
         LOGGER.info("concat test data shape: {}".format(list2str(concat_test, 1)))
         return concat_train, concat_test
 
-    def predict(self, inputs):
-        pass
+    def predict(self, X):
+        return self.transform(X)
 
 
 class CascadeLayer(Layer):
@@ -495,7 +540,7 @@ class CascadeLayer(Layer):
         NOTE: Only one train set and one test set.
         :param x_train: train datasets
         :param y_train: train labels
-        :return: train_output, test_output
+        :return: train_output
         """
         if isinstance(x_train, (list, tuple)):
             x_train = None if len(x_train) == 0 else x_train[0]
@@ -523,7 +568,7 @@ class CascadeLayer(Layer):
             if y_proba_train.shape != (n_trains, n_classes):
                 raise ValueError('output probability shape incorrect!,'
                                  ' should be {}, but {}'.format((n_trains, n_classes), y_proba_train.shape))
-            self.fit_estimators = est
+            self.fit_estimators[ei] = est
             x_proba_train[:, ei * n_classes:ei * n_classes + n_classes] = y_proba_train
             eval_proba_train += y_proba_train
         eval_proba_train /= self.n_estimators
@@ -588,7 +633,7 @@ class CascadeLayer(Layer):
             if y_proba_test.shape != (n_tests, n_classes):
                 raise ValueError('output probability shape incorrect!'
                                  ' should be {}, but {}'.format((n_trains, n_classes), y_proba_train.shape))
-            self.fit_estimators = est
+            self.fit_estimators[ei] = est
             x_proba_train[:, ei*n_classes:ei*n_classes + n_classes] = y_proba_train
             x_proba_test[:, ei*n_classes:ei*n_classes + n_classes] = y_proba_test
             eval_proba_train += y_proba_train
@@ -636,13 +681,60 @@ class CascadeLayer(Layer):
                                    keep_in_mem=self.keep_in_mem,
                                    est_args=est_args)
 
-    def transform(self, inputs, labels=None):
-        raise NotImplementedError
+    def transform(self, X):
+        """
+        Transform datasets, return one numpy ndarray
+        NOTE: Only one train set and one test set.
+        :param X: train datasets
+        :return:
+        """
+        if isinstance(X, (list, tuple)):
+            X = None if len(X) == 0 else X[0]
+        n_trains = X.shape[0]
+        n_classes = self.n_classes
+        x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=np.float32)
+        # fit estimators, get probas
+        for ei, est in enumerate(self.fit_estimators):
+            # transform by n-folds CV
+            y_proba_train = est.transform(X)
+            if y_proba_train is None:
+                raise RuntimeError("layer - {} - estimator - {} transform FAILED!".format(self.layer_id, ei))
+            if y_proba_train.shape != (n_trains, n_classes):
+                raise ValueError('transform output probability shape incorrect!,'
+                                 ' should be {}, but {}'.format((n_trains, n_classes), y_proba_train.shape))
+            x_proba_train[:, ei * n_classes:ei * n_classes + n_classes] = y_proba_train
+        return x_proba_train
 
-    def predict(self, inputs):
-        raise NotImplementedError
+    def predict(self, X):
+        proba_sum = self.predict_proba(X)
+        n_classes = self.n_classes
+        return np.argmax(proba_sum.reshape((-1, n_classes)), axis=1)
 
-    def evaluate(self, inputs, labels):
+    def predict_proba(self, X):
+        """
+        Transform datasets, return one numpy ndarray
+        NOTE: Only one train set and one test set.
+        :param X: train datasets
+        :return:
+        """
+        if isinstance(X, (list, tuple)):
+            X = None if len(X) == 0 else X[0]
+        n_trains = X.shape[0]
+        n_classes = self.n_classes
+        proba_sum = np.zeros((n_trains, n_classes), dtype=np.float32)
+        # fit estimators, get probas
+        for ei, est in enumerate(self.fit_estimators):
+            # transform by n-folds CV
+            y_proba_train = est.transform(X)
+            if y_proba_train is None:
+                raise RuntimeError("layer - {} - estimator - {} transform FAILED!".format(self.layer_id, ei))
+            if y_proba_train.shape != (n_trains, n_classes):
+                raise ValueError('transform output probability shape incorrect!,'
+                                 ' should be {}, but {}'.format((n_trains, n_classes), y_proba_train.shape))
+            proba_sum += y_proba_train
+        return proba_sum
+
+    def evaluate(self, X, y):
         raise NotImplementedError
 
 
@@ -719,6 +811,10 @@ class AutoGrowingCascadeLayer(Layer):
     def fit(self, x_trains, y_train):
         if not isinstance(x_trains, (list, tuple)):
             x_trains = [x_trains]
+        # only supports one y_train
+        if isinstance(y_train, (list, tuple)):
+            y_train = y_train[0]
+        self.layer_fit_cascades = []
         n_groups_train = len(x_trains)
         n_trains = len(y_train)
         # Initialize the groups
@@ -726,7 +822,9 @@ class AutoGrowingCascadeLayer(Layer):
         group_starts, group_ends, group_dims = [], [], []
         # train set
         for i, x_train in enumerate(x_trains):
-            assert x_train.shape[0] == n_trains
+            assert x_train.shape[0] == n_trains, 'x_train.shape[0]={} not equal to n_trains={}'.format(
+                x_train.shape[0], n_trains
+            )
             x_train = x_train.reshape(n_trains, -1)
             group_dims.append(x_train.shape[1])
             group_starts.append(i if i == 0 else group_ends[i - 1])
@@ -739,7 +837,7 @@ class AutoGrowingCascadeLayer(Layer):
 
         if self.look_index_cycle is None:
             self.look_index_cycle = [[i, ] for i in range(n_groups_train)]
-        x_cur_train = np.zeros((n_trains, 0), dtype=np.float32)
+        x_cur_train = None
         x_proba_train = np.zeros((n_trains, 0), dtype=np.float32)
         layer_id = 0
         layer_metric_list = []
@@ -748,6 +846,8 @@ class AutoGrowingCascadeLayer(Layer):
             while True:
                 if layer_id >= self.max_layers > 0:
                     break
+                # clear x_cur_train
+                x_cur_train = np.zeros((n_trains, 0), dtype=np.float32)
                 train_ids = self.look_index_cycle[layer_id % n_groups_train]
                 for gid in train_ids:
                     x_cur_train = np.hstack((x_cur_train, x_train_group[:, group_starts[gid]:group_ends[gid]]))
@@ -817,6 +917,7 @@ class AutoGrowingCascadeLayer(Layer):
             y_test = y_test[0]
         if not isinstance(x_tests, (list, tuple)):
             x_tests = [x_tests]
+        self.layer_fit_cascades = []
         n_groups_train = len(x_trains)
         n_groups_test = len(x_tests)
         n_trains = len(y_train)
@@ -946,14 +1047,62 @@ class AutoGrowingCascadeLayer(Layer):
         except KeyboardInterrupt:
             pass
 
-    def predict(self, inputs):
-        pass
+    def transform(self, X):
+        if not isinstance(X, (list, tuple)):
+            X = [X]
+        n_groups = len(X)
+        n_examples = len(X[0])
+        # Initialize the groups
+        x_train_group = np.zeros((n_examples, 0), dtype=X[0].dtype)
+        group_starts, group_ends, group_dims = [], [], []
+        # train set
+        for i, x_train in enumerate(X):
+            assert x_train.shape[0] == n_examples, 'x_train.shape[0]={} not equal to n_trains={}'.format(
+                x_train.shape[0], n_examples
+            )
+            x_train = x_train.reshape((n_examples, -1))
+            group_dims.append(x_train.shape[1])
+            group_starts.append(i if i == 0 else group_ends[i - 1])
+            group_ends.append(group_starts[i] + group_dims[i])
+            x_train_group = np.hstack((x_train_group, x_train))
 
-    def transform(self, inputs, labels=None):
-        pass
+        LOGGER.info('[transform] group_starts={}'.format(group_dims))
+        LOGGER.info('[transform] group_dims={}'.format(group_dims))
+        LOGGER.info('[transform] X_train_group={}'.format(x_train_group.shape))
+
+        if self.look_index_cycle is None:
+            self.look_index_cycle = [[i, ] for i in range(n_groups)]
+        x_proba_train = np.zeros((n_examples, 0), dtype=np.float32)
+        layer_id = 0
+        try:
+            while layer_id < self.n_layers:
+                x_cur_train = np.zeros((n_examples, 0), dtype=np.float32)
+                train_ids = self.look_index_cycle[layer_id % n_groups]
+                for gid in train_ids:
+                    x_cur_train = np.hstack((x_cur_train, x_train_group[:, group_starts[gid]:group_ends[gid]]))
+                x_cur_train = np.hstack((x_cur_train, x_proba_train))
+                cascade = self.layer_fit_cascades[layer_id]
+                x_proba_train = cascade.transform(x_cur_train)
+                layer_id += 1
+            return x_proba_train
+        except KeyboardInterrupt:
+            pass
 
     def evaluate(self, inputs, labels):
         pass
+
+    def predict_proba(self, X):
+        if not isinstance(X, (list, tuple)):
+            X = [X]
+        x_proba_train = self.transform(X)
+        total_proba = np.zeros((X[0].shape[0], self.n_classes), dtype=np.float32)
+        for i in range(len(self.est_configs)):
+            total_proba += x_proba_train[:, i * self.n_classes:i * self.n_classes + self.n_classes]
+        return total_proba
+
+    def predict(self, X):
+        total_proba = self.predict_proba(X)
+        return np.argmax(total_proba.reshape((-1, self.n_classes)), axis=1)
 
     @property
     def num_layers(self):

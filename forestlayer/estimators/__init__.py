@@ -29,7 +29,7 @@ def get_estimator(name, est_type, est_args):
     return est_class(name, est_args)
 
 
-def get_estimator_kfold(name, n_folds, est_type, eval_metrics=None, seed=None, keep_in_mem=False, est_args=None):
+def get_estimator_kfold(name, n_folds, est_type, eval_metrics=None, seed=None, keep_in_mem=True, est_args=None):
     if est_type == "XGB":
         return XGBoostClassifier(name, n_folds, seed=seed, est_args=est_args)
     est_class = est_class_from_type(est_type)

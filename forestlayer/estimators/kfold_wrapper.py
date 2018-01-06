@@ -131,25 +131,28 @@ class KFoldWrapper(object):
                 self.log_eval_metrics(self.name, y_test, y_probas_test[vi], test_name)
         return y_proba_train, y_probas_test
 
-    def transform(self, test_sets):
-        if test_sets is None or test_sets == []:
+    def transform(self, x_tests):
+        if x_tests is None or x_tests == []:
             return []
-        y_probas = []
+        if isinstance(x_tests, (list, tuple)):
+            LOGGER.warn('transform(x_tests) only support single ndarray instead of list of ndarrays')
+            x_tests = x_tests[0]
+        proba_result = None
         for k, est in enumerate(self.fit_estimators):
-            for vi, (prefix, X_test, y_test) in enumerate(test_sets):
-                y_proba = est.predict_proba(X_test.reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
-                if len(X_test.shape) == 3:
-                    y_proba = y_proba.reshape((X_test.shape[0], X_test.shape[1], y_proba.shape[-1]))
-                if k == 0:
-                    y_probas.append(y_proba)
-                else:
-                    y_probas[vi] += y_proba
-        for y_proba in y_probas:
-            y_proba /= self.n_folds
-        for vi, (test_name, X_test, y_test) in enumerate(test_sets):
-            if y_test is not None:
-                self.log_eval_metrics(self.name, y_test, y_probas[vi], test_name)
-        return y_probas
+            try:
+                y_proba = est.predict_proba(x_tests.reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
+            except ValueError, e:
+                print(e)
+                print(x_tests.shape)
+                print(self.n_dims)
+            if len(x_tests.shape) == 3:
+                y_proba = y_proba.reshape((x_tests.shape[0], x_tests.shape[1], y_proba.shape[-1]))
+            if k == 0:
+                proba_result = y_proba
+            else:
+                proba_result += y_proba
+            proba_result /= self.n_folds
+        return proba_result
 
     def log_eval_metrics(self, est_name, y_true, y_proba, y_name):
         """
