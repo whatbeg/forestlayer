@@ -12,3 +12,4 @@ import os.path as osp
 
 def get_log_base():
     return osp.abspath(osp.join(__file__, osp.pardir, osp.pardir, osp.pardir, "log"))
+

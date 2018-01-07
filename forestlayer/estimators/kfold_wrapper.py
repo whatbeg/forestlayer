@@ -156,9 +156,9 @@ class KFoldWrapper(object):
         """
         if self.eval_metrics is None:
             return
-        for (eval_name, eval_metric) in self.eval_metrics:
-            accuracy = eval_metric(y_true, y_proba)
-            LOGGER.info("Accuracy({}.{}.{}) = {:.2f}%".format(est_name, y_name, eval_name, accuracy * 100.))
+        for metric in self.eval_metrics:
+            acc = metric.calc_proba(y_true, y_proba)
+            LOGGER.info("Accuracy({}.{}.{}) = {:.2f}%".format(est_name, y_name, metric.name, acc * 100.))
 
     def _predict_proba(self, est, X):
         return est.predict_proba(X)

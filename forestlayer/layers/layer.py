@@ -13,7 +13,7 @@ import copy
 import datetime
 from ..utils.log_utils import get_logger, list2str
 from ..utils.storage_utils import *
-from ..utils.metrics import accuracy_pb, auc
+from ..utils.metrics import Accuracy, AUC
 from ..estimators import get_estimator_kfold
 from .. import backend as F
 
@@ -95,6 +95,9 @@ class Layer(object):
         raise NotImplementedError
 
     def predict(self, inputs):
+        raise NotImplementedError
+
+    def predict_proba(self, inputs):
         raise NotImplementedError
 
     def evaluate(self, inputs, labels):
@@ -308,6 +311,9 @@ class MultiGrainScanLayer(Layer):
     def predict(self, X):
         return self.transform(X)
 
+    def predict_proba(self, X):
+        return self.transform(X)
+
     def evaluate(self, inputs, labels):
         raise NotImplementedError
 
@@ -383,9 +389,12 @@ class PoolingLayer(Layer):
         return x_trains
 
     def evaluate(self, inputs, labels):
-        pass
+        raise NotImplementedError
 
     def predict(self, X):
+        return self.transform(X)
+
+    def predict_proba(self, X):
         return self.transform(X)
 
 
@@ -424,7 +433,7 @@ class ConcatLayer(Layer):
         return concat_train
 
     def evaluate(self, inputs, labels=None):
-        pass
+        raise NotImplementedError
 
     def fit(self, x_trains, y_trains=None):
         concat_train = self._fit(x_trains)
@@ -464,6 +473,9 @@ class ConcatLayer(Layer):
         return concat_train, concat_test
 
     def predict(self, X):
+        return self.transform(X)
+
+    def predict_proba(self, X):
         return self.transform(X)
 
 
@@ -517,13 +529,14 @@ class CascadeLayer(Layer):
         self.data_save_dir = kwargs.get('data_save_dir')
         check_dir(self.data_save_dir)  # check dir, if not exists, create the dir
         self.seed = kwargs.get('seed')
+        self.larger_better = True
         self.metrics = kwargs.get('metrics')
-        if self.metrics == 'predict':
-            self.eval_metrics = [('accuracy', accuracy_pb)]
+        if self.metrics == 'accuracy':
+            self.eval_metrics = [Accuracy('accuracy')]
         elif self.metrics == 'auc':
-            self.eval_metrics = [('auc', auc)]
+            self.eval_metrics = [AUC('auc')]
         else:
-            self.eval_metrics = [('accuracy', accuracy_pb)]
+            self.eval_metrics = [Accuracy('accuracy')]
         self.keep_in_mem = kwargs.get('keep_in_mem')
         if self.keep_in_mem is None:
             self.keep_in_mem = True
@@ -579,8 +592,10 @@ class CascadeLayer(Layer):
             x_proba_train[:, ei * n_classes:ei * n_classes + n_classes] = y_proba_train
             eval_proba_train += y_proba_train
         eval_proba_train /= self.n_estimators
-        train_avg_acc = calc_accuracy(y_train, np.argmax(eval_proba_train, axis=1),
-                                      'layer - {} - [train] average'.format(self.layer_id))
+        # now supports one eval_metrics
+        metric = self.eval_metrics[0]
+        train_avg_acc = metric.calc(y_train, np.argmax(eval_proba_train, axis=1),
+                                    'layer - {} - [train] average'.format(self.layer_id))
         self.train_avg_metric = train_avg_acc
         return x_proba_train
 
@@ -647,13 +662,14 @@ class CascadeLayer(Layer):
             eval_proba_test += y_proba_test
         eval_proba_train /= self.n_estimators
         eval_proba_test /= self.n_estimators
-        train_avg_acc = calc_accuracy(y_train, np.argmax(eval_proba_train, axis=1),
-                                      'layer - {} - [train] average'.format(self.layer_id))
+        metric = self.eval_metrics[0]
+        train_avg_acc = metric.calc(y_train, np.argmax(eval_proba_train, axis=1),
+                                    'layer - {} - [train] average'.format(self.layer_id))
         self.train_avg_metric = train_avg_acc
         # judge whether y_test is None, which means users are to predict test probas
         if y_test is not None:
-            test_avg_acc = calc_accuracy(y_test, np.argmax(eval_proba_test, axis=1),
-                                         'layer - {} - [test] average'.format(self.layer_id))
+            test_avg_acc = metric.calc(y_test, np.argmax(eval_proba_test, axis=1),
+                                       'layer - {} - [test] average'.format(self.layer_id))
             self.test_avg_metric = test_avg_acc
         # if y_test is None, we need to generate test prediction, so keep eval_proba_test
         if y_test is None:
@@ -741,12 +757,15 @@ class CascadeLayer(Layer):
             proba_sum += y_proba_train
         return proba_sum
 
-    def evaluate(self, X, y):
+    def evaluate(self, X, y, eval_metrics=None):
+        if eval_metrics is None:
+            eval_metrics = [Accuracy('evaluate')]
         if isinstance(y, (list, tuple)):
             assert len(y) == 1, 'only support single labels array'
             y = y[0]
         pred = self.predict(X)
-        calc_accuracy(y, pred, 'evaluate')
+        for metric in eval_metrics:
+            metric.calc(y, pred, logger=LOGGER)
 
 
 class AutoGrowingCascadeLayer(Layer):
@@ -1112,36 +1131,33 @@ class AutoGrowingCascadeLayer(Layer):
                     x_cur_test = np.hstack((x_cur_test, x_test_group[:, self.group_starts[gid]:self.group_ends[gid]]))
                 x_cur_test = np.hstack((x_cur_test, x_proba_test))
                 cascade = self.layer_fit_cascades[layer_id]
-                # print('cascade.train_avg_metric: ', cascade.train_avg_metric)
                 x_proba_test = cascade.transform(x_cur_test)
-                # print(x_proba_test.shape)
-                # total_proba = np.zeros((n_examples, self.n_classes), dtype=np.float32)
-                # for i in range(len(self.est_configs)):
-                #     total_proba += x_proba_test[:, i * self.n_classes:i * self.n_classes + self.n_classes]
-                # calc_accuracy(y, np.argmax(total_proba.reshape((-1, self.n_classes)), axis=1), 'layer - {}'.format(layer_id))
                 layer_id += 1
             return x_proba_test
         except KeyboardInterrupt:
             pass
 
-    def evaluate(self, inputs, labels):
+    def evaluate(self, inputs, labels, eval_metrics=None):
+        if eval_metrics is None:
+            eval_metrics = [Accuracy('evaluate')]
         if isinstance(labels, (list, tuple)):
             assert len(labels) == 1, 'only support single labels array'
             labels = labels[0]
-        pred = self.predict(inputs, labels)
-        calc_accuracy(labels, pred, 'evaluate')
+        pred = self.predict(inputs)
+        for metric in eval_metrics:
+            metric.calc(labels, pred, logger=LOGGER)
 
-    def predict_proba(self, X, y=None):
+    def predict_proba(self, X):
         if not isinstance(X, (list, tuple)):
             X = [X]
-        x_proba = self.transform(X, y)
+        x_proba = self.transform(X)
         total_proba = np.zeros((X[0].shape[0], self.n_classes), dtype=np.float32)
         for i in range(len(self.est_configs)):
             total_proba += x_proba[:, i * self.n_classes:i * self.n_classes + self.n_classes]
         return total_proba
 
-    def predict(self, X, y=None):
-        total_proba = self.predict_proba(X, y)
+    def predict(self, X):
+        total_proba = self.predict_proba(X)
         return np.argmax(total_proba.reshape((-1, self.n_classes)), axis=1)
 
     @property
@@ -1202,29 +1218,10 @@ def _to_snake_case(name):
     return 'private' + insecure
 
 
-def calc_accuracy(y_true, y_pred, name, prefix=""):
-    if y_true is None or y_pred is None:
-        return
-    acc = 100. * np.sum(np.asarray(y_true) == y_pred) / len(y_true)
-    LOGGER.info('{}Accuracy({}) = {:.2f}%'.format(prefix, name, acc))
-    return acc
-
-
-def calc_auc(y_true, y_pred, name, prefix=""):
-    auc_res = auc(y_true, y_pred)
-    LOGGER.info('{}Accuracy({})={:.2f}%'.format(prefix, name, auc_res*100.0))
-    return auc_res
-
-
-def get_opt_layer_id(acc_list):
+def get_opt_layer_id(acc_list, larger_better=True):
     """ Return layer id with max accuracy on training data """
-    opt_layer_id = np.argsort(-np.asarray(acc_list), kind='mergesort')[0]
-    return opt_layer_id
-
-
-def get_opt_layer_id_best(acc_list_train, acc_list_test):
-    """ Return layer id with max accuracy on training and testing data"""
-    opt_layer_id_train = np.argsort(-np.asarray(acc_list_train), kind='mergesort')[0]
-    opt_layer_id_test = np.argsort(-np.asarray(acc_list_test), kind='mergesort')[0]
-    opt_layer_id = opt_layer_id_train if opt_layer_id_train > opt_layer_id_test else opt_layer_id_test
+    if larger_better:
+        opt_layer_id = np.argsort(-np.asarray(acc_list), kind='mergesort')[0]
+    else:
+        opt_layer_id = np.argsort(np.asarray(acc_list), kind='mergesort')[0]
     return opt_layer_id

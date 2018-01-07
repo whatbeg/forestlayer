@@ -8,9 +8,9 @@ DAG definition
 # License: Apache-2.0
 
 from ..utils import get_logger
-from ..utils.metrics import accuracy_pb
-from ..backend import pb2pred
+from ..utils.metrics import accuracy_pb, Accuracy
 import copy
+import numpy as np
 
 LOGGER = get_logger('forestflow.layers.graph')
 
@@ -73,48 +73,43 @@ class Graph(object):
         return x_trains, x_tests
 
     def transform(self, inputs):
-        # TODO
+        if self.FIT is False:
+            raise RuntimeError('You must fit the graph before predict')
         if not isinstance(inputs, (list, tuple)):
-            inputs = [inputs]
+            X = [inputs]
+        else:
+            X = inputs
         for layer in self.layers:
-            prev_inputs = inputs
-            inputs = layer.transform(prev_inputs)
-            del prev_inputs
-        LOGGER.info("graph fit_transform finished!")
-        self.FIT = True
-        return inputs
+            X = layer.transform(X)
+        LOGGER.info("graph transform finished!")
+        return X
 
     def predict(self, inputs):
-        # TODO
-        inputs = self.predict_proba(inputs)
-        for i, inp in enumerate(inputs):
-            inputs[i] = pb2pred(inp)
-        if len(inputs) == 1:
-            return inputs[0]
-        return inputs
+        if self.FIT is False:
+            raise RuntimeError('You must fit the graph before predict')
+        X = self.predict_proba(inputs)
+        return np.argmax(X.reshape((-1, self.layers[-1].n_classes)), axis=1)
 
     def predict_proba(self, inputs):
         if self.FIT is False:
             raise RuntimeError('You must fit the graph before predict')
         if not isinstance(inputs, (list, tuple)):
-            inputs = [inputs]
-        for layer in self.layers:
-            prev_inputs = inputs
-            inputs = layer.transform(prev_inputs)
-            del prev_inputs
-        return inputs
+            X = [inputs]
+        else:
+            X = inputs
+        for layer in self.layers[:-1]:
+            X = layer.transform(X)
+        X = self.layers[-1].predict_proba(X)
+        return X
 
     def evaluate(self, inputs, labels, eval_metrics=None):
         if eval_metrics is None:
-            eval_metrics = [accuracy_pb]
+            eval_metrics = [Accuracy('evaluate')]
         # make eval_metrics iterative
         if not isinstance(eval_metrics, (list, tuple)):
             eval_metrics = [eval_metrics]
-        metric_result = []
         for metric in eval_metrics:
-            res = metric(labels, self.predict(inputs))
-            metric_result.append(res)
-        return metric_result
+            metric(labels, self.predict_proba(inputs), prefix='', logger=LOGGER)
 
     def to_debug_string(self):
         debug_str = '\n'

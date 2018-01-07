@@ -11,7 +11,7 @@ from base_estimator import *
 from sklearn_estimator import *
 from xgboost_estimator import *
 from kfold_wrapper import *
-from ..utils.metrics import accuracy_pb
+from ..utils.metrics import Accuracy
 
 
 def est_class_from_type(est_type):
@@ -34,7 +34,7 @@ def get_estimator_kfold(name, n_folds, est_type, eval_metrics=None, seed=None, k
         return XGBoostClassifier(name, n_folds, seed=seed, est_args=est_args)
     est_class = est_class_from_type(est_type)
     if eval_metrics is None:
-        eval_metrics = [('accuracy', accuracy_pb)]
+        eval_metrics = [Accuracy('accuracy')]
     return KFoldWrapper(name,
                         n_folds,
                         est_class,
