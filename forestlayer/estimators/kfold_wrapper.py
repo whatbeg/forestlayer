@@ -139,12 +139,7 @@ class KFoldWrapper(object):
             x_tests = x_tests[0]
         proba_result = None
         for k, est in enumerate(self.fit_estimators):
-            try:
-                y_proba = est.predict_proba(x_tests.reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
-            except ValueError, e:
-                print(e)
-                print(x_tests.shape)
-                print(self.n_dims)
+            y_proba = est.predict_proba(x_tests.reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
             if len(x_tests.shape) == 3:
                 y_proba = y_proba.reshape((x_tests.shape[0], x_tests.shape[1], y_proba.shape[-1]))
             if k == 0:
@@ -163,7 +158,7 @@ class KFoldWrapper(object):
             return
         for (eval_name, eval_metric) in self.eval_metrics:
             accuracy = eval_metric(y_true, y_proba)
-            LOGGER.info("Accuracy({}.{}.{})={:.2f}%".format(est_name, y_name, eval_name, accuracy * 100.))
+            LOGGER.info("Accuracy({}.{}.{}) = {:.2f}%".format(est_name, y_name, eval_name, accuracy * 100.))
 
     def _predict_proba(self, est, X):
         return est.predict_proba(X)

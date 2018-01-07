@@ -9,7 +9,7 @@ UCI_ADULT Example.
 
 from __future__ import print_function
 from forestlayer.datasets import uci_adult
-from forestlayer.layers import Graph, AutoGrowingCascadeLayer
+from forestlayer.layers import Graph, AutoGrowingCascadeLayer, CascadeLayer
 from forestlayer.utils.storage_utils import get_data_save_base
 from forestlayer.utils.metrics import accuracy_pb
 import time
@@ -47,8 +47,16 @@ est_configs = [
     get_est_args('RF')
 ]
 
+cascade_kwargs = {
+    'n_classes': 2,
+    'data_save_dir': osp.join(get_data_save_base(), 'test_layer', 'cascade'),
+    'layer_id': 1,
+    'keep_in_mem': True,
+    'dtype': np.float32,
+}
+
 auto_cascade_kwargs = {
-    'early_stop_rounds': 4,
+    'early_stop_rounds': 3,
     'max_layers': 0,
     'stop_by_test': False,
     'n_classes': 2,
@@ -58,10 +66,23 @@ auto_cascade_kwargs = {
     'dtype': np.float32,
 }
 
+gc = CascadeLayer(est_configs=est_configs, kwargs=cascade_kwargs)
+
 agc = AutoGrowingCascadeLayer(est_configs=est_configs, kwargs=auto_cascade_kwargs)
 
-model = Graph()
-model.add(agc)
-model.build()
-model.fit_transform(x_train, y_train, x_test, y_test)
+
+def test_uci_graph():
+    model = Graph()
+    model.add(agc)
+    model.build()
+    model.fit_transform(x_train, y_train, x_test, y_test)
+
+
+def test_fit_predict():
+    agc.fit(x_train, y_train)
+    agc.evaluate(x_test, y_test)
+
+
+test_fit_predict()
+
 

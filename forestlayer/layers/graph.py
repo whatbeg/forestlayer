@@ -8,6 +8,7 @@ DAG definition
 # License: Apache-2.0
 
 from ..utils import get_logger
+from ..utils.metrics import accuracy_pb
 from ..backend import pb2pred
 import copy
 
@@ -103,10 +104,11 @@ class Graph(object):
             del prev_inputs
         return inputs
 
-    def evaluate(self, eval_metrics, inputs, labels):
-        # TODO
+    def evaluate(self, inputs, labels, eval_metrics=None):
+        if eval_metrics is None:
+            eval_metrics = [accuracy_pb]
         # make eval_metrics iterative
-        if isinstance(eval_metrics, (list, tuple)) is not True:
+        if not isinstance(eval_metrics, (list, tuple)):
             eval_metrics = [eval_metrics]
         metric_result = []
         for metric in eval_metrics:

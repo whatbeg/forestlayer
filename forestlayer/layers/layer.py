@@ -275,6 +275,7 @@ class MultiGrainScanLayer(Layer):
         return x_win_est_train, x_win_est_test
 
     def transform(self, x_trains):
+        assert x_trains is not None, 'x_trains should not be None!'
         if isinstance(x_trains, (list, tuple)):
             assert len(x_trains) == 1, "Multi grain scan Layer only supports exactly one input now!"
             x_trains = x_trains[0]
@@ -308,7 +309,7 @@ class MultiGrainScanLayer(Layer):
         return self.transform(X)
 
     def evaluate(self, inputs, labels):
-        pass
+        raise NotImplementedError
 
     def __str__(self):
         return self.__class__.__name__
@@ -364,6 +365,9 @@ class PoolingLayer(Layer):
         return x_trains, x_tests
 
     def transform(self, x_trains):
+        assert x_trains is not None, 'x_trains should not be None!'
+        if not isinstance(x_trains, (list, tuple)):
+            x_trains = [x_trains]
         # inputs shape: [[(60000, 10, 11, 11), (60000, 10, 11, 11)], [.., ..], ...]
         if len(self.pools) != len(x_trains):
             raise ValueError('len(pools) does not equal to len(inputs), you must set right pools!')
@@ -400,6 +404,8 @@ class ConcatLayer(Layer):
         pass
 
     def _fit(self, x_trains):
+        if not isinstance(x_trains, (list, tuple)):
+            x_trains = [x_trains]
         # inputs shape: [[(60000, 10, 6, 6), (60000, 10, 6, 6)], [.., ..], ...]
         concat_train = []
         for bottoms in x_trains:
@@ -558,7 +564,7 @@ class CascadeLayer(Layer):
         x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=np.float32)
         eval_proba_train = np.zeros((n_trains, n_classes))
         # fit estimators, get probas
-        for ei, est_config in enumerate(self.est_configs):
+        for ei in range(self.n_estimators):
             est = self._init_estimators(self.layer_id, ei)
             # fit and transform
             y_proba_train, _ = est.fit_transform(x_train, y_train, y_train, test_sets=None)
@@ -568,13 +574,13 @@ class CascadeLayer(Layer):
             if y_proba_train.shape != (n_trains, n_classes):
                 raise ValueError('output probability shape incorrect!,'
                                  ' should be {}, but {}'.format((n_trains, n_classes), y_proba_train.shape))
-            self.fit_estimators[ei] = est
+            if self.keep_in_mem:
+                self.fit_estimators[ei] = est
             x_proba_train[:, ei * n_classes:ei * n_classes + n_classes] = y_proba_train
             eval_proba_train += y_proba_train
         eval_proba_train /= self.n_estimators
         train_avg_acc = calc_accuracy(y_train, np.argmax(eval_proba_train, axis=1),
                                       'layer - {} - [train] average'.format(self.layer_id))
-
         self.train_avg_metric = train_avg_acc
         return x_proba_train
 
@@ -616,7 +622,7 @@ class CascadeLayer(Layer):
         eval_proba_train = np.zeros((n_trains, n_classes))
         eval_proba_test = np.zeros((n_tests, n_classes))
         # fit estimators, get probas
-        for ei, est_config in enumerate(self.est_configs):
+        for ei in range(self.n_estimators):
             est = self._init_estimators(self.layer_id, ei)
             # fit and transform
             y_proba_train, y_proba_test = est.fit_transform(x_train, y_train, y_train,
@@ -633,7 +639,8 @@ class CascadeLayer(Layer):
             if y_proba_test.shape != (n_tests, n_classes):
                 raise ValueError('output probability shape incorrect!'
                                  ' should be {}, but {}'.format((n_trains, n_classes), y_proba_train.shape))
-            self.fit_estimators[ei] = est
+            if self.keep_in_mem:
+                self.fit_estimators[ei] = est
             x_proba_train[:, ei*n_classes:ei*n_classes + n_classes] = y_proba_train
             x_proba_test[:, ei*n_classes:ei*n_classes + n_classes] = y_proba_test
             eval_proba_train += y_proba_train
@@ -735,7 +742,11 @@ class CascadeLayer(Layer):
         return proba_sum
 
     def evaluate(self, X, y):
-        raise NotImplementedError
+        if isinstance(y, (list, tuple)):
+            assert len(y) == 1, 'only support single labels array'
+            y = y[0]
+        pred = self.predict(X)
+        calc_accuracy(y, pred, 'evaluate')
 
 
 class AutoGrowingCascadeLayer(Layer):
@@ -797,6 +808,10 @@ class AutoGrowingCascadeLayer(Layer):
         self.layer_fit_cascades = []
         self.n_layers = 0
         self.opt_layer_id = 0
+        self.n_group_train = 0
+        self.group_starts = []
+        self.group_ends = []
+        self.group_dims = []
 
     def _create_cascade_layer(self, kwargs):
         return CascadeLayer(est_configs=self.est_configs,
@@ -816,6 +831,7 @@ class AutoGrowingCascadeLayer(Layer):
             y_train = y_train[0]
         self.layer_fit_cascades = []
         n_groups_train = len(x_trains)
+        self.n_group_train = n_groups_train
         n_trains = len(y_train)
         # Initialize the groups
         x_train_group = np.zeros((n_trains, 0), dtype=x_trains[0].dtype)
@@ -831,10 +847,12 @@ class AutoGrowingCascadeLayer(Layer):
             group_ends.append(group_starts[i] + group_dims[i])
             x_train_group = np.hstack((x_train_group, x_train))
 
-        LOGGER.info('group_starts={}'.format(group_dims))
+        LOGGER.info('group_starts={}'.format(group_starts))
         LOGGER.info('group_dims={}'.format(group_dims))
         LOGGER.info('X_train_group={}'.format(x_train_group.shape))
-
+        self.group_starts = group_starts
+        self.group_ends = group_ends
+        self.group_dims = group_dims
         if self.look_index_cycle is None:
             self.look_index_cycle = [[i, ] for i in range(n_groups_train)]
         x_cur_train = None
@@ -860,7 +878,7 @@ class AutoGrowingCascadeLayer(Layer):
                     'dtype': self.dtype,
                 }
                 cascade = self._create_cascade_layer(kwargs=kwargs)
-                x_proba_train, x_proba_test = cascade.fit_transform(x_cur_train, y_train)
+                x_proba_train, _ = cascade.fit_transform(x_cur_train, y_train)
                 if self.keep_in_mem:
                     self.layer_fit_cascades.append(cascade)
                 layer_metric_list.append(cascade.train_avg_metric)
@@ -878,6 +896,9 @@ class AutoGrowingCascadeLayer(Layer):
                                                                   layer_metric_list[opt_layer_id]))
                     self.n_layers = layer_id + 1
                     self._save_data(opt_layer_id, *opt_data)
+                    # wash the fit cascades after optimal layer id to save memory
+                    for li in range(opt_layer_id + 1, layer_id + 1):
+                        self.layer_fit_cascades[li] = None
                     return x_cur_train
                 if self.data_save_rounds > 0 and (layer_id + 1) % self.data_save_rounds == 0:
                     self._save_data(layer_id, *opt_data)
@@ -893,6 +914,9 @@ class AutoGrowingCascadeLayer(Layer):
                                                                               layer_metric_list[opt_layer_id]))
             self._save_data(layer_id, *opt_data)
             self.n_layers = layer_id + 1
+            # wash the fit cascades after optimal layer id to save memory
+            for li in range(opt_layer_id + 1, layer_id + 1):
+                self.layer_fit_cascades[li] = None
             return x_cur_train
         except KeyboardInterrupt:
             pass
@@ -919,12 +943,13 @@ class AutoGrowingCascadeLayer(Layer):
             x_tests = [x_tests]
         self.layer_fit_cascades = []
         n_groups_train = len(x_trains)
+        self.n_group_train = n_groups_train
         n_groups_test = len(x_tests)
         n_trains = len(y_train)
         n_tests = x_tests[0].shape[0]
         if y_test is None and self.stop_by_test is True:
             raise ValueError("Since y_test is None so you cannot set stop_by_test True!")
-        assert n_groups_train == n_groups_test, 'n_group_train must equal to n_group_test now! Sorry about that!'
+        assert n_groups_train == n_groups_test, 'n_group_train must equal to n_group_test!'
         # Initialize the groups
         x_train_group = np.zeros((n_trains, 0), dtype=x_trains[0].dtype)
         x_test_group = np.zeros((n_tests, 0), dtype=x_tests[0].dtype)
@@ -948,7 +973,9 @@ class AutoGrowingCascadeLayer(Layer):
         LOGGER.info('group_starts={}'.format(group_starts))
         LOGGER.info('group_dims={}'.format(group_dims))
         LOGGER.info('X_train_group={}, X_test_group={}'.format(x_train_group.shape, x_test_group.shape))
-
+        self.group_starts = group_starts
+        self.group_ends = group_ends
+        self.group_dims = group_dims
         if self.look_index_cycle is None:
             self.look_index_cycle = [[i, ] for i in range(n_groups_train)]
         x_cur_train, x_cur_test = None, None
@@ -1009,6 +1036,9 @@ class AutoGrowingCascadeLayer(Layer):
                                       opt_layer_id, layer_train_metrics[opt_layer_id]))
                     self.n_layers = layer_id + 1
                     self.save_data(opt_layer_id, *opt_data)
+                    # wash the fit cascades after optimal layer id to save memory
+                    for li in range(opt_layer_id + 1, layer_id + 1):
+                        self.layer_fit_cascades[li] = None
                     return x_cur_train, x_cur_test
                 if self.data_save_rounds > 0 and (layer_id + 1) % self.data_save_rounds == 0:
                     self.save_data(layer_id, *opt_data)
@@ -1041,67 +1071,77 @@ class AutoGrowingCascadeLayer(Layer):
                                                                       layer_test_metrics[opt_layer_id]))
             self._save_data(layer_id, *opt_data)
             self.n_layers = layer_id + 1
+            # if y_test is None, we predict x_test and save its predictions
             if y_test is None and cascade is not None:
                 self.save_test_result(x_proba_test=cascade.eval_proba_test)
+            # wash the fit cascades after optimal layer id to save memory
+            for li in range(opt_layer_id + 1, layer_id + 1):
+                self.layer_fit_cascades[li] = None
             return x_cur_train, x_cur_test
         except KeyboardInterrupt:
             pass
 
-    def transform(self, X):
+    def transform(self, X, y=None):
         if not isinstance(X, (list, tuple)):
             X = [X]
         n_groups = len(X)
         n_examples = len(X[0])
         # Initialize the groups
-        x_train_group = np.zeros((n_examples, 0), dtype=X[0].dtype)
-        group_starts, group_ends, group_dims = [], [], []
-        # train set
-        for i, x_train in enumerate(X):
-            assert x_train.shape[0] == n_examples, 'x_train.shape[0]={} not equal to n_trains={}'.format(
-                x_train.shape[0], n_examples
-            )
-            x_train = x_train.reshape((n_examples, -1))
-            group_dims.append(x_train.shape[1])
-            group_starts.append(i if i == 0 else group_ends[i - 1])
-            group_ends.append(group_starts[i] + group_dims[i])
-            x_train_group = np.hstack((x_train_group, x_train))
+        x_test_group = np.zeros((n_examples, 0), dtype=X[0].dtype)
+        # test set
+        for i, x_test in enumerate(X):
+            assert x_test.shape[0] == n_examples
+            x_test = x_test.reshape(n_examples, -1)
+            assert x_test.shape[1] == self.group_dims[i]
+            x_test_group = np.hstack((x_test_group, x_test))
 
-        LOGGER.info('[transform] group_starts={}'.format(group_dims))
-        LOGGER.info('[transform] group_dims={}'.format(group_dims))
-        LOGGER.info('[transform] X_train_group={}'.format(x_train_group.shape))
+        LOGGER.info('[transform] group_starts={}'.format(self.group_starts))
+        LOGGER.info('[transform] group_dims={}'.format(self.group_dims))
+        LOGGER.info('[transform] X_test_group={}'.format(x_test_group.shape))
 
         if self.look_index_cycle is None:
             self.look_index_cycle = [[i, ] for i in range(n_groups)]
-        x_proba_train = np.zeros((n_examples, 0), dtype=np.float32)
+        x_proba_test = np.zeros((n_examples, 0), dtype=np.float32)
         layer_id = 0
         try:
-            while layer_id < self.n_layers:
-                x_cur_train = np.zeros((n_examples, 0), dtype=np.float32)
+            while layer_id <= self.opt_layer_id:
+                LOGGER.info('Transforming layer - {} / {}'.format(layer_id, self.n_layers))
+                x_cur_test = np.zeros((n_examples, 0), dtype=np.float32)
                 train_ids = self.look_index_cycle[layer_id % n_groups]
                 for gid in train_ids:
-                    x_cur_train = np.hstack((x_cur_train, x_train_group[:, group_starts[gid]:group_ends[gid]]))
-                x_cur_train = np.hstack((x_cur_train, x_proba_train))
+                    x_cur_test = np.hstack((x_cur_test, x_test_group[:, self.group_starts[gid]:self.group_ends[gid]]))
+                x_cur_test = np.hstack((x_cur_test, x_proba_test))
                 cascade = self.layer_fit_cascades[layer_id]
-                x_proba_train = cascade.transform(x_cur_train)
+                # print('cascade.train_avg_metric: ', cascade.train_avg_metric)
+                x_proba_test = cascade.transform(x_cur_test)
+                # print(x_proba_test.shape)
+                # total_proba = np.zeros((n_examples, self.n_classes), dtype=np.float32)
+                # for i in range(len(self.est_configs)):
+                #     total_proba += x_proba_test[:, i * self.n_classes:i * self.n_classes + self.n_classes]
+                # calc_accuracy(y, np.argmax(total_proba.reshape((-1, self.n_classes)), axis=1), 'layer - {}'.format(layer_id))
                 layer_id += 1
-            return x_proba_train
+            return x_proba_test
         except KeyboardInterrupt:
             pass
 
     def evaluate(self, inputs, labels):
-        pass
+        if isinstance(labels, (list, tuple)):
+            assert len(labels) == 1, 'only support single labels array'
+            labels = labels[0]
+        pred = self.predict(inputs, labels)
+        calc_accuracy(labels, pred, 'evaluate')
 
-    def predict_proba(self, X):
+    def predict_proba(self, X, y=None):
         if not isinstance(X, (list, tuple)):
             X = [X]
-        x_proba_train = self.transform(X)
+        x_proba = self.transform(X, y)
         total_proba = np.zeros((X[0].shape[0], self.n_classes), dtype=np.float32)
         for i in range(len(self.est_configs)):
-            total_proba += x_proba_train[:, i * self.n_classes:i * self.n_classes + self.n_classes]
+            total_proba += x_proba[:, i * self.n_classes:i * self.n_classes + self.n_classes]
         return total_proba
 
-    def predict(self, X):
-        total_proba = self.predict_proba(X)
+    def predict(self, X, y=None):
+        total_proba = self.predict_proba(X, y)
         return np.argmax(total_proba.reshape((-1, self.n_classes)), axis=1)
 
     @property
@@ -1163,8 +1203,10 @@ def _to_snake_case(name):
 
 
 def calc_accuracy(y_true, y_pred, name, prefix=""):
+    if y_true is None or y_pred is None:
+        return
     acc = 100. * np.sum(np.asarray(y_true) == y_pred) / len(y_true)
-    LOGGER.info('{}Accuracy({})={:.2f}%'.format(prefix, name, acc))
+    LOGGER.info('{}Accuracy({}) = {:.2f}%'.format(prefix, name, acc))
     return acc
 
 
