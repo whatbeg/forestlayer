@@ -18,10 +18,10 @@ install_requires = [
 ]
 
 setup(
-    name="forestflow",
+    name="forestlayer",
     version="0.1.0",
     include_package_data=True,
-    author="ForestFlow Contributors",
+    author="ForestLayer Contributors",
     author_email="huqiu00@163.com",
     url="https://github.com/whatbeg/forestflow",
     license="apache",

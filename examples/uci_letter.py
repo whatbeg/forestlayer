@@ -22,7 +22,7 @@ start_time = time.time()
 auto_cascade_kwargs = {
     'early_stop_rounds': 4,
     'max_layers': 0,
-    'stop_by_test': False,
+    'stop_by_test': True,
     'n_classes': 26,
     'data_save_rounds': 4,
     'data_save_dir': osp.join(get_data_save_base(), 'uci_adult', 'auto_cascade'),
@@ -37,8 +37,7 @@ def get_est_args(est_type):
         'n_folds': 3,
         'n_estimators': 500,
         'max_depth': 100,
-        'n_jobs': -1,
-        'min_samples_leaf': 10
+        'n_jobs': -1
     }
     return est_args
 
