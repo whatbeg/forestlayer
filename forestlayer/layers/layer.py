@@ -39,30 +39,19 @@ class Layer(object):
     # Class Methods
         from_config(config)
     """
-    def __init__(self, **kwargs):
+    def __init__(self, batch_size=None, dtype=None, name=None):
         """
         Initialize a layer.
-        :param kwargs:
         """
-        allowed_kwargs = {'batch_size',
-                          'dtype',
-                          'name'}
-        for kwarg in kwargs:
-            if kwarg not in allowed_kwargs:
-                raise TypeError('Keyword argument not understood:', kwarg)
-
-        name = kwargs.get('name')
+        self.batch_size = batch_size
         if not name:
             prefix = self.__class__.__name__
             name = _to_snake_case(prefix) + "_" + str(id(self))
         self.name = name
         # Set dtype.
-        dtype = kwargs.get('dtype')
         if dtype is None:
             dtype = F.floatx()
         self.dtype = dtype
-        self.input_layer = None
-        self.output_layer = None
 
     def call(self, x_trains):
         raise NotImplementedError
@@ -151,7 +140,6 @@ class MultiGrainScanLayer(Layer):
             prefix = 'multi_grain_scan'
             name = prefix + '_' + str(id(self))
         super(MultiGrainScanLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
-        self.batch_size = batch_size
         self.windows = windows  # [Win, Win, Win, ...]
         self.est_for_windows = est_for_windows  # [[est1, est2], [est1, est2], [est1, est2], ...]
         assert n_class is not None
@@ -480,66 +468,53 @@ class ConcatLayer(Layer):
 
 
 class CascadeLayer(Layer):
-    def __init__(self, est_configs, kwargs):
-        """Cascade Layer
+    def __init__(self, batch_size=None, dtype=None, name=None, est_configs=None, layer_id='anonymous', n_classes=None,
+                 keep_in_mem=False, data_save_dir=None, metrics=None, seed=None):
+        """Cascade Layer.
+        A cascade layer contains several estimators, it accepts single input, go through these estimators, produces
+        predicted probability by every estimators, and stacks them together for next cascade layer.
 
-        # Arguments:
-            name
-            est_configs
-            n_classes
-            layer_id
-            data_save_dir
-            metrics
-            seed
-            keep_in_mem
+        :param batch_size: cascade layer do not need batch_size actually.
+        :param dtype: data type
+        :param name: name of this layer
+        :param est_configs: estimators' configurations for this layer, one for every estimator
+        :param layer_id: layer id, if this layer is an independent layer, layer id is anonymous [default]
+        :param n_classes: number of classes to classify
+        :param keep_in_mem: identifies whether keep the model in memory, if fit_transform,
+                            we recommend set it False to save memory and speed up the application
+                            TODO: support dump model to disk to save memory
+        :param data_save_dir: directory to save intermediate data into
+        :param metrics: evaluation metrics used in training model and evaluating testing data
+        :param seed: random seed, also called random state in scikit-learn random forest
+
         # Properties
-            eval_metrics
-            fit_estimators
-            train_avg_metric
-            test_avg_metric
+            eval_metrics: evaluation metrics
+            fit_estimators: estimator instances after fit
+            train_avg_metric: training average metric
+            test_avg_metric: testing average metric
 
         # Raises
             RuntimeError: if estimator.fit_transform returns None data
             ValueError: if estimator.fit_transform returns wrong shape data
         """
-        self.est_configs = est_configs
-        allowed_args = {'n_classes',
-                        'data_save_dir',
-                        'name',
-                        'layer_id',
-                        'seed',
-                        'metrics',
-                        'keep_in_mem',
-                        'batch_size',
-                        'dtype',
-                        }
-
-        for kwarg in kwargs:
-            if kwarg not in allowed_args:
-                LOGGER.warn("Unidentified argument {}, ignore it!".format(kwarg))
-        self.layer_id = kwargs.get('layer_id')
-        if self.layer_id is None:
-            self.layer_id = "Unknown"
-        name = kwargs.get('name')
+        self.est_configs = [] if est_configs is None else est_configs
+        self.layer_id = layer_id
         if not name:
             name = 'layer-{}'.format(self.layer_id)
-        dtype = kwargs.get('dtype')
-        super(CascadeLayer, self).__init__(name=name, dtype=dtype)
-        self.n_classes = kwargs.get('n_classes')
-        self.data_save_dir = kwargs.get('data_save_dir')
+        super(CascadeLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
+        self.n_classes = n_classes
+        self.keep_in_mem = keep_in_mem
+        self.data_save_dir = data_save_dir
         check_dir(self.data_save_dir)  # check dir, if not exists, create the dir
-        self.seed = kwargs.get('seed')
+        self.seed = seed
         self.larger_better = True
-        self.metrics = kwargs.get('metrics')
+        self.metrics = metrics
         if self.metrics == 'accuracy':
             self.eval_metrics = [Accuracy('accuracy')]
         elif self.metrics == 'auc':
             self.eval_metrics = [AUC('auc')]
         else:
             self.eval_metrics = [Accuracy('accuracy')]
-        self.keep_in_mem = kwargs.get('keep_in_mem')
-        if self.keep_in_mem is None:
-            self.keep_in_mem = True
         # whether this layer the last layer of Auto-growing cascade layer
         self.complete = False
         self.fit_estimators = [None for _ in range(self.n_estimators)]
@@ -663,14 +638,14 @@ class CascadeLayer(Layer):
         eval_proba_train /= self.n_estimators
         eval_proba_test /= self.n_estimators
         metric = self.eval_metrics[0]
-        train_avg_acc = metric.calc(y_train, np.argmax(eval_proba_train, axis=1),
-                                    'layer - {} - [train] average'.format(self.layer_id), logger=LOGGER)
-        self.train_avg_metric = train_avg_acc
+        train_avg_metric = metric.calc(y_train, np.argmax(eval_proba_train, axis=1),
+                                       'layer - {} - [train] average'.format(self.layer_id), logger=LOGGER)
+        self.train_avg_metric = train_avg_metric
         # judge whether y_test is None, which means users are to predict test probas
         if y_test is not None:
-            test_avg_acc = metric.calc(y_test, np.argmax(eval_proba_test, axis=1),
-                                       'layer - {} - [test] average'.format(self.layer_id), logger=LOGGER)
-            self.test_avg_metric = test_avg_acc
+            test_avg_metric = metric.calc(y_test, np.argmax(eval_proba_test, axis=1),
+                                          'layer - {} - [test] average'.format(self.layer_id), logger=LOGGER)
+            self.test_avg_metric = test_avg_metric
         # if y_test is None, we need to generate test prediction, so keep eval_proba_test
         if y_test is None:
             self.eval_proba_test = eval_proba_test
@@ -769,61 +744,65 @@ class CascadeLayer(Layer):
 
 
 class AutoGrowingCascadeLayer(Layer):
-    def __init__(self, est_configs, kwargs):
-        """
-        early_stopping_rounds: int
-            when not None , means when the accuracy does not increase in
-            early_stopping_rounds, the cascade level will stop automatically growing
-        est_configs: list of estimator arguments
-            identify the estimator configuration to construct at this layer
-        max_layers: int
-            maximum number of cascade layers allowed for experiments,
-            0 means do NOT use Early Stopping to automatically find the layer number
-        n_classes: int
-            Number of classes
-        look_index_cycle (2d list): default=None
-            specification for layer i, look for the array in look_index_cycle[i % len(look_index_cycle)]
-            default = None <=> [[i,] for i in range(n_groups)]
-            .e.g.
-                look_index_cycle = [[0,1],[2,3],[0,1,2,3]]
-                means layer 1 look for the grained 0,1; layer 2 look for grained 2,3;
-                layer 3 look for every grained, and layer 4 cycles back as layer 1
-        data_save_rounds: int [default=0]
-        data_save_dir: str [default=None]
-            each data_save_rounds save the intermediate results in data_save_dir
-            if data_save_rounds = 0, then no savings for intermediate results
-        """
-        self.est_configs = est_configs
-        allowed_args = {'early_stop_rounds',
-                        'max_layers',
-                        'n_classes',
-                        'look_index_cycle',
-                        'data_save_rounds',
-                        'data_save_dir',
-                        'keep_in_mem',
-                        'stop_by_test',
-                        'name',
-                        'batch_size',
-                        'dtype',
-                        }
+    def __init__(self, batch_size=None, dtype=None, name=None,
+                 early_stopping_rounds=None, max_layers=0, look_index_cycle=None, data_save_rounds=None,
+                 stop_by_test=False, est_configs=None, n_classes=None,
+                 keep_in_mem=False, data_save_dir=None, metrics=None, seed=None):
+        """AutoGrowingCascadeLayer
+        An AutoGrowingCascadeLayer is a virtual layer that consists of many single cascade layers.
+        `auto-growing` means this kind of layer can decide the depth of cascade forest,
+         by training error or testing error.
 
-        for kwarg in kwargs:
-            if kwarg not in allowed_args:
-                LOGGER.warn("Unidentified argument {}, ignore it!".format(kwarg))
-        name = kwargs.get('name')
-        dtype = kwargs.get('dtype')
-        super(AutoGrowingCascadeLayer, self).__init__(name=name, dtype=dtype)
+        :param batch_size: cascade layer do not need batch_size actually.
+        :param dtype: data type
+        :param name: name of this layer
+        :param early_stopping_rounds: early stopping rounds, if there is no increase in performance (training accuracy
+                                      or testing accuracy) over `early_stopping_rounds` layer, we stop the training
+                                      process to save time and storage. And we keep first optimal_layer_id cascade
+                                      layer models, and predict/evaluate according to these cascade layer.
+        :param max_layers: max layers to growing
+                           0 means using Early Stopping to automatically find the layer number
+        :param look_index_cycle: (2d list): default = None = [[i,] for i in range(n_groups)]
+                                 specification for layer i, look for the array in
+                                 look_index_cycle[i % len(look_index_cycle)]
+                                 .e.g. look_index_cycle = [[0,1],[2,3],[0,1,2,3]]
+                                 means layer 1 look for the grained 0,1; layer 2 look for grained 2,3;
+                                 layer 3 look for every grained, and layer 4 cycles back as layer 1
+        :param data_save_rounds: int [default = 0, means no savings for intermediate results]
+        :param stop_by_test: boolean, identifies whether conduct early stopping by testing metric
+                             [default = False]
+        :param est_configs: list of estimator arguments
+                            identify the estimator configuration to construct at this layer
+        :param n_classes: number of classes
+        :param keep_in_mem: boolean, identifies whether keep model in memory. [default = False] to save memory
+        :param data_save_dir: str [default = None]
+                              each data_save_rounds save the intermediate results in data_save_dir
+                              if data_save_rounds = 0, then no savings for intermediate results
+        :param metrics: evaluation metrics used in training model and evaluating testing data
+        :param seed: random seed, also called random state in scikit-learn random forest
+        """
+        self.est_configs = [] if est_configs is None else est_configs
+        super(AutoGrowingCascadeLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
         self.name = name
-        self.early_stop_rounds = kwargs.get('early_stop_rounds', 4)
-        self.max_layers = kwargs.get('max_layers', 0)
-        self.n_classes = kwargs.get('n_classes')
+        self.early_stop_rounds = early_stopping_rounds
+        self.max_layers = max_layers
+        self.n_classes = n_classes
         # if look_index_cycle is None, you need set look_index_cycle in fit / fit_transform
-        self.look_index_cycle = kwargs.get('look_index_cycle')
-        self.data_save_rounds = kwargs.get('data_save_rounds')
-        self.data_save_dir = kwargs.get('data_save_dir')
+        self.look_index_cycle = look_index_cycle
+        self.data_save_rounds = data_save_rounds
+        self.data_save_dir = data_save_dir
         check_dir(self.data_save_dir)  # check data save dir, if not exists, create the dir
-        self.keep_in_mem = kwargs.get('keep_in_mem', True)
-        self.stop_by_test = kwargs.get('stop_by_test', False)
+        self.keep_in_mem = keep_in_mem
+        self.stop_by_test = stop_by_test
+        self.metrics = metrics
+        if self.metrics == 'accuracy':
+            self.eval_metrics = [Accuracy('accuracy')]
+        elif self.metrics == 'auc':
+            self.eval_metrics = [AUC('auc')]
+        else:
+            self.eval_metrics = [Accuracy('accuracy')]
+        self.seed = seed
+        # properties
         self.layer_fit_cascades = []
         self.n_layers = 0
         self.opt_layer_id = 0
@@ -832,9 +811,8 @@ class AutoGrowingCascadeLayer(Layer):
         self.group_ends = []
         self.group_dims = []
 
-    def _create_cascade_layer(self, kwargs):
-        return CascadeLayer(est_configs=self.est_configs,
-                            kwargs=kwargs)
+    def _create_cascade_layer(self, **kwargs):
+        return CascadeLayer(est_configs=self.est_configs, **kwargs)
 
     def call(self, x_trains):
         pass
@@ -895,8 +873,10 @@ class AutoGrowingCascadeLayer(Layer):
                     'layer_id': layer_id,
                     'keep_in_mem': self.keep_in_mem,
                     'dtype': self.dtype,
+                    'metrics': self.eval_metrics,
+                    'seed': self.seed
                 }
-                cascade = self._create_cascade_layer(kwargs=kwargs)
+                cascade = self._create_cascade_layer(**kwargs)
                 x_proba_train, _ = cascade.fit_transform(x_cur_train, y_train)
                 if self.keep_in_mem:
                     self.layer_fit_cascades.append(cascade)
