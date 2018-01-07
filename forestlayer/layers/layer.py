@@ -96,43 +96,6 @@ class Layer(object):
         return self.__class__.__name__
 
 
-class InputLayer(Layer):
-    # TODO: think whether it's redundant
-    def __init__(self, input_shape=None, batch_size=None, dtype=None, name=None):
-        if not name:
-            prefix = 'input'
-            name = prefix + '_' + str(id(self))
-        super(InputLayer, self).__init__(dtype=dtype, name=name)
-        self.input_shape = input_shape
-        self.batch_size = batch_size
-        self.num_est = 0
-        self.estimators = []
-
-    def call(self, x_trains):
-        return x_trains
-
-    def __call__(self, x_trains):
-        self.call(x_trains)
-
-    def fit(self, x_trains, y_trains):
-        return x_trains
-
-    def fit_transform(self, x_trains, y_trains, x_tests=None, y_tests=None):
-        return x_trains, x_tests
-
-    def transform(self, inputs, labels=None):
-        return inputs
-
-    def predict(self, inputs):
-        raise NotImplementedError
-
-    def evaluate(self, inputs, labels):
-        raise NotImplementedError
-
-    def __str__(self):
-        return self.__class__.__name__
-
-
 class MultiGrainScanLayer(Layer):
     def __init__(self, batch_size=None, dtype=None, name=None,
                  windows=None, est_for_windows=None, n_class=None):
@@ -744,10 +707,9 @@ class CascadeLayer(Layer):
 
 
 class AutoGrowingCascadeLayer(Layer):
-    def __init__(self, batch_size=None, dtype=None, name=None,
-                 early_stopping_rounds=None, max_layers=0, look_index_cycle=None, data_save_rounds=None,
-                 stop_by_test=False, est_configs=None, n_classes=None,
-                 keep_in_mem=False, data_save_dir=None, metrics=None, seed=None):
+    def __init__(self, batch_size=None, dtype=np.float32, name=None, est_configs=None,
+                 early_stopping_rounds=None, max_layers=0, look_index_cycle=None, data_save_rounds=0,
+                 stop_by_test=False, n_classes=None, keep_in_mem=False, data_save_dir=None, metrics=None, seed=None):
         """AutoGrowingCascadeLayer
         An AutoGrowingCascadeLayer is a virtual layer that consists of many single cascade layers.
         `auto-growing` means this kind of layer can decide the depth of cascade forest,
@@ -756,6 +718,8 @@ class AutoGrowingCascadeLayer(Layer):
         :param batch_size: cascade layer do not need batch_size actually.
         :param dtype: data type
         :param name: name of this layer
+        :param est_configs: list of estimator arguments
+                            identify the estimator configuration to construct at this layer
         :param early_stopping_rounds: early stopping rounds, if there is no increase in performance (training accuracy
                                       or testing accuracy) over `early_stopping_rounds` layer, we stop the training
                                       process to save time and storage. And we keep first optimal_layer_id cascade
@@ -771,8 +735,6 @@ class AutoGrowingCascadeLayer(Layer):
         :param data_save_rounds: int [default = 0, means no savings for intermediate results]
         :param stop_by_test: boolean, identifies whether conduct early stopping by testing metric
                              [default = False]
-        :param est_configs: list of estimator arguments
-                            identify the estimator configuration to construct at this layer
         :param n_classes: number of classes
         :param keep_in_mem: boolean, identifies whether keep model in memory. [default = False] to save memory
         :param data_save_dir: str [default = None]
@@ -811,8 +773,10 @@ class AutoGrowingCascadeLayer(Layer):
         self.group_ends = []
         self.group_dims = []
 
-    def _create_cascade_layer(self, **kwargs):
-        return CascadeLayer(est_configs=self.est_configs, **kwargs)
+    def _create_cascade_layer(self, est_configs=None, n_classes=None, data_save_dir=None,
+                              layer_id=None, keep_in_mem=False, dtype=None, metrics=None, seed=None):
+        return CascadeLayer(dtype=dtype, est_configs=est_configs, layer_id=layer_id, n_classes=n_classes,
+                            keep_in_mem=keep_in_mem, data_save_dir=data_save_dir, metrics=metrics, seed=seed)
 
     def call(self, x_trains):
         pass
@@ -867,16 +831,15 @@ class AutoGrowingCascadeLayer(Layer):
                 for gid in train_ids:
                     x_cur_train = np.hstack((x_cur_train, x_train_group[:, group_starts[gid]:group_ends[gid]]))
                 x_cur_train = np.hstack((x_cur_train, x_proba_train))
-                kwargs = {
-                    'n_classes': self.n_classes,
-                    'data_save_dir': osp.join(self.data_save_dir, 'cascade_layer_{}'.format(layer_id)),
-                    'layer_id': layer_id,
-                    'keep_in_mem': self.keep_in_mem,
-                    'dtype': self.dtype,
-                    'metrics': self.eval_metrics,
-                    'seed': self.seed
-                }
-                cascade = self._create_cascade_layer(**kwargs)
+                cascade = self._create_cascade_layer(est_configs=self.est_configs,
+                                                     n_classes=self.n_classes,
+                                                     data_save_dir=osp.join(self.data_save_dir,
+                                                                            'cascade_layer_{}'.format(layer_id)),
+                                                     layer_id=layer_id,
+                                                     keep_in_mem=self.keep_in_mem,
+                                                     dtype=self.dtype,
+                                                     metrics=self.eval_metrics,
+                                                     seed=self.seed)
                 x_proba_train, _ = cascade.fit_transform(x_cur_train, y_train)
                 if self.keep_in_mem:
                     self.layer_fit_cascades.append(cascade)
@@ -998,14 +961,14 @@ class AutoGrowingCascadeLayer(Layer):
                     x_cur_test = np.hstack((x_cur_test, x_test_group[:, group_starts[gid]:group_ends[gid]]))
                 x_cur_train = np.hstack((x_cur_train, x_proba_train))
                 x_cur_test = np.hstack((x_cur_test, x_proba_test))
-                kwargs = {
-                    'n_classes': self.n_classes,
-                    'data_save_dir': osp.join(self.data_save_dir, 'cascade_layer_{}'.format(layer_id)),
-                    'layer_id': layer_id,
-                    'keep_in_mem': self.keep_in_mem,
-                    'dtype': self.dtype,
-                }
-                cascade = self._create_cascade_layer(kwargs=kwargs)
+                cascade = self._create_cascade_layer(est_configs=self.est_configs,
+                                                     n_classes=self.n_classes,
+                                                     data_save_dir=osp.join(self.data_save_dir,
+                                                                            'cascade_layer_{}'.format(layer_id)),
+                                                     layer_id=layer_id,
+                                                     keep_in_mem=self.keep_in_mem,
+                                                     dtype=self.dtype,
+                                                     seed=self.seed)
                 x_proba_train, x_proba_test = cascade.fit_transform(x_cur_train, y_train, x_cur_test, y_test)
                 if self.keep_in_mem:
                     self.layer_fit_cascades.append(cascade)
