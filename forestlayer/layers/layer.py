@@ -664,12 +664,12 @@ class CascadeLayer(Layer):
         eval_proba_test /= self.n_estimators
         metric = self.eval_metrics[0]
         train_avg_acc = metric.calc(y_train, np.argmax(eval_proba_train, axis=1),
-                                    'layer - {} - [train] average'.format(self.layer_id))
+                                    'layer - {} - [train] average'.format(self.layer_id), logger=LOGGER)
         self.train_avg_metric = train_avg_acc
         # judge whether y_test is None, which means users are to predict test probas
         if y_test is not None:
             test_avg_acc = metric.calc(y_test, np.argmax(eval_proba_test, axis=1),
-                                       'layer - {} - [test] average'.format(self.layer_id))
+                                       'layer - {} - [test] average'.format(self.layer_id), logger=LOGGER)
             self.test_avg_metric = test_avg_acc
         # if y_test is None, we need to generate test prediction, so keep eval_proba_test
         if y_test is None:
@@ -916,8 +916,9 @@ class AutoGrowingCascadeLayer(Layer):
                     self.n_layers = layer_id + 1
                     self._save_data(opt_layer_id, *opt_data)
                     # wash the fit cascades after optimal layer id to save memory
-                    for li in range(opt_layer_id + 1, layer_id + 1):
-                        self.layer_fit_cascades[li] = None
+                    if self.keep_in_mem:
+                        for li in range(opt_layer_id + 1, layer_id + 1):
+                            self.layer_fit_cascades[li] = None
                     return x_cur_train
                 if self.data_save_rounds > 0 and (layer_id + 1) % self.data_save_rounds == 0:
                     self._save_data(layer_id, *opt_data)
@@ -934,8 +935,9 @@ class AutoGrowingCascadeLayer(Layer):
             self._save_data(layer_id, *opt_data)
             self.n_layers = layer_id + 1
             # wash the fit cascades after optimal layer id to save memory
-            for li in range(opt_layer_id + 1, layer_id + 1):
-                self.layer_fit_cascades[li] = None
+            if self.keep_in_mem:
+                for li in range(opt_layer_id + 1, layer_id + 1):
+                    self.layer_fit_cascades[li] = None
             return x_cur_train
         except KeyboardInterrupt:
             pass
@@ -1056,8 +1058,9 @@ class AutoGrowingCascadeLayer(Layer):
                     self.n_layers = layer_id + 1
                     self.save_data(opt_layer_id, *opt_data)
                     # wash the fit cascades after optimal layer id to save memory
-                    for li in range(opt_layer_id + 1, layer_id + 1):
-                        self.layer_fit_cascades[li] = None
+                    if self.keep_in_mem:
+                        for li in range(opt_layer_id + 1, layer_id + 1):
+                            self.layer_fit_cascades[li] = None
                     return x_cur_train, x_cur_test
                 if self.data_save_rounds > 0 and (layer_id + 1) % self.data_save_rounds == 0:
                     self.save_data(layer_id, *opt_data)
@@ -1094,8 +1097,9 @@ class AutoGrowingCascadeLayer(Layer):
             if y_test is None and cascade is not None:
                 self.save_test_result(x_proba_test=cascade.eval_proba_test)
             # wash the fit cascades after optimal layer id to save memory
-            for li in range(opt_layer_id + 1, layer_id + 1):
-                self.layer_fit_cascades[li] = None
+            if self.keep_in_mem:
+                for li in range(opt_layer_id + 1, layer_id + 1):
+                    self.layer_fit_cascades[li] = None
             return x_cur_train, x_cur_test
         except KeyboardInterrupt:
             pass

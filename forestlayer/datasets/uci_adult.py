@@ -7,7 +7,6 @@ UCI_ADULT dataset loading.
 # Authors: Qiu Hu <huqiu00#163.com>
 # License: Apache-2.0
 
-from keras.utils.data_utils import get_file
 import os
 from forestlayer.preprocessing import FeatureParser
 import numpy as np
