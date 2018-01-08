@@ -7,7 +7,4 @@ Initialize examples.
 # Authors: Qiu Hu <huqiu00#163.com>
 # License: Apache-2.0
 
-import mnist
-import ray_uci_adult
-import uci_letter
-import uci_adult
+
