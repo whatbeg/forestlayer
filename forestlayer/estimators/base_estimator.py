@@ -11,8 +11,9 @@ LOGGER = get_logger('estimators.base_estimator')
 
 
 class BaseEstimator(object):
-    def __init__(self, est_class=None, name=None, est_args=None):
+    def __init__(self, task=None, est_class=None, name=None, est_args=None):
         self.name = name
+        self.task = task
         self.est_class = est_class
         self.est_args = est_args if est_args is not None else {}
         self.cache_suffix = '.pkl'
@@ -39,7 +40,7 @@ class BaseEstimator(object):
             # keep in memory
             self.est = est
 
-    def predict_proba(self, X, cache_dir=None, batch_size=None):
+    def predict(self, X, cache_dir=None, batch_size=None):
         LOGGER.debug("X.shape={}".format(X.shape))
         cache_path = self._cache_path(cache_dir)
         # cache
@@ -49,7 +50,27 @@ class BaseEstimator(object):
             LOGGER.info("done ...")
         else:
             est = self.est
-        batch_size = batch_size or self._default_predict_batch_size(est, X)
+        batch_size = batch_size or self._default_predict_batch_size(est=est, X=X, task=self.task)
+        if batch_size > 0:
+            y_pred = self._batch_predict(est, X, batch_size)
+        else:
+            y_pred = self._predict(est, X)
+        LOGGER.debug("y_proba.shape={}".format(y_pred.shape))
+        return y_pred
+
+    def predict_proba(self, X, cache_dir=None, batch_size=None):
+        if self.task == 'regression':
+            return self.predict(X, cache_dir=cache_dir, batch_size=batch_size)
+        LOGGER.debug("X.shape={}".format(X.shape))
+        cache_path = self._cache_path(cache_dir)
+        # cache
+        if cache_path is not None:
+            LOGGER.info("Load estimator from {} ...".format(cache_path))
+            est = self._load_model_from_disk(cache_path)
+            LOGGER.info("done ...")
+        else:
+            est = self.est
+        batch_size = batch_size or self._default_predict_batch_size(est, X, self.task)
         if batch_size > 0:
             y_proba = self._batch_predict_proba(est, X, batch_size)
         else:
@@ -58,7 +79,6 @@ class BaseEstimator(object):
         return y_proba
 
     def _batch_predict_proba(self, est, X, batch_size):
-        print("_batch_predict_proba...")
         LOGGER.debug("X.shape={}, batch_size={}".format(X.shape, batch_size))
         verbose_backup = 0
         # clear verbose
@@ -79,6 +99,26 @@ class BaseEstimator(object):
             est.verbose = verbose_backup
         return y_pred_proba
 
+    def _batch_predict(self, est, X, batch_size):
+        LOGGER.debug("X.shape={}, batch_size={}".format(X.shape, batch_size))
+        verbose_backup = 0
+        # clear verbose
+        if hasattr(est, "verbose"):
+            verbose_backup = est.verbose
+            est.verbose = 0
+        n_datas = X.shape[0]
+        y_pred = None
+        for j in range(0, n_datas, batch_size):
+            LOGGER.info("[batch_predict_proba][batch_size={}] ({}/{})".format(batch_size, j, n_datas))
+            y_cur = self._predict(est, X[j:j + batch_size])
+            if j == 0:
+                y_pred = np.empty((n_datas,), dtype=np.float32)
+            y_pred[j:j + batch_size] = y_cur
+        # restore verbose
+        if hasattr(est, "verbose"):
+            est.verbose = verbose_backup
+        return y_pred
+
     def _cache_path(self, cache_dir):
         if cache_dir is None:
             return None
@@ -90,15 +130,15 @@ class BaseEstimator(object):
     def _save_model_to_disk(self, est, cache_path):
         raise NotImplementedError()
 
-    def _default_predict_batch_size(self, est, X):
+    def _default_predict_batch_size(self, est, X, task):
         """
-        You can re-implement this function when inherient this class
+        You can re-implement this function when inherent this class
 
         Return
         ------
         predict_batch_size (int): default=0
             if = 0,  predict_proba without batches
-            if > 0, then predict_proba without baches
+            if > 0, then predict_proba without batches
             sklearn predict_proba is not so inefficient, has to do this
         """
         return 0
@@ -109,7 +149,13 @@ class BaseEstimator(object):
     def _predict_proba(self, est, X):
         return est.predict_proba(X)
 
+    def _predict(self, est, X):
+        return est.predict(X)
+
     def copy(self):
         return BaseEstimator(est_class=self.est_class, **self.est_args)
 
+    @property
+    def is_classification(self):
+        return self.task == 'classification'
 

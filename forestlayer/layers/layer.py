@@ -13,7 +13,7 @@ import copy
 import datetime
 from ..utils.log_utils import get_logger, list2str
 from ..utils.storage_utils import *
-from ..utils.metrics import Accuracy, AUC
+from ..utils.metrics import Accuracy, AUC, MSE
 from ..estimators import get_estimator_kfold, EstimatorArgument
 from .. import backend as F
 
@@ -142,11 +142,8 @@ class MultiGrainScanLayer(Layer):
             y_win = y_trains[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
             for est in ests_for_win:
                 # (60000, 121, 10)
-                y_proba_train, y_probas_test = est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0])
+                y_proba_train, _ = est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0])
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
-                for i in range(len(y_probas_test)):
-                    # (60000, 10, 11, 11)
-                    y_probas_test[i] = y_probas_test[i].reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
                 win_est_train.append(y_proba_train)
             x_win_est_train.append(win_est_train)
         if len(x_win_est_train) == 0:
@@ -431,8 +428,8 @@ class ConcatLayer(Layer):
 
 
 class CascadeLayer(Layer):
-    def __init__(self, batch_size=None, dtype=None, name=None, est_configs=None, layer_id='anonymous', n_classes=None,
-                 keep_in_mem=False, data_save_dir=None, metrics=None, seed=None):
+    def __init__(self, batch_size=None, dtype=None, name=None, task='classification', est_configs=None,
+                 layer_id='anonymous', n_classes=None, keep_in_mem=False, data_save_dir=None, metrics=None, seed=None):
         """Cascade Layer.
         A cascade layer contains several estimators, it accepts single input, go through these estimators, produces
         predicted probability by every estimators, and stacks them together for next cascade layer.
@@ -440,6 +437,7 @@ class CascadeLayer(Layer):
         :param batch_size: cascade layer do not need batch_size actually.
         :param dtype: data type
         :param name: name of this layer
+        :param task: classification or regression, [default = classification]
         :param est_configs: list of estimator arguments, every argument can be `dict` or `EstimatorArgument` instance
                             identify the estimator configuration to construct at this layer
         :param layer_id: layer id, if this layer is an independent layer, layer id is anonymous [default]
@@ -470,7 +468,10 @@ class CascadeLayer(Layer):
         if not name:
             name = 'layer-{}'.format(self.layer_id)
         super(CascadeLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
+        self.task = task
         self.n_classes = n_classes
+        if self.task == 'regression':
+            self.n_classes = 1
         self.keep_in_mem = keep_in_mem
         self.data_save_dir = data_save_dir
         check_dir(self.data_save_dir)  # check dir, if not exists, create the dir
@@ -481,8 +482,13 @@ class CascadeLayer(Layer):
             self.eval_metrics = [Accuracy('accuracy')]
         elif self.metrics == 'auc':
             self.eval_metrics = [AUC('auc')]
+        elif self.metrics == 'MSE':
+            self.eval_metrics = [MSE('Mean Square Error')]
         else:
-            self.eval_metrics = [Accuracy('accuracy')]
+            if self.task == 'regression':
+                self.eval_metrics = [MSE('Mean Square Error')]
+            else:
+                self.eval_metrics = [Accuracy('accuracy')]
         # whether this layer the last layer of Auto-growing cascade layer
         self.complete = False
         self.fit_estimators = [None for _ in range(self.n_estimators)]
@@ -514,21 +520,24 @@ class CascadeLayer(Layer):
         )
         LOGGER.info('X_train.shape={},y_train.shape={}'.format(x_train.shape, y_train.shape))
         n_trains = x_train.shape[0]
-        n_classes = self.n_classes
-        if n_classes is None:
+        n_classes = self.n_classes  # if regression, n_classes = 1
+        if self.task == 'classification' and n_classes is None:
             n_classes = np.unique(y_train)
+        if self.task == 'regression' and n_classes is None:
+            n_classes = 1
         x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=np.float32)
         eval_proba_train = np.zeros((n_trains, n_classes))
-        # fit estimators, get probas
+        # fit estimators, get probas (classification) or targets (regression)
         for ei in range(self.n_estimators):
             est = self._init_estimators(self.layer_id, ei)
             # fit and transform
-            y_proba_train, _ = est.fit_transform(x_train, y_train, y_train, test_sets=None)
+            y_stratify = y_train if self.task == 'classification' else None
+            y_proba_train, _ = est.fit_transform(x_train, y_train, y_stratify, test_sets=None)
             # print(y_proba_train.shape, y_proba_test.shape)
             if y_proba_train is None:
                 raise RuntimeError("layer - {} - estimator - {} fit FAILED!".format(self.layer_id, ei))
-            if y_proba_train.shape != (n_trains, n_classes):
-                raise ValueError('output probability shape incorrect!,'
+            if self.is_classification and y_proba_train.shape != (n_trains, n_classes):
+                raise ValueError('output shape incorrect!,'
                                  ' should be {}, but {}'.format((n_trains, n_classes), y_proba_train.shape))
             if self.keep_in_mem:
                 self.fit_estimators[ei] = est
@@ -537,8 +546,11 @@ class CascadeLayer(Layer):
         eval_proba_train /= self.n_estimators
         # now supports one eval_metrics
         metric = self.eval_metrics[0]
-        train_avg_acc = metric.calc(y_train, np.argmax(eval_proba_train, axis=1),
-                                    'layer - {} - [train] average'.format(self.layer_id))
+        if self.task == 'classification':
+            train_avg_acc = metric.calc(y_train, np.argmax(eval_proba_train, axis=1),
+                                        'layer - {} - [train] average'.format(self.layer_id))
+        else:
+            train_avg_acc = metric.calc(y_train, eval_proba_train, 'layer - {} - [train] average'.format(self.layer_id))
         self.train_avg_metric = train_avg_acc
         return x_proba_train
 
@@ -572,9 +584,11 @@ class CascadeLayer(Layer):
         ))
         n_trains = x_train.shape[0]
         n_tests = x_test.shape[0]
-        n_classes = self.n_classes
-        if n_classes is None:
+        n_classes = self.n_classes  # if regression, n_classes = 1
+        if self.task == 'classification' and n_classes is None:
             n_classes = np.unique(y_train)
+        if self.task == 'regression' and n_classes is None:
+            n_classes = 1
         x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=np.float32)
         x_proba_test = np.zeros((n_tests, n_classes * self.n_estimators), dtype=np.float32)
         eval_proba_train = np.zeros((n_trains, n_classes))
@@ -583,7 +597,8 @@ class CascadeLayer(Layer):
         for ei in range(self.n_estimators):
             est = self._init_estimators(self.layer_id, ei)
             # fit and transform
-            y_proba_train, y_proba_test = est.fit_transform(x_train, y_train, y_train,
+            y_stratify = y_train if self.task == 'classification' else None
+            y_proba_train, y_proba_test = est.fit_transform(x_train, y_train, y_stratify,
                                                             test_sets=[('test', x_test, y_test)])
             # if only one element on test_sets, return one test result like y_proba_train
             if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
@@ -591,12 +606,9 @@ class CascadeLayer(Layer):
             # print(y_proba_train.shape, y_proba_test.shape)
             if y_proba_train is None:
                 raise RuntimeError("layer - {} - estimator - {} fit FAILED!".format(self.layer_id, ei))
-            if y_proba_train.shape != (n_trains, n_classes):
-                raise ValueError('output probability shape incorrect!,'
-                                 ' should be {}, but {}'.format((n_trains, n_classes), y_proba_train.shape))
-            if y_proba_test.shape != (n_tests, n_classes):
-                raise ValueError('output probability shape incorrect!'
-                                 ' should be {}, but {}'.format((n_trains, n_classes), y_proba_train.shape))
+            self.check_shape(y_proba_train, n_trains, n_classes)
+            if y_proba_test is not None:
+                self.check_shape(y_proba_test, n_tests, n_classes)
             if self.keep_in_mem:
                 self.fit_estimators[ei] = est
             x_proba_train[:, ei*n_classes:ei*n_classes + n_classes] = y_proba_train
@@ -618,6 +630,14 @@ class CascadeLayer(Layer):
         if y_test is None:
             self.eval_proba_test = eval_proba_test
         return x_proba_train, x_proba_test
+
+    def check_shape(self, y_proba, n, n_classes):
+        if self.is_classification and y_proba.shape != (n, n_classes):
+            raise ValueError('output shape incorrect!,'
+                             ' should be {}, but {}'.format((n, n_classes), y_proba.shape))
+        if not self.is_classification and y_proba.shape != (n,):
+            raise ValueError('output shape incorrect!,'
+                             ' should be {}, but {}'.format((n,), y_proba.shape))
 
     @property
     def n_estimators(self):
@@ -641,6 +661,7 @@ class CascadeLayer(Layer):
             seed = None
         return get_estimator_kfold(name=est_name,
                                    n_folds=n_folds,
+                                   task=self.task,
                                    est_type=est_type,
                                    eval_metrics=self.eval_metrics,
                                    seed=seed,
@@ -665,11 +686,18 @@ class CascadeLayer(Layer):
             y_proba_train = est.transform(X)
             if y_proba_train is None:
                 raise RuntimeError("layer - {} - estimator - {} transform FAILED!".format(self.layer_id, ei))
-            if y_proba_train.shape != (n_trains, n_classes):
+            if self.is_classification and y_proba_train.shape != (n_trains, n_classes):
                 raise ValueError('transform output probability shape incorrect!,'
                                  ' should be {}, but {}'.format((n_trains, n_classes), y_proba_train.shape))
+            if not self.is_classification and y_proba_train.shape != (n_trains, ):
+                raise ValueError('transform target output shape incorrect!,'
+                                 ' should be {}, but {}'.format((n_trains, ), y_proba_train.shape))
             x_proba_train[:, ei * n_classes:ei * n_classes + n_classes] = y_proba_train
         return x_proba_train
+
+    @property
+    def is_classification(self):
+        return self.task == 'classification'
 
     def predict(self, X):
         proba_sum = self.predict_proba(X)

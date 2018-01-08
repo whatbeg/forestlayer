@@ -64,7 +64,8 @@ class KFoldWrapper(object):
             self.keep_in_mem = False
         assert 2 <= len(X.shape) <= 3, "X.shape should be n x k or n x n2 x k"
         assert len(X.shape) == len(y.shape) + 1
-        assert X.shape[0] == len(y_stratify)
+        if y_stratify is not None:
+            assert X.shape[0] == len(y_stratify)
         test_sets = test_sets if test_sets is not None else []
         # K-Fold split
         n_stratify = X.shape[0]
@@ -73,7 +74,7 @@ class KFoldWrapper(object):
         else:
             if y_stratify is None:
                 skf = KFold(n_splits=self.n_folds, shuffle=True, random_state=self.seed)
-                cv = [(t, v) for (t, v) in skf.split(len(n_stratify))]
+                cv = [(t, v) for (t, v) in skf.split(range(n_stratify))]
             else:
                 skf = StratifiedKFold(n_splits=self.n_folds, shuffle=True, random_state=self.seed)
                 cv = [(t, v) for (t, v) in skf.split(range(n_stratify), y_stratify)]
@@ -93,6 +94,9 @@ class KFoldWrapper(object):
 
             # predict on k-fold validation
             y_proba = est.predict_proba(X[val_idx].reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
+            if not est.is_classification:
+                pass
+                # TODO: Add dim
             if len(X.shape) == 3:
                 y_proba = y_proba.reshape((len(val_idx), -1, y_proba.shape[-1]))
             self.log_eval_metrics(self.name, y[val_idx], y_proba, "train_{}".format(k))

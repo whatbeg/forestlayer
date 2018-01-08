@@ -79,7 +79,7 @@ class MSE(Metrics):
         return metrics.mean_squared_error(y_true, y_pred)
 
     def calc_proba(self, y_true, y_proba, prefix='', logger=None):
-        raise NotImplementedError
+        return metrics.mean_squared_error(y_true, y_proba)
 
 
 def accuracy(y_true, y_pred):
