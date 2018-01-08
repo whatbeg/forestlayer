@@ -14,7 +14,7 @@ import datetime
 from ..utils.log_utils import get_logger, list2str
 from ..utils.storage_utils import *
 from ..utils.metrics import Accuracy, AUC
-from ..estimators import get_estimator_kfold
+from ..estimators import get_estimator_kfold, EstimatorArgument
 from .. import backend as F
 
 LOGGER = get_logger('layer')
@@ -440,7 +440,8 @@ class CascadeLayer(Layer):
         :param batch_size: cascade layer do not need batch_size actually.
         :param dtype: data type
         :param name: name of this layer
-        :param est_configs: estimators' configurations for this layer, one for every estimator
+        :param est_configs: list of estimator arguments, every argument can be `dict` or `EstimatorArgument` instance
+                            identify the estimator configuration to construct at this layer
         :param layer_id: layer id, if this layer is an independent layer, layer id is anonymous [default]
         :param n_classes: number of classes to classify
         :param keep_in_mem: identifies whether keep the model in memory, if fit_transform,
@@ -461,6 +462,10 @@ class CascadeLayer(Layer):
             ValueError: if estimator.fit_transform returns wrong shape data
         """
         self.est_configs = [] if est_configs is None else est_configs
+        # transform EstimatorArgument to dict that represents estimator arguments
+        for eci, est_config in enumerate(self.est_configs):
+            if isinstance(est_config, EstimatorArgument):
+                self.est_configs[eci] = est_config.get_est_args()
         self.layer_id = layer_id
         if not name:
             name = 'layer-{}'.format(self.layer_id)
@@ -718,7 +723,7 @@ class AutoGrowingCascadeLayer(Layer):
         :param batch_size: cascade layer do not need batch_size actually.
         :param dtype: data type
         :param name: name of this layer
-        :param est_configs: list of estimator arguments
+        :param est_configs: list of estimator arguments, every argument can be `dict` or `EstimatorArgument` instance
                             identify the estimator configuration to construct at this layer
         :param early_stopping_rounds: early stopping rounds, if there is no increase in performance (training accuracy
                                       or testing accuracy) over `early_stopping_rounds` layer, we stop the training
@@ -790,6 +795,8 @@ class AutoGrowingCascadeLayer(Layer):
         # only supports one y_train
         if isinstance(y_train, (list, tuple)):
             y_train = y_train[0]
+        if self.stop_by_test is True:
+            LOGGER.warn('stop_by_test is True, but we do not obey it when fit(x_train, y_train)!')
         self.layer_fit_cascades = []
         n_groups_train = len(x_trains)
         self.n_group_train = n_groups_train

@@ -11,6 +11,7 @@ from base_estimator import *
 from sklearn_estimator import *
 from xgboost_estimator import *
 from kfold_wrapper import *
+from arguments import *
 from ..utils.metrics import Accuracy
 
 
@@ -21,6 +22,8 @@ def est_class_from_type(est_type):
         return RFClassifier
     if est_type == 'GBDT':
         return GBDTClassifier
+    if est_type == 'XGB':
+        return XGBoostClassifier
     raise ValueError('Unknown Estimator')
 
 
@@ -30,8 +33,6 @@ def get_estimator(name, est_type, est_args):
 
 
 def get_estimator_kfold(name, n_folds, est_type, eval_metrics=None, seed=None, keep_in_mem=True, est_args=None):
-    if est_type == "XGB":
-        return XGBoostClassifier(name, n_folds, seed=seed, est_args=est_args)
     est_class = est_class_from_type(est_type)
     if eval_metrics is None:
         eval_metrics = [Accuracy('accuracy')]

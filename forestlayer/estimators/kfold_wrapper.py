@@ -18,7 +18,7 @@ LOGGER = get_logger('estimators.kfold_wrapper')
 
 
 class KFoldWrapper(object):
-    def __init__(self, name, n_folds, est_class, seed,
+    def __init__(self, name, n_folds, est_class, seed=None,
                  eval_metrics=None, cache_dir=None, keep_in_mem=None, est_args=None):
         self.name = name
         self.n_folds = n_folds

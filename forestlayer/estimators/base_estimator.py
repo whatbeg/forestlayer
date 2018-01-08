@@ -22,7 +22,6 @@ class BaseEstimator(object):
         return self.est_class(**self.est_args)
 
     def fit(self, X, y, cache_dir=None):
-        # LOGGER.info('X_train.shape={}, y_train.shape={}'.format(X.shape, y.shape))
         cache_path = self._cache_path(cache_dir=cache_dir)
         # cache it
         if is_path_exists(cache_path):
@@ -59,6 +58,7 @@ class BaseEstimator(object):
         return y_proba
 
     def _batch_predict_proba(self, est, X, batch_size):
+        print("_batch_predict_proba...")
         LOGGER.debug("X.shape={}, batch_size={}".format(X.shape, batch_size))
         verbose_backup = 0
         # clear verbose

@@ -37,6 +37,10 @@ def get_est_args(est_type):
 est_configs = [
     get_est_args('CRF'),
     get_est_args('CRF'),
+    get_est_args('CRF'),
+    get_est_args('CRF'),
+    get_est_args('RF'),
+    get_est_args('RF'),
     get_est_args('RF'),
     get_est_args('RF')
 ]
