@@ -14,9 +14,29 @@ You can refer to [Deep Forest Paper](https://arxiv.org/abs/1702.08835), [Ray Pro
 
 ## News
 
+[8 Jan] You can now use ForestLayer for classification task. See [examples](https://github.com/whatbeg/forestlayer/tree/master/examples)
+
 ## Installation
 
+ForestLayer has install prerequisites including scikit-learn, keras, numpy and ray. For GPU support, CUDA and cuDNN are required, but now we have not support GPU yet. The simplest way to install ForestLayer in your python program is:
+```
+[for master version] pip install git+https://github.com/whatbeg/forestlayer.git
+[for stable version] pip install forestlayer
+```
+
+Alternatively, you can install ForestLayer from the github source:
+```
+git clone https://github.com/whatbeg/forestlayer.git
+cd forestlayer
+python setup.py install
+```
+
+
+## Getting Started: 30 seconds to ForestLayer
+
 ## Examples
+
+See [examples](https://github.com/whatbeg/forestlayer/tree/master/examples)
 
 ## Design Principles
 
@@ -24,7 +44,7 @@ You can refer to [Deep Forest Paper](https://arxiv.org/abs/1702.08835), [Ray Pro
 
 ## Citation
 
-If you find it is useful, please cite our paper in your project and paper.
+<!-- If you find it is useful, please cite our paper in your project and paper. -->
 
 
 ## License
