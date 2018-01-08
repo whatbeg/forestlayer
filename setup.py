@@ -14,7 +14,8 @@ install_requires = [
     'scipy',
     'scikit-learn',
     'keras',
-    'ray'
+    'ray',
+    'joblib'
 ]
 
 setup(

@@ -7,20 +7,43 @@ UCI_ADULT dataset loading.
 # Authors: Qiu Hu <huqiu00#163.com>
 # License: Apache-2.0
 
-import os
 from forestlayer.preprocessing import FeatureParser
 import numpy as np
+import os.path as osp
 from .dataset import get_data_base
+from keras.utils.data_utils import get_file
+from ..utils.log_utils import get_logger
+
+LOGGER = get_logger('datasets.uci_adult')
 
 
-def load_data(data_path="adult.data", features="features", one_hot=True):
-    data_path = os.path.join(get_data_base(), "uci_adult", data_path)
-    features = os.path.join(get_data_base(), "uci_adult", features)
+def load_data(one_hot=True):
+    train_path = 'adult.data'
+    test_path = 'adult.test'
+    features_path = 'features'
+    train_path = get_file(train_path,
+                          origin='http://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data',
+                          cache_subdir='uci_adult',
+                          cache_dir=get_data_base())
+    test_path = get_file(test_path,
+                         origin='http://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test',
+                         cache_subdir='uci_adult',
+                         cache_dir=get_data_base())
+    features_path = get_file(features_path,
+                             origin='http://7xt9qk.com1.z0.glb.clouddn.com/features',
+                             cache_subdir='uci_adult',
+                             cache_dir=get_data_base())
+    LOGGER.info('Load data from directory: {}'.format(osp.dirname(train_path)))
     feature_parsers = []
-    with open(features) as f:
+    with open(features_path) as f:
         for row in f.readlines():
             feature_parsers.append(FeatureParser(row))
+    x_train, y_train = load_util(train_path, feature_parsers, one_hot)
+    x_test, y_test = load_util(test_path, feature_parsers, one_hot)
+    return x_train, y_train, x_test, y_test
 
+
+def load_util(data_path, feature_parsers, one_hot):
     with open(data_path) as f:
         rows = [row.strip().split(',') for row in f.readlines() if len(row.strip()) > 0 and not row.startswith("|")]
         n_train = len(rows)
@@ -42,10 +65,4 @@ def load_data(data_path="adult.data", features="features", one_hot=True):
                     X[i, j] = feature_parsers[j].get_continuous(row[j].strip())
             y[i] = 0 if row[-1].strip().startswith("<=50K") else 1
         return X, y
-
-
-
-
-
-
 

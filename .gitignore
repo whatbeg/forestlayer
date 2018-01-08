@@ -103,5 +103,6 @@ ENV/
 # pycharm IDE
 .idea/
 
-data/
+*.data
+*.test
 run_data/

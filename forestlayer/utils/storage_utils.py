@@ -9,7 +9,13 @@ Storage Utilities, include cache utilities.
 
 import os.path as osp
 import os
+from ..backend.backend import get_base_dir
 import pickle
+
+
+_DATA_SAVE_BASE = osp.join(get_base_dir(), 'run_data')
+
+_MODEL_SAVE_BASE = osp.join(get_base_dir(), 'run_model')
 
 
 def name2path(name):
@@ -32,8 +38,21 @@ def check_dir(path):
 
 
 def get_data_save_base():
-    return osp.abspath(osp.join(__file__, osp.pardir, osp.pardir, osp.pardir, "run_data"))
+    return _DATA_SAVE_BASE
+
+
+def set_data_save_base(dir_path):
+    global _DATA_SAVE_BASE
+    _DATA_SAVE_BASE = dir_path
+    check_dir(_DATA_SAVE_BASE)
 
 
 def get_model_save_base():
-    return osp.abspath(osp.join(__file__, osp.pardir, osp.pardir, osp.pardir, "run_model"))
+    return _MODEL_SAVE_BASE
+
+
+def set_model_save_base(dir_path):
+    global _MODEL_SAVE_BASE
+    _MODEL_SAVE_BASE = dir_path
+    check_dir(_MODEL_SAVE_BASE)
+

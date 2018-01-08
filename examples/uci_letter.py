@@ -45,11 +45,8 @@ agc = AutoGrowingCascadeLayer(est_configs=est_configs,
                               keep_in_mem=False)
 
 model = Graph()
-
 model.add(agc)
-
 model.fit_transform(X_train, y_train, X_test, y_test)
-
 
 end_time = time.time()
 

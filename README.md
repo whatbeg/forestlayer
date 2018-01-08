@@ -14,11 +14,11 @@ You can refer to [Deep Forest Paper](https://arxiv.org/abs/1702.08835), [Ray Pro
 
 ## News
 
-[8 Jan] You can now use ForestLayer for classification task. See [examples](https://github.com/whatbeg/forestlayer/tree/master/examples)
+* [8 Jan] You can now use ForestLayer for classification task. See [examples](https://github.com/whatbeg/forestlayer/tree/master/examples)
 
 ## Installation
 
-ForestLayer has install prerequisites including scikit-learn, keras, numpy and ray. For GPU support, CUDA and cuDNN are required, but now we have not support GPU yet. The simplest way to install ForestLayer in your python program is:
+ForestLayer has install prerequisites including scikit-learn, keras, numpy, ray and joblib. For GPU support, CUDA and cuDNN are required, but now we have not support GPU yet. The simplest way to install ForestLayer in your python program is:
 ```
 [for master version] pip install git+https://github.com/whatbeg/forestlayer.git
 [for stable version] pip install forestlayer
@@ -26,9 +26,10 @@ ForestLayer has install prerequisites including scikit-learn, keras, numpy and r
 
 Alternatively, you can install ForestLayer from the github source:
 ```
-git clone https://github.com/whatbeg/forestlayer.git
-cd forestlayer
-python setup.py install
+$ git clone https://github.com/whatbeg/forestlayer.git
+
+$ cd forestlayer
+$ python setup.py install
 ```
 
 
@@ -44,10 +45,25 @@ See [examples](https://github.com/whatbeg/forestlayer/tree/master/examples)
 
 ## Citation
 
-<!-- If you find it is useful, please cite our paper in your project and paper. -->
+If you find it is useful, please cite our project in your project and paper.
+```
+@misc{qiuhu2018forestlayer,
+  title={ForestLayer},
+  author={Hu, Qiu and others},
+  year={2018},
+  publisher={GitHub},
+  howpublished={\url{https://github.com/whatbeg/forestlayer}},
+}
+```
 
 
 ## License
 
 ForestLayer is released under the Apache 2.0 license.
+
+## TODO
+
+* Add model save and load mechanism
+* Different input data load and management
+* Static factory method to create layer
 

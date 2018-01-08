@@ -6,3 +6,8 @@ Initialize examples.
 # Copyright 2017 Authors NJU PASA BigData Laboratory.
 # Authors: Qiu Hu <huqiu00#163.com>
 # License: Apache-2.0
+
+import mnist
+import ray_uci_adult
+import uci_letter
+import uci_adult

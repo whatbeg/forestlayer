@@ -16,8 +16,7 @@ import numpy as np
 import os.path as osp
 
 start_time = time.time()
-(x_train, y_train) = uci_adult.load_data("adult.data")
-(x_test, y_test) = uci_adult.load_data("adult.test")
+(x_train, y_train, x_test, y_test) = uci_adult.load_data()
 
 print(x_train.shape[0], 'train samples')
 print(x_test.shape[0], 'test samples')
@@ -54,7 +53,6 @@ agc = AutoGrowingCascadeLayer(est_configs=est_configs,
 
 model = Graph()
 model.add(agc)
-model.build()
 model.fit_transform(x_train, y_train, x_test, y_test)
 
 end_time = time.time()
