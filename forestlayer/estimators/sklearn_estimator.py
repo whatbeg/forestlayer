@@ -59,3 +59,8 @@ class GBDTClassifier(SKlearnBaseEstimator):
         from sklearn.ensemble import GradientBoostingClassifier
         super(GBDTClassifier, self).__init__(GradientBoostingClassifier, name, kwargs)
 
+
+class SKXGBoostClassifier(SKlearnBaseEstimator):
+    def __init__(self, name, kwargs):
+        from xgboost import XGBClassifier
+        super(SKXGBoostClassifier, self).__init__(XGBClassifier, name, kwargs)

@@ -21,8 +21,10 @@ start_time = time.time()
 
 
 est_configs = [
-    MultiClassXGBoost(num_class=26, verbose_eval=False),
-    MultiClassXGBoost(num_class=26, verbose_eval=False)
+    MultiClassXGBoost(num_class=26),
+    MultiClassXGBoost(num_class=26),
+    MultiClassXGBoost(num_class=26),
+    MultiClassXGBoost(num_class=26)
 ]
 
 agc = AutoGrowingCascadeLayer(est_configs=est_configs,
@@ -35,29 +37,6 @@ agc = AutoGrowingCascadeLayer(est_configs=est_configs,
 model = Graph()
 model.add(agc)
 model.fit_transform(X_train, y_train, X_test, y_test)
-
-# import xgboost as xgb
-#
-# est_args = {
-#     'nthread': -1,
-#     'num_class': 26,
-#     "silent": True,
-#     "objective": "multi:softmax",
-#     "eval_metric": "merror",
-#     "eta": 0.03,
-#     "subsample": 0.9,
-#     "colsample_bytree": 0.85,
-#     "colsample_bylevel": 0.9,
-#     "max_depth": 10
-# }
-#
-# print(X_train.shape[0], y_train.shape[0])
-#
-# xg_train = xgb.DMatrix(X_train, label=y_train.reshape(-1))
-# watch_list = [(xg_train, 'train')]
-#
-# est = xgb.train(est_args, dtrain=xg_train, num_boost_round=160, early_stopping_rounds=30,
-#                 evals=watch_list, verbose_eval=10)
 
 end_time = time.time()
 

@@ -8,7 +8,7 @@ from utils import get_log_base
 logging.basicConfig(format="[ %(asctime)s][%(module)s.%(funcName)s] %(message)s")
 
 DEFAULT_LEVEL = logging.INFO
-DEFAULT_LOGGING_DIR = osp.join(get_log_base(), "forestflow")
+DEFAULT_LOGGING_DIR = osp.join(get_log_base(), "forestlayer")
 fh = None
 
 

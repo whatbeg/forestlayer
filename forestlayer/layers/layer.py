@@ -789,6 +789,14 @@ class AutoGrowingCascadeLayer(Layer):
     def __call__(self, *args, **kwargs):
         pass
 
+    def add(self, est):
+        if isinstance(est, EstimatorArgument):
+            self.est_configs.append(est.get_est_args())
+        elif isinstance(est, dict):
+            self.est_configs.append(est)
+        else:
+            raise ValueError("Unknown estimator information {}".format(est))
+
     def fit(self, x_trains, y_train):
         if not isinstance(x_trains, (list, tuple)):
             x_trains = [x_trains]
