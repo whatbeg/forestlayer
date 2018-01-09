@@ -39,7 +39,7 @@ class Accuracy(Metrics):
             return
         acc = 100. * np.sum(np.asarray(y_true) == y_pred) / len(y_true)
         if logger is not None:
-            logger.info('{} Accuracy({}) = {:.2f}%'.format(prefix, self.name, acc))
+            logger.info('{} Accuracy({}) = {:.4f}%'.format(prefix, self.name, acc))
         return acc
 
     def calc_proba(self, y_true, y_proba, prefix='', logger=None):
@@ -47,7 +47,7 @@ class Accuracy(Metrics):
         y_pred = np.argmax(y_proba.reshape((-1, y_proba.shape[-1])), 1)
         acc = 100. * np.sum(y_true == y_pred) / len(y_true)
         if logger is not None:
-            logger.info('{} Accuracy({}) = {:.2f}%'.format(prefix, self.name, acc))
+            logger.info('{} Accuracy({}) = {:.4f}%'.format(prefix, self.name, acc))
         return acc
 
 
@@ -64,7 +64,7 @@ class AUC(Metrics):
         y_true = y_true.reshape(-1)
         auc_result = auc(y_true, y_proba)
         if logger is not None:
-            logger.info('{} AUC({}) = {:.3f}'.format(prefix, self.name, auc_result))
+            logger.info('{} AUC({}) = {:.4f}'.format(prefix, self.name, auc_result))
         return auc_result
 
 
@@ -78,7 +78,7 @@ class MSE(Metrics):
     def calc(self, y_true, y_pred, prefix='', logger=None):
         mse_result = metrics.mean_squared_error(y_true, y_pred)
         if logger is not None:
-            logger.info('{} MSE({}) = {:.3f}'.format(prefix, self.name, mse_result))
+            logger.info('{} MSE({}) = {:.4f}'.format(prefix, self.name, mse_result))
         return mse_result
 
     def calc_proba(self, y_true, y_proba, prefix='', logger=None):

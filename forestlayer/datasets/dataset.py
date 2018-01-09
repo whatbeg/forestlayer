@@ -41,7 +41,7 @@ def get_data_cache_base():
     return _DATA_CACHE_DIR
 
 
-def set_data_cache_dir(dir_path):
+def set_data_cache_base(dir_path):
     global _DATA_CACHE_DIR
     _DATA_CACHE_DIR = dir_path
     if not osp.exists(_DATA_CACHE_DIR):

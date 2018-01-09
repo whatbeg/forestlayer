@@ -38,6 +38,8 @@ def check_dir(path):
 
 
 def get_data_save_base():
+    global _DATA_SAVE_BASE
+    _DATA_SAVE_BASE = osp.join(get_base_dir(), 'run_data')
     return _DATA_SAVE_BASE
 
 
@@ -48,6 +50,8 @@ def set_data_save_base(dir_path):
 
 
 def get_model_save_base():
+    global _MODEL_SAVE_BASE
+    _MODEL_SAVE_BASE = osp.join(get_base_dir(), 'run_data')
     return _MODEL_SAVE_BASE
 
 

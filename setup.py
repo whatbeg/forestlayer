@@ -24,7 +24,7 @@ setup(
     include_package_data=True,
     author="ForestLayer Contributors",
     author_email="huqiu00@163.com",
-    url="https://github.com/whatbeg/forestflow",
+    url="https://github.com/whatbeg/forestlayer",
     license="apache",
     packages=find_packages(),
     install_requires=install_requires,

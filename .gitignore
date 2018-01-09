@@ -107,3 +107,4 @@ ENV/
 *.test
 *.xlsx
 run_data/
+run_model/

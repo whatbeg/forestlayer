@@ -759,7 +759,8 @@ class CascadeLayer(Layer):
 class AutoGrowingCascadeLayer(Layer):
     def __init__(self, batch_size=None, dtype=np.float32, name=None, task='classification', est_configs=None,
                  early_stopping_rounds=None, max_layers=0, look_index_cycle=None, data_save_rounds=0,
-                 stop_by_test=False, n_classes=None, keep_in_mem=False, data_save_dir=None, metrics=None, seed=None):
+                 stop_by_test=False, n_classes=None, keep_in_mem=False, data_save_dir=None, metrics=None,
+                 keep_test_result=False, seed=None):
         """AutoGrowingCascadeLayer
         An AutoGrowingCascadeLayer is a virtual layer that consists of many single cascade layers.
         `auto-growing` means this kind of layer can decide the depth of cascade forest,
@@ -830,6 +831,8 @@ class AutoGrowingCascadeLayer(Layer):
         self.group_starts = []
         self.group_ends = []
         self.group_dims = []
+        self.test_results = None
+        self.keep_test_result = keep_test_result
 
     def _create_cascade_layer(self, task='classification', est_configs=None, n_classes=None, data_save_dir=None,
                               layer_id=None, keep_in_mem=False, dtype=None, metrics=None, seed=None):
@@ -925,7 +928,7 @@ class AutoGrowingCascadeLayer(Layer):
                 if layer_id - opt_layer_id >= self.early_stop_rounds > 0:
                     # log and save the final results of the optimal layer
                     LOGGER.info('[Result][Early Stop][Optimal Layer Detected] opt_layer={},'.format(opt_layer_id) +
-                                ' {}_train={:.2f}{},'.format(self.eval_metrics[0].name,
+                                ' {}_train={:.4f}{},'.format(self.eval_metrics[0].name,
                                                              layer_metric_list[opt_layer_id], self._percent))
                     self.n_layers = layer_id + 1
                     self._save_data(opt_layer_id, *opt_data)
@@ -941,8 +944,8 @@ class AutoGrowingCascadeLayer(Layer):
             opt_data = [x_cur_train, y_train]
             opt_layer_id = get_opt_layer_id(layer_metric_list, larger_better=self.larger_better)
             self.opt_layer_id = opt_layer_id
-            LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.2f}{},'
-                        ' optimal_layer={}, {}_optimal_train={:.2f}{}'.format(
+            LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.4f}{},'
+                        ' optimal_layer={}, {}_optimal_train={:.4f}{}'.format(
                             self.max_layers, self.eval_metrics[0].name, layer_metric_list[-1], self._percent,
                             opt_layer_id, self.eval_metrics[0].name, layer_metric_list[opt_layer_id], self._percent))
             self._save_data(layer_id, *opt_data)
@@ -1072,21 +1075,23 @@ class AutoGrowingCascadeLayer(Layer):
                 if opt_layer_id == layer_id:
                     opt_data = [x_cur_train, y_train, x_cur_test, y_test]
                     # detected best layer, save test result
-                    if y_test is None:
+                    if y_test is None and cascade is not None:
                         self.save_test_result(x_proba_test=cascade.eval_proba_test)
+                        if self.keep_test_result:
+                            self.test_results = cascade.eval_proba_test
                 # early stopping
                 if layer_id - opt_layer_id >= self.early_stop_rounds > 0:
                     # log and save the final results of the optimal layer
                     if y_test is not None:
                         LOGGER.info('[Result][Early Stop][Optimal Layer Detected] opt_layer={},'.format(opt_layer_id) +
-                                    ' {}_train={:.2f}{}, {}_test={:.2f}{}'.format(
+                                    ' {}_train={:.4f}{}, {}_test={:.4f}{}'.format(
                                       self.eval_metrics[0].name, layer_train_metrics[opt_layer_id],
                                       self._percent, self.eval_metrics[0].name, layer_test_metrics[opt_layer_id],
                                       self._percent))
                     else:
                         # print(layer_train_metrics[opt_layer_id])
                         LOGGER.info('[Result][Early Stop][Optimal Layer Detected] opt_layer={},'.format(opt_layer_id) +
-                                    ' {}_train={:.2f}{}'.format(self.eval_metrics[0].name,
+                                    ' {}_train={:.4f}{}'.format(self.eval_metrics[0].name,
                                                                 layer_train_metrics[opt_layer_id], self._percent))
                     self.n_layers = layer_id + 1
                     self.save_data(opt_layer_id, *opt_data)
@@ -1107,23 +1112,25 @@ class AutoGrowingCascadeLayer(Layer):
                 opt_layer_id = get_opt_layer_id(layer_train_metrics, self.larger_better)
             self.opt_layer_id = opt_layer_id
             if y_test is not None:
-                LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.2f}{}, {}_test={:.2f}{}' +
-                            ' optimal_layer={}, {}_optimal_train={:.2f}{},' +
-                            ' {}_optimal_test={:.2f}{}'.format(
+                LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.4f}{}, {}_test={:.4f}{}'
+                            ' optimal_layer={}, {}_optimal_train={:.4f}{},'
+                            ' {}_optimal_test={:.4f}{}'.format(
                                 self.max_layers, self.eval_metrics[0].name, layer_train_metrics[-1], self._percent,
                                 self.eval_metrics[0].name, layer_test_metrics[-1], self._percent, opt_layer_id,
                                 self.eval_metrics[0].name, layer_train_metrics[opt_layer_id], self._percent,
                                 self.eval_metrics[0].name, layer_test_metrics[opt_layer_id], self._percent))
             else:
-                LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.2f}{},' +
-                            ' optimal_layer={}, {}_optimal_train={:.2f}{}'.format(
+                LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.4f}{},'
+                            ' optimal_layer={}, {}_optimal_train={:.4f}{}'.format(
                              self.max_layers, self.eval_metrics[0].name, layer_train_metrics[-1], self._percent,
-                             self.eval_metrics[0].name, layer_train_metrics[opt_layer_id], self._percent))
-            self._save_data(layer_id, *opt_data)
+                             opt_layer_id, self.eval_metrics[0].name, layer_train_metrics[opt_layer_id], self._percent))
+            self.save_data(layer_id, *opt_data)
             self.n_layers = layer_id + 1
             # if y_test is None, we predict x_test and save its predictions
             if y_test is None and cascade is not None:
                 self.save_test_result(x_proba_test=cascade.eval_proba_test)
+                if self.keep_test_result:
+                    self.test_results = cascade.eval_proba_test
             # wash the fit cascades after optimal layer id to save memory
             if self.keep_in_mem:
                 for li in range(opt_layer_id + 1, layer_id + 1):
@@ -1239,7 +1246,10 @@ class AutoGrowingCascadeLayer(Layer):
         prefix = datetime.datetime.now().strftime('%m_%d_%H_%M')
         file_name = osp.join(self.data_save_dir, 'submission_' + prefix + '.csv')
         LOGGER.info('[Save][Test Output] x_proba_test={}, Saving to {}'.format(x_proba_test.shape, file_name))
-        np.savetxt(file_name, np.argmax(x_proba_test, axis=1), fmt="%d", delimiter=',')
+        if self.is_classification:
+            np.savetxt(file_name, np.argmax(x_proba_test, axis=1), fmt="%d", delimiter=',')
+        else:
+            np.savetxt(file_name, x_proba_test, fmt="%f", delimiter=',')
 
 
 def _to_snake_case(name):
