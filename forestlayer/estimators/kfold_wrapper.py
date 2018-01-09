@@ -10,7 +10,7 @@ K-fold wrapper definition.
 import os.path as osp
 import numpy as np
 from sklearn.model_selection import KFold, StratifiedKFold
-
+from ..utils.metrics import Accuracy
 from ..utils.log_utils import get_logger
 from ..utils.storage_utils import name2path
 
@@ -64,7 +64,8 @@ class KFoldWrapper(object):
             self.keep_in_mem = False
         assert 2 <= len(X.shape) <= 3, "X.shape should be n x k or n x n2 x k"
         assert len(X.shape) == len(y.shape) + 1
-        assert X.shape[0] == len(y_stratify)
+        if y_stratify is not None:
+            assert X.shape[0] == len(y_stratify)
         test_sets = test_sets if test_sets is not None else []
         # K-Fold split
         n_stratify = X.shape[0]
@@ -73,7 +74,7 @@ class KFoldWrapper(object):
         else:
             if y_stratify is None:
                 skf = KFold(n_splits=self.n_folds, shuffle=True, random_state=self.seed)
-                cv = [(t, v) for (t, v) in skf.split(len(n_stratify))]
+                cv = [(t, v) for (t, v) in skf.split(range(n_stratify))]
             else:
                 skf = StratifiedKFold(n_splits=self.n_folds, shuffle=True, random_state=self.seed)
                 cv = [(t, v) for (t, v) in skf.split(range(n_stratify), y_stratify)]
@@ -93,6 +94,8 @@ class KFoldWrapper(object):
 
             # predict on k-fold validation
             y_proba = est.predict_proba(X[val_idx].reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
+            if not est.is_classification:
+                y_proba = y_proba[:, np.newaxis]  # add one dimension
             if len(X.shape) == 3:
                 y_proba = y_proba.reshape((len(val_idx), -1, y_proba.shape[-1]))
             self.log_eval_metrics(self.name, y[val_idx], y_proba, "train_{}".format(k))
@@ -112,6 +115,8 @@ class KFoldWrapper(object):
             # test
             for vi, (prefix, X_test, y_test) in enumerate(test_sets):
                 y_proba = est.predict_proba(X_test.reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
+                if not est.is_classification:
+                    y_proba = y_proba[:, np.newaxis]
                 if len(X.shape) == 3:
                     y_proba = y_proba.reshape((X_test.shape[0], X_test.shape[1], y_proba.shape[-1]))
                 if k == 0:
@@ -140,6 +145,8 @@ class KFoldWrapper(object):
         proba_result = None
         for k, est in enumerate(self.fit_estimators):
             y_proba = est.predict_proba(x_tests.reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
+            if not est.is_classification:
+                y_proba = y_proba[:, np.newaxis]  # add one dimension
             if len(x_tests.shape) == 3:
                 y_proba = y_proba.reshape((x_tests.shape[0], x_tests.shape[1], y_proba.shape[-1]))
             if k == 0:
@@ -158,7 +165,8 @@ class KFoldWrapper(object):
             return
         for metric in self.eval_metrics:
             acc = metric.calc_proba(y_true, y_proba)
-            LOGGER.info("Accuracy({}.{}.{}) = {:.2f}%".format(est_name, y_name, metric.name, acc))
+            LOGGER.info("{}({}.{}) = {:.2f}{}".format(
+                metric.name, est_name, y_name, acc, '%' if isinstance(metric, Accuracy) else ''))
 
     def _predict_proba(self, est, X):
         return est.predict_proba(X)
