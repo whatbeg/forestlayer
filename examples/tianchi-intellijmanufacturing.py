@@ -37,7 +37,7 @@ def func(x):
 
 
 # 获取标签
-label = pd.DataFrame(train_test)['Y'][:500]
+label = train_test['Y'][:500]
 print(label)
 train_test = train_test.fillna(0)
 train_test.applymap(func)

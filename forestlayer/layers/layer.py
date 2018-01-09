@@ -105,7 +105,7 @@ class MultiGrainScanLayer(Layer):
         super(MultiGrainScanLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
         self.windows = windows  # [Win, Win, Win, ...]
         self.est_for_windows = est_for_windows  # [[est1, est2], [est1, est2], [est1, est2], ...]
-        assert self.task in ['regression', 'classification'], 'task unknown! task = {}'.format(task)
+        assert task in ['regression', 'classification'], 'task unknown! task = {}'.format(task)
         self.task = task
         if self.task == 'regression':
             self.n_class = 1
@@ -125,8 +125,8 @@ class MultiGrainScanLayer(Layer):
     def scan(self, window, x):
         return window.fit_transform(x)
 
-    def _init_estimator(self, est_or_args, wi, ei):
-        est_args = est_or_args.copy()
+    def _init_estimator(self, est_arguments, wi, ei):
+        est_args = est_arguments.get_est_args()
         est_name = 'win - {} - estimator - {} - {}folds'.format(wi, ei, est_args['n_folds'])
         n_folds = int(est_args['n_folds'])
         est_args.pop('n_folds')
@@ -176,6 +176,7 @@ class MultiGrainScanLayer(Layer):
                 y_proba_train, _ = est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0])
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
                 win_est_train.append(y_proba_train)
+                self.est_for_windows[wi][ei] = est
             x_win_est_train.append(win_est_train)
         if len(x_win_est_train) == 0:
             return x_wins_train
@@ -233,10 +234,9 @@ class MultiGrainScanLayer(Layer):
                 for i, y_test in enumerate(y_tests):
                     tmp_y_tests[i] = y_test[:, np.newaxis].repeat(x_wins_test[wi][i].shape[1], axis=1)
             test_sets = [('testOfWin{}'.format(wi), tw, tmp_y_tests[i]) for i, tw in enumerate(x_wins_test[wi])]
-            # print(y_win.shape)
-            # for k in test_sets:
-            #     print(k[0], k[1].shape, k[2].shape)
-            for est in ests_for_win:
+            for ei, est in enumerate(ests_for_win):
+                if isinstance(est, EstimatorArgument):
+                    est = self._init_estimator(est, wi, ei)
                 # (60000, 121, 10)
                 y_proba_train, y_probas_test = est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
@@ -245,6 +245,7 @@ class MultiGrainScanLayer(Layer):
                     y_probas_test[i] = y_probas_test[i].reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
                 win_est_train.append(y_proba_train)
                 win_est_test.append(y_probas_test)
+                self.est_for_windows[wi][ei] = est
             x_win_est_train.append(win_est_train)
             x_win_est_test.append(win_est_test)
         if len(x_win_est_train) == 0:
@@ -276,7 +277,7 @@ class MultiGrainScanLayer(Layer):
             _, nh, nw, _ = x_wins_train[wi].shape
             # (60000, 121, 49)
             x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
-            for est in ests_for_win:
+            for ei, est in enumerate(ests_for_win):
                 # (60000, 121, 10)
                 y_proba_train = est.transform(x_wins_train[wi])
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
@@ -995,7 +996,8 @@ class AutoGrowingCascadeLayer(Layer):
         n_trains = len(y_train)
         n_tests = x_tests[0].shape[0]
         if y_test is None and self.stop_by_test is True:
-            raise ValueError("Since y_test is None so you cannot set stop_by_test True!")
+            self.stop_by_test = False
+            LOGGER.warn('stop_by_test is True, but we do not obey it when fit(x_train, y_train, x_test, None)!')
         assert n_groups_train == n_groups_test, 'n_group_train must equal to n_group_test!'
         # Initialize the groups
         x_train_group = np.zeros((n_trains, 0), dtype=x_trains[0].dtype)
@@ -1082,7 +1084,7 @@ class AutoGrowingCascadeLayer(Layer):
                                       self._percent, self.eval_metrics[0].name, layer_test_metrics[opt_layer_id],
                                       self._percent))
                     else:
-                        print(layer_train_metrics[opt_layer_id])
+                        # print(layer_train_metrics[opt_layer_id])
                         LOGGER.info('[Result][Early Stop][Optimal Layer Detected] opt_layer={},'.format(opt_layer_id) +
                                     ' {}_train={:.2f}{}'.format(self.eval_metrics[0].name,
                                                                 layer_train_metrics[opt_layer_id], self._percent))

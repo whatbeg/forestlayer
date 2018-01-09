@@ -7,7 +7,7 @@ DAG definition
 # Authors: Qiu Hu <huqiu00#163.com>
 # License: Apache-2.0
 
-from ..utils import get_logger
+from ..utils.log_utils import get_logger
 from ..utils.metrics import accuracy_pb, Accuracy
 import copy
 import numpy as np

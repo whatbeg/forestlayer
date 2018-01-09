@@ -13,7 +13,7 @@ class EstimatorArgument(object):
         self.est_args = {}
 
     def get_est_args(self):
-        return self.est_args
+        return self.est_args.copy()
 
 
 class MultiClassXGBoost(EstimatorArgument):
@@ -104,8 +104,19 @@ class CompletelyRandomForest(EstimatorArgument):
 
 
 class GBDT(EstimatorArgument):
-    def __init__(self, n_folds=3):
-        pass
+    def __init__(self, n_folds=3, n_estimators=500, max_depth=6, n_jobs=-1, max_features='sqrt',
+                 min_samples_leaf=1, subsample=1.0, ):
+        super(GBDT, self).__init__()
+        self.est_args = {
+            'est_type': 'CRF',
+            'n_folds': n_folds,
+            'n_estimators': n_estimators,
+            'max_depth': max_depth,
+            'n_jobs': n_jobs,
+            'max_features': max_features,
+            'min_samples_leaf': min_samples_leaf,
+            'subsample': subsample
+        }
 
 
 

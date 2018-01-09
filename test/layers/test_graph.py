@@ -34,10 +34,10 @@ def mnist_test_graph():
     print('X_test: ', X_test.shape, 'y: ', y_test.shape)
 
     est_configs = [
-        CompletelyRandomForest(),
-        CompletelyRandomForest(),
-        RandomForest(),
-        RandomForest()
+        CompletelyRandomForest(n_estimators=40),
+        CompletelyRandomForest(n_estimators=40),
+        RandomForest(n_estimators=40),
+        RandomForest(n_estimators=40)
     ]
 
     def _init():
@@ -70,6 +70,7 @@ def mnist_test_graph():
         return mgs, poolayer, concat_layer, auto_cascade
 
     def test_fit():
+        print("test fit")
         mgs, poolayer, concat_layer, auto_cascade = _init()
         model = Graph()
         model.add(mgs)
@@ -80,6 +81,7 @@ def mnist_test_graph():
         LOGGER.info('test fit passed!')
 
     def test_fit_transform():
+        print("test fit_transform")
         mgs, poolayer, concat_layer, auto_cascade = _init()
         model = Graph()
         model.add(mgs)
@@ -90,7 +92,10 @@ def mnist_test_graph():
         LOGGER.info('test fit_transform(x, y, x_test) passed!')
 
     def test_fit_transform2():
+        print("test fit_transform2")
         mgs, poolayer, concat_layer, auto_cascade = _init()
+        mgs.keep_in_mem = True
+        auto_cascade.keep_in_mem = True
         model = Graph()
         model.add(mgs)
         model.add(poolayer)
@@ -100,7 +105,10 @@ def mnist_test_graph():
         LOGGER.info('test fit_transform(x, y, x_test, y_test) passed!')
 
     def test_transform():
+        print("test transform")
         mgs, poolayer, concat_layer, auto_cascade = _init()
+        mgs.keep_in_mem = True
+        auto_cascade.keep_in_mem = True
         model = Graph()
         model.add(mgs)
         model.add(poolayer)
@@ -111,7 +119,10 @@ def mnist_test_graph():
         LOGGER.info('test transform passed!')
 
     def test_fit_predict():
+        print("test fit and predict")
         mgs, poolayer, concat_layer, auto_cascade = _init()
+        mgs.keep_in_mem = True
+        auto_cascade.keep_in_mem = True
         model = Graph()
         model.add(mgs)
         model.add(poolayer)
@@ -122,7 +133,10 @@ def mnist_test_graph():
         LOGGER.info('test fit_predict passed!')
 
     def test_fit_evaluate():
+        print("test fit and evaluate")
         mgs, poolayer, concat_layer, auto_cascade = _init()
+        mgs.keep_in_mem = True
+        auto_cascade.keep_in_mem = True
         model = Graph()
         model.add(mgs)
         model.add(poolayer)

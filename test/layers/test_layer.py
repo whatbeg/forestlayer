@@ -11,6 +11,7 @@ from __future__ import print_function
 import numpy as np
 import os.path as osp
 import time
+import copy
 from forestlayer.layers.window import Window, Pooling
 from forestlayer.layers.layer import MultiGrainScanLayer, PoolingLayer, ConcatLayer, CascadeLayer, AutoGrowingCascadeLayer
 from forestlayer.estimators.arguments import RandomForest, CompletelyRandomForest, GBDT
@@ -53,11 +54,10 @@ def MNIST_based_test():
         concat_layer = ConcatLayer()
 
         est_configs = [
-            CompletelyRandomForest(),
-            CompletelyRandomForest(),
-            RandomForest(),
-            RandomForest()
-
+            CompletelyRandomForest(n_estimators=40),
+            CompletelyRandomForest(n_estimators=40),
+            RandomForest(n_estimators=40),
+            RandomForest(n_estimators=40)
         ]
 
         cascade = CascadeLayer(est_configs=est_configs,
@@ -76,6 +76,8 @@ def MNIST_based_test():
         return mgs, poolayer, concat_layer, cascade, auto_cascade
 
     def test_fit_transform():
+        print('test fit_transform')
+
         mgs, poolayer, concat_layer, cascade, auto_cascade = _init()
 
         res_train, res_test = mgs.fit_transform(X, y_train, X_test, y_test)
@@ -89,6 +91,8 @@ def MNIST_based_test():
         print(res_train.shape, res_test.shape)
 
     def test_fit():
+        print('test fit')
+
         mgs, poolayer, concat_layer, cascade, auto_cascade = _init()
         res_train = mgs.fit(X, y_train)
 
@@ -99,7 +103,10 @@ def MNIST_based_test():
         res_train = auto_cascade.fit(res_train, y_train)
 
     def test_predict():
+        print('test predict')
+
         mgs, poolayer, concat_layer, cascade, auto_cascade = _init()
+        mgs.keep_in_mem = True
         res_train = mgs.fit(X, y_train)
         predicted = mgs.predict(X_test)
 
@@ -108,8 +115,8 @@ def MNIST_based_test():
 
         res_train = concat_layer.fit(res_train, None)
         predicted = concat_layer.predict(predicted)
-
-        res_train, _ = auto_cascade.fit(res_train, y_train)
+        auto_cascade.keep_in_mem = True
+        res_train = auto_cascade.fit(res_train, y_train)
         auto_cascade.evaluate(predicted, y_test)
 
     test_fit_transform()
@@ -121,8 +128,7 @@ def MNIST_based_test():
 
 def UCI_ADULT_based_test():
     start_time = time.time()
-    (x_train, y_train) = uci_adult.load_data("adult.data")
-    (x_test, y_test) = uci_adult.load_data("adult.test")
+    (x_train, y_train, x_test, y_test) = uci_adult.load_data()
 
     print(x_train.shape[0], 'train samples')
     print(x_test.shape[0], 'test samples')
@@ -131,41 +137,54 @@ def UCI_ADULT_based_test():
     end_time = time.time()
     print('time cost: {}'.format(end_time - start_time))
 
-    est_configs = [
-        CompletelyRandomForest(),
-        CompletelyRandomForest(),
-        RandomForest(),
-        RandomForest()
-    ]
+    def _init():
+        est_configs = [
+            CompletelyRandomForest(n_estimators=40),
+            CompletelyRandomForest(n_estimators=40),
+            RandomForest(n_estimators=40),
+            RandomForest(n_estimators=40)
+        ]
 
-    gc = CascadeLayer(est_configs=est_configs,
-                      n_classes=2,
-                      data_save_dir=osp.join(get_data_save_base(), 'test_layer', 'cascade'))
+        gc = CascadeLayer(est_configs=est_configs,
+                          n_classes=2,
+                          data_save_dir=osp.join(get_data_save_base(), 'test_layer', 'cascade'))
 
-    agc = AutoGrowingCascadeLayer(est_configs=est_configs,
-                                  early_stopping_rounds=2,
-                                  stop_by_test=False,
-                                  data_save_rounds=4,
-                                  n_classes=2,
-                                  data_save_dir=osp.join(get_data_save_base(),
-                                                         'test_layer', 'auto_cascade'))
+        agc = AutoGrowingCascadeLayer(est_configs=est_configs,
+                                      early_stopping_rounds=2,
+                                      stop_by_test=False,
+                                      data_save_rounds=4,
+                                      n_classes=2,
+                                      data_save_dir=osp.join(get_data_save_base(),
+                                                             'test_layer', 'auto_cascade'))
+        return gc, agc
 
     def test_uci_graph():
+        print('test uci_graph')
+        gc, agc = _init()
         model = Graph()
         model.add(agc)
         model.fit_transform(x_train, y_train, x_test, y_test)
 
     def test_fit_predict():
+        print('test fit and predict')
+        gc, agc = _init()
+        agc.keep_in_mem = True
         agc.fit(x_train, y_train)
         agc.evaluate(x_test, y_test)
 
     def test_graph_fit_evaluate():
+        print('test fit and evaluate')
+        gc, agc = _init()
+        agc.keep_in_mem = True
         model = Graph()
         model.add(agc)
         model.fit(x_train, y_train)
         model.evaluate(x_test, y_test)
 
     def test_graph_transform():
+        print('test graph transform')
+        gc, agc = _init()
+        agc.keep_in_mem = True
         model = Graph()
         model.add(agc)
         model.fit(x_train, y_train)
