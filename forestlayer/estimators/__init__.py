@@ -12,7 +12,7 @@ from sklearn_estimator import *
 from xgboost_estimator import *
 from kfold_wrapper import *
 from arguments import *
-from ..utils.metrics import Accuracy
+from ..utils.metrics import Accuracy, MSE
 
 
 def est_class_from_type(task, est_type):
@@ -49,7 +49,10 @@ def get_estimator_kfold(name, n_folds=3, task='classification', est_type='RF', e
                         cache_dir=None, keep_in_mem=True, est_args=None):
     est_class = est_class_from_type(task, est_type)
     if eval_metrics is None:
-        eval_metrics = [Accuracy('accuracy')]
+        if task == 'classification':
+            eval_metrics = [Accuracy('accuracy')]
+        else:
+            eval_metrics = [MSE('MSE')]
     return KFoldWrapper(name,
                         n_folds,
                         est_class,

@@ -3,7 +3,12 @@ import os
 import os.path as osp
 import time
 import logging
-from utils import get_log_base
+from ..backend.backend import get_base_dir
+
+
+def get_log_base():
+    return osp.join(get_base_dir(), 'log')
+
 
 logging.basicConfig(format="[ %(asctime)s][%(module)s.%(funcName)s] %(message)s")
 
@@ -39,7 +44,7 @@ def update_default_logging_dir(default_logging_dir):
     DEFAULT_LOGGING_DIR = default_logging_dir
 
 
-def get_logger(name="forestflow", level=None):
+def get_logger(name="forestlayer", level=None):
     level = level or DEFAULT_LEVEL
     logger = logging.getLogger(name)
     logger.setLevel(level)

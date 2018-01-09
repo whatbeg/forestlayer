@@ -50,7 +50,7 @@ class Layer(object):
         self.name = name
         # Set dtype.
         if dtype is None:
-            dtype = F.floatx()
+            dtype = np.float32
         self.dtype = dtype
 
     def call(self, x_trains):
@@ -97,16 +97,24 @@ class Layer(object):
 
 
 class MultiGrainScanLayer(Layer):
-    def __init__(self, batch_size=None, dtype=None, name=None,
-                 windows=None, est_for_windows=None, n_class=None):
+    def __init__(self, batch_size=None, dtype=None, name=None, task='classification',
+                 windows=None, est_for_windows=None, n_class=None, keep_in_mem=False, eval_metrics=None, seed=None):
         if not name:
             prefix = 'multi_grain_scan'
             name = prefix + '_' + str(id(self))
         super(MultiGrainScanLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
         self.windows = windows  # [Win, Win, Win, ...]
         self.est_for_windows = est_for_windows  # [[est1, est2], [est1, est2], [est1, est2], ...]
-        assert n_class is not None
-        self.n_class = n_class
+        assert self.task in ['regression', 'classification'], 'task unknown! task = {}'.format(task)
+        self.task = task
+        if self.task == 'regression':
+            self.n_class = 1
+        else:
+            assert n_class is not None
+            self.n_class = n_class
+        self.seed = seed
+        self.keep_in_mem = keep_in_mem
+        self.eval_metrics = eval_metrics
 
     def call(self, x_trains, **kwargs):
         pass
@@ -116,6 +124,27 @@ class MultiGrainScanLayer(Layer):
 
     def scan(self, window, x):
         return window.fit_transform(x)
+
+    def _init_estimator(self, est_or_args, wi, ei):
+        est_args = est_or_args.copy()
+        est_name = 'win - {} - estimator - {} - {}folds'.format(wi, ei, est_args['n_folds'])
+        n_folds = int(est_args['n_folds'])
+        est_args.pop('n_folds')
+        est_type = est_args['est_type']
+        est_args.pop('est_type')
+        # seed
+        if self.seed is not None:
+            seed = (self.seed + hash("[estimator] {}".format(est_name))) % 1000000007
+        else:
+            seed = None
+        return get_estimator_kfold(name=est_name,
+                                   n_folds=n_folds,
+                                   task=self.task,
+                                   est_type=est_type,
+                                   eval_metrics=self.eval_metrics,
+                                   seed=seed,
+                                   keep_in_mem=self.keep_in_mem,
+                                   est_args=est_args)
 
     def fit(self, x_trains, y_trains):
         if isinstance(x_trains, (list, tuple)):
@@ -140,7 +169,9 @@ class MultiGrainScanLayer(Layer):
             # (60000, 121, 49)
             x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
             y_win = y_trains[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
-            for est in ests_for_win:
+            for ei, est in enumerate(ests_for_win):
+                if isinstance(est, EstimatorArgument):
+                    est = self._init_estimator(est, wi, ei)
                 # (60000, 121, 10)
                 y_proba_train, _ = est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0])
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
