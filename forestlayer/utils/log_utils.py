@@ -4,16 +4,26 @@ import os.path as osp
 import time
 import logging
 from ..backend.backend import get_base_dir
+from .storage_utils import check_dir
+
+_LOG_BASE = osp.join(get_base_dir(), 'log')
 
 
-def get_log_base():
-    return osp.join(get_base_dir(), 'log')
+def get_logging_base():
+    global _LOG_BASE
+    return _LOG_BASE
+
+
+def set_logging_base(dir_path):
+    global _LOG_BASE
+    _LOG_BASE = dir_path
+    check_dir(_LOG_BASE)
 
 
 logging.basicConfig(format="[ %(asctime)s][%(module)s.%(funcName)s] %(message)s")
 
 DEFAULT_LEVEL = logging.INFO
-DEFAULT_LOGGING_DIR = osp.join(get_log_base(), "forestlayer")
+DEFAULT_LOGGING_DIR = osp.join(get_logging_base(), "forestlayer")
 fh = None
 
 
@@ -34,14 +44,24 @@ def init_fh():
     fh.setFormatter(logging.Formatter("[ %(asctime)s][%(module)s.%(funcName)s] %(message)s"))
 
 
-def update_default_level(defalut_level):
+def set_logging_level(defalut_level):
     global DEFAULT_LEVEL
     DEFAULT_LEVEL = defalut_level
 
 
-def update_default_logging_dir(default_logging_dir):
+def get_logging_level():
+    global DEFAULT_LEVEL
+    return DEFAULT_LEVEL
+
+
+def set_logging_dir(default_logging_dir):
     global DEFAULT_LOGGING_DIR
     DEFAULT_LOGGING_DIR = default_logging_dir
+
+
+def get_logging_dir():
+    global DEFAULT_LOGGING_DIR
+    return DEFAULT_LOGGING_DIR
 
 
 def get_logger(name="forestlayer", level=None):

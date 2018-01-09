@@ -8,7 +8,8 @@ DAG definition
 # License: Apache-2.0
 
 from ..utils.log_utils import get_logger
-from ..utils.metrics import accuracy_pb, Accuracy
+from ..utils.metrics import Accuracy, MSE
+from ..layers.layer import Layer
 import copy
 import numpy as np
 
@@ -16,8 +17,9 @@ LOGGER = get_logger('forestflow.layers.graph')
 
 
 class Graph(object):
-    def __init__(self):
+    def __init__(self, task='classification'):
         self.layers = []
+        self.task = task
         self.FIT = False
 
     def call(self):
@@ -26,13 +28,22 @@ class Graph(object):
     def __call__(self, *args, **kwargs):
         self.call()
 
-    def add(self, layer):
+    def _add(self, layer):
+        if layer is None or not isinstance(layer, Layer):
+            LOGGER.info('layer [{}] is invalid!'.format(layer))
+            return
         self.layers.append(layer)
-        if len(self.layers) <= 1:
-            layer.input_layer = None
-        else:
-            layer.input_layer = self.layers[-2]
-            self.layers[-2].output_layer = layer
+
+    def add(self, layer, *layers):
+        """
+        Add one or more layers.
+        :param layer: at least one layer to be add
+        :param layers: additional layers, optional
+        :return:
+        """
+        self._add(layer)
+        for lay in layers:
+            self._add(lay)
 
     def build(self):
         LOGGER.info("graph build finished!")
@@ -65,8 +76,8 @@ class Graph(object):
             x_tests = [x_tests]
         if y_tests is not None and not isinstance(y_tests, (list, tuple)):
             y_tests = [y_tests]
-        for layer in self.layers:
-            LOGGER.info(" -------------- Now fitting layer [{}] --------------".format(layer))
+        for li, layer in enumerate(self.layers):
+            LOGGER.info(" -------------- Now fitting layer - [{}] [{}] --------------".format(li, layer))
             x_trains, x_tests = layer.fit_transform(x_trains, y_trains, x_tests, y_tests)
         LOGGER.info("graph fit_transform finished!")
         self.FIT = True
@@ -102,9 +113,16 @@ class Graph(object):
         X = self.layers[-1].predict_proba(X)
         return X
 
+    @property
+    def is_classification(self):
+        return self.task == 'classification'
+
     def evaluate(self, inputs, labels, eval_metrics=None):
         if eval_metrics is None:
-            eval_metrics = [Accuracy('evaluate')]
+            if self.is_classification:
+                eval_metrics = [Accuracy('evaluate')]
+            else:
+                eval_metrics = [MSE('evaluate')]
         # make eval_metrics iterative
         if not isinstance(eval_metrics, (list, tuple)):
             eval_metrics = [eval_metrics]

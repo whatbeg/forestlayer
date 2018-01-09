@@ -30,7 +30,7 @@ def mnist_test_graph():
     X_test = np.reshape(x_test[:100], (100, -1, 28, 28))
     y_test = y_test[:100]
 
-    print('X: ', X.shape, 'y: ', y_train.shape)
+    print('X_train: ', X_train.shape, 'y: ', y_train.shape)
     print('X_test: ', X_test.shape, 'y: ', y_test.shape)
 
     est_configs = [
@@ -94,8 +94,6 @@ def mnist_test_graph():
     def test_fit_transform2():
         print("test fit_transform2")
         mgs, poolayer, concat_layer, auto_cascade = _init()
-        mgs.keep_in_mem = True
-        auto_cascade.keep_in_mem = True
         model = Graph()
         model.add(mgs)
         model.add(poolayer)
@@ -146,9 +144,9 @@ def mnist_test_graph():
         model.evaluate(X_test, y_test)
         LOGGER.info('test fit_evaluate passed!')
 
-    test_fit_transform()
-    test_fit_transform2()
     test_fit()
+    # test_fit_transform()
+    test_fit_transform2()
     test_transform()
     test_fit_predict()
     test_fit_evaluate()

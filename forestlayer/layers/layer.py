@@ -15,10 +15,8 @@ from ..utils.log_utils import get_logger, list2str
 from ..utils.storage_utils import *
 from ..utils.metrics import Accuracy, AUC, MSE
 from ..estimators import get_estimator_kfold, EstimatorArgument
-from .. import backend as F
 
 LOGGER = get_logger('layer')
-# LOGGER.setLevel(logging.ERROR)
 
 
 class Layer(object):
@@ -461,7 +459,8 @@ class ConcatLayer(Layer):
 
 class CascadeLayer(Layer):
     def __init__(self, batch_size=None, dtype=None, name=None, task='classification', est_configs=None,
-                 layer_id='anonymous', n_classes=None, keep_in_mem=False, data_save_dir=None, metrics=None, seed=None):
+                 layer_id='anonymous', n_classes=None, keep_in_mem=False, data_save_dir=None, model_save_dir=None,
+                 metrics=None, seed=None):
         """Cascade Layer.
         A cascade layer contains several estimators, it accepts single input, go through these estimators, produces
         predicted probability by every estimators, and stacks them together for next cascade layer.
@@ -478,6 +477,7 @@ class CascadeLayer(Layer):
                             we recommend set it False to save memory and speed up the application
                             TODO: support dump model to disk to save memory
         :param data_save_dir: directory to save intermediate data into
+        :param model_save_dir: directory to save fit estimators into
         :param metrics: evaluation metrics used in training model and evaluating testing data
         :param seed: random seed, also called random state in scikit-learn random forest
 
@@ -507,6 +507,8 @@ class CascadeLayer(Layer):
         self.keep_in_mem = keep_in_mem
         self.data_save_dir = data_save_dir
         check_dir(self.data_save_dir)  # check dir, if not exists, create the dir
+        self.model_save_dir = model_save_dir
+        check_dir(self.model_save_dir)
         self.seed = seed
         self.larger_better = True
         self.metrics = metrics
@@ -759,8 +761,8 @@ class CascadeLayer(Layer):
 class AutoGrowingCascadeLayer(Layer):
     def __init__(self, batch_size=None, dtype=np.float32, name=None, task='classification', est_configs=None,
                  early_stopping_rounds=None, max_layers=0, look_index_cycle=None, data_save_rounds=0,
-                 stop_by_test=False, n_classes=None, keep_in_mem=False, data_save_dir=None, metrics=None,
-                 keep_test_result=False, seed=None):
+                 stop_by_test=True, n_classes=None, keep_in_mem=False, data_save_dir=None, model_save_dir=None,
+                 metrics=None, keep_test_result=False, seed=None):
         """AutoGrowingCascadeLayer
         An AutoGrowingCascadeLayer is a virtual layer that consists of many single cascade layers.
         `auto-growing` means this kind of layer can decide the depth of cascade forest,
@@ -792,6 +794,7 @@ class AutoGrowingCascadeLayer(Layer):
         :param data_save_dir: str [default = None]
                               each data_save_rounds save the intermediate results in data_save_dir
                               if data_save_rounds = 0, then no savings for intermediate results
+        :param model_save_dir: directory to save fit estimators into
         :param metrics: evaluation metrics used in training model and evaluating testing data
         :param seed: random seed, also called random state in scikit-learn random forest
         """
@@ -808,6 +811,8 @@ class AutoGrowingCascadeLayer(Layer):
         self.data_save_rounds = data_save_rounds
         self.data_save_dir = data_save_dir
         check_dir(self.data_save_dir)  # check data save dir, if not exists, create the dir
+        self.model_save_dir = model_save_dir
+        check_dir(self.model_save_dir)
         self.keep_in_mem = keep_in_mem
         self.stop_by_test = stop_by_test
         self.metrics = metrics
@@ -834,10 +839,12 @@ class AutoGrowingCascadeLayer(Layer):
         self.test_results = None
         self.keep_test_result = keep_test_result
 
-    def _create_cascade_layer(self, task='classification', est_configs=None, n_classes=None, data_save_dir=None,
-                              layer_id=None, keep_in_mem=False, dtype=None, metrics=None, seed=None):
+    def _create_cascade_layer(self, task='classification', est_configs=None, n_classes=None,
+                              data_save_dir=None, model_save_dir=None, layer_id=None, keep_in_mem=False,
+                              dtype=None, metrics=None, seed=None):
         return CascadeLayer(dtype=dtype, task=task, est_configs=est_configs, layer_id=layer_id, n_classes=n_classes,
-                            keep_in_mem=keep_in_mem, data_save_dir=data_save_dir, metrics=metrics, seed=seed)
+                            keep_in_mem=keep_in_mem, data_save_dir=data_save_dir, model_save_dir=model_save_dir,
+                            metrics=metrics, seed=seed)
 
     def call(self, x_trains):
         pass
@@ -905,10 +912,14 @@ class AutoGrowingCascadeLayer(Layer):
                 data_save_dir = self.data_save_dir
                 if data_save_dir is not None:
                     data_save_dir = osp.join(data_save_dir, 'cascade_layer_{}'.format(layer_id))
+                model_save_dir = self.model_save_dir
+                if model_save_dir is not None:
+                    model_save_dir = osp.join(model_save_dir, 'cascade_layer_{}'.format(layer_id))
                 cascade = self._create_cascade_layer(task=self.task,
                                                      est_configs=self.est_configs,
                                                      n_classes=self.n_classes,
                                                      data_save_dir=data_save_dir,
+                                                     model_save_dir=model_save_dir,
                                                      layer_id=layer_id,
                                                      keep_in_mem=self.keep_in_mem,
                                                      dtype=self.dtype,
@@ -1052,10 +1063,14 @@ class AutoGrowingCascadeLayer(Layer):
                 data_save_dir = self.data_save_dir
                 if data_save_dir is not None:
                     data_save_dir = osp.join(data_save_dir, 'cascade_layer_{}'.format(layer_id))
+                model_save_dir = self.model_save_dir
+                if model_save_dir is not None:
+                    model_save_dir = osp.join(model_save_dir, 'cascade_layer_{}'.format(layer_id))
                 cascade = self._create_cascade_layer(task=self.task,
                                                      est_configs=self.est_configs,
                                                      n_classes=self.n_classes,
                                                      data_save_dir=data_save_dir,
+                                                     model_save_dir=model_save_dir,
                                                      layer_id=layer_id,
                                                      keep_in_mem=self.keep_in_mem,
                                                      dtype=self.dtype,

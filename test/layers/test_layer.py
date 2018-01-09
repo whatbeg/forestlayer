@@ -85,6 +85,7 @@ def MNIST_based_test():
         res_train, res_test = poolayer.fit_transform(res_train, None, res_test, None)
 
         res_train, res_test = concat_layer.fit_transform(res_train, None, res_test)
+        print(res_train[:20])
 
         res_train, res_test = auto_cascade.fit_transform(res_train, y_train, res_test)
 
