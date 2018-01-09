@@ -64,7 +64,7 @@ class AUC(Metrics):
         y_true = y_true.reshape(-1)
         auc_result = auc(y_true, y_proba)
         if logger is not None:
-            logger.info('{} AUC({}) = {:.4f}'.format(prefix, self.name, auc_result))
+            logger.info('{} AUC({}) = {:.3f}'.format(prefix, self.name, auc_result))
         return auc_result
 
 
@@ -76,10 +76,19 @@ class MSE(Metrics):
         return self.calc(y_true, y_pred, prefix, logger)
 
     def calc(self, y_true, y_pred, prefix='', logger=None):
-        return metrics.mean_squared_error(y_true, y_pred)
+        mse_result = metrics.mean_squared_error(y_true, y_pred)
+        if logger is not None:
+            logger.info('{} MSE({}) = {:.3f}'.format(prefix, self.name, mse_result))
+        return mse_result
 
     def calc_proba(self, y_true, y_proba, prefix='', logger=None):
-        return metrics.mean_squared_error(y_true, y_proba)
+        if len(y_true.shape) == 1:
+            y_proba = y_proba.reshape(-1)
+        elif len(y_true.shape) == 2:
+            y_proba = y_proba.reshape((y_true.shape[0], -1))
+        else:
+            raise ValueError('y_true.shape should not exceed 2-dim, but {}'.format(y_true.shape))
+        return self.calc(y_true, y_proba, prefix, logger)
 
 
 def accuracy(y_true, y_pred):

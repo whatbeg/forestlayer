@@ -10,7 +10,7 @@ K-fold wrapper definition.
 import os.path as osp
 import numpy as np
 from sklearn.model_selection import KFold, StratifiedKFold
-
+from ..utils.metrics import Accuracy
 from ..utils.log_utils import get_logger
 from ..utils.storage_utils import name2path
 
@@ -95,8 +95,7 @@ class KFoldWrapper(object):
             # predict on k-fold validation
             y_proba = est.predict_proba(X[val_idx].reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
             if not est.is_classification:
-                pass
-                # TODO: Add dim
+                y_proba = y_proba[:, np.newaxis]  # add one dimension
             if len(X.shape) == 3:
                 y_proba = y_proba.reshape((len(val_idx), -1, y_proba.shape[-1]))
             self.log_eval_metrics(self.name, y[val_idx], y_proba, "train_{}".format(k))
@@ -116,6 +115,8 @@ class KFoldWrapper(object):
             # test
             for vi, (prefix, X_test, y_test) in enumerate(test_sets):
                 y_proba = est.predict_proba(X_test.reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
+                if not est.is_classification:
+                    y_proba = y_proba[:, np.newaxis]
                 if len(X.shape) == 3:
                     y_proba = y_proba.reshape((X_test.shape[0], X_test.shape[1], y_proba.shape[-1]))
                 if k == 0:
@@ -144,6 +145,8 @@ class KFoldWrapper(object):
         proba_result = None
         for k, est in enumerate(self.fit_estimators):
             y_proba = est.predict_proba(x_tests.reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
+            if not est.is_classification:
+                y_proba = y_proba[:, np.newaxis]  # add one dimension
             if len(x_tests.shape) == 3:
                 y_proba = y_proba.reshape((x_tests.shape[0], x_tests.shape[1], y_proba.shape[-1]))
             if k == 0:
@@ -162,7 +165,8 @@ class KFoldWrapper(object):
             return
         for metric in self.eval_metrics:
             acc = metric.calc_proba(y_true, y_proba)
-            LOGGER.info("Accuracy({}.{}.{}) = {:.2f}%".format(est_name, y_name, metric.name, acc))
+            LOGGER.info("{}({}.{}) = {:.2f}{}".format(
+                metric.name, est_name, y_name, acc, '%' if isinstance(metric, Accuracy) else ''))
 
     def _predict_proba(self, est, X):
         return est.predict_proba(X)

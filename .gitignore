@@ -105,4 +105,5 @@ ENV/
 
 *.data
 *.test
+*.xlsx
 run_data/

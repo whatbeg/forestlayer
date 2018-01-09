@@ -12,8 +12,7 @@ import matplotlib.pyplot as plt
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import AdaBoostRegressor
 from forestlayer.estimators.arguments import RandomForest, CompletelyRandomForest
-from forestlayer.layers.layer import CascadeLayer
-from forestlayer.utils.metrics import MSE
+from forestlayer.layers.layer import AutoGrowingCascadeLayer
 
 rng = np.random.RandomState(1)
 X = np.linspace(0, 6, 100)[:, np.newaxis]
@@ -24,31 +23,23 @@ est_configs = [
     CompletelyRandomForest()
 ]
 
-cascade = CascadeLayer(task='regression', est_configs=est_configs, metrics=[MSE])
-
+cascade = AutoGrowingCascadeLayer(task='regression', est_configs=est_configs, early_stopping_rounds=3, keep_in_mem=True)
 cascade.fit(X, y)
+y1 = cascade.predict(X)
+y1 = y1.reshape(-1)
 
+abr = AdaBoostRegressor(DecisionTreeRegressor(max_depth=4),
+                        n_estimators=300, random_state=rng)
+abr.fit(X, y)
+y2 = abr.predict(X)
 
-# # Fit regression model
-# regr_1 = DecisionTreeRegressor(max_depth=4)
-#
-# regr_2 = AdaBoostRegressor(DecisionTreeRegressor(max_depth=4),
-#                            n_estimators=300, random_state=rng)
-#
-# regr_1.fit(X, y)
-# regr_2.fit(X, y)
-#
-# # Predict
-# y_1 = regr_1.predict(X)
-# y_2 = regr_2.predict(X)
-#
-# # Plot the results
-# plt.figure()
-# plt.scatter(X, y, c="k", label="training samples")
-# plt.plot(X, y_1, c="g", label="n_estimators=1", linewidth=2)
-# plt.plot(X, y_2, c="r", label="n_estimators=300", linewidth=2)
-# plt.xlabel("data")
-# plt.ylabel("target")
-# plt.title("Boosted Decision Tree Regression")
-# plt.legend()
-# plt.show()
+# Plot the results
+plt.figure()
+plt.scatter(X, y, c="k", label="training samples")
+plt.plot(X, y2, c="g", label="n_estimators=300", linewidth=1.5)
+plt.plot(X, y1, c="r", label="n_estimators=500", linewidth=1.5)
+plt.xlabel("data")
+plt.ylabel("target")
+plt.title("Regression")
+plt.legend()
+plt.show()
