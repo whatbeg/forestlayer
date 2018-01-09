@@ -20,7 +20,7 @@ X = np.reshape(x_train, (60000, -1, 28, 28))
 print('x_train: ', X.shape)
 
 win = Window(X, 7, 7, 2, 2, 0, 0)
-x = win.fit_transform()
+x = win.fit_transform(X)
 
 # print('x_win: ', x.shape)
 assert x.shape == (60000, 11, 11, 49)

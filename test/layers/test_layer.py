@@ -13,7 +13,7 @@ import os.path as osp
 import time
 from forestlayer.layers.window import Window, Pooling
 from forestlayer.layers.layer import MultiGrainScanLayer, PoolingLayer, ConcatLayer, CascadeLayer, AutoGrowingCascadeLayer
-from forestlayer.estimators import get_estimator_kfold
+from forestlayer.estimators.arguments import RandomForest, CompletelyRandomForest, GBDT
 from forestlayer.layers.graph import Graph
 from forestlayer.utils.storage_utils import get_data_save_base
 from keras.datasets import mnist
@@ -35,17 +35,10 @@ def MNIST_based_test():
     def _init():
         windows = [Window(7, 7, 2, 2, 0, 0), Window(11, 11, 2, 2, 0, 0)]
 
-        args = {
-            'n_estimators': 500,
-            'max_depth': 100,
-            'n_jobs': -1,
-            'min_samples_leaf': 10
-        }
+        rf1 = CompletelyRandomForest(min_samples_leaf=10)
+        rf2 = RandomForest(min_samples_leaf=10)
 
-        rf1 = get_estimator_kfold('rf1', 3, 'RF', est_args=args)
-        rf2 = get_estimator_kfold('rf2', 3, 'CRF', est_args=args)
-
-        est_for_windows = [[rf1, rf2], [rf1.copy(), rf2.copy()]]
+        est_for_windows = [[rf1, rf2], [rf1, rf2]]
 
         mgs = MultiGrainScanLayer(batch_size=None,
                                   dtype=np.float32,
@@ -59,51 +52,31 @@ def MNIST_based_test():
 
         concat_layer = ConcatLayer()
 
-        def get_est_args(est_type):
-            est_args = {
-                'est_type': est_type,
-                'n_folds': 3,
-                'n_estimators': 500,
-                'max_depth': 100,
-                'n_jobs': -1,
-                'min_samples_leaf': 10
-            }
-            return est_args
-
         est_configs = [
-            get_est_args('CRF'),
-            get_est_args('CRF'),
-            get_est_args('RF'),
-            get_est_args('RF')
+            CompletelyRandomForest(),
+            CompletelyRandomForest(),
+            RandomForest(),
+            RandomForest()
+
         ]
 
-        cascade_kwargs = {
-            'n_classes': 10,
-            'data_save_dir': osp.join(get_data_save_base(), 'test_layer', 'cascade'),
-            'layer_id': 1,
-            'keep_in_mem': True,
-            'dtype': np.float32,
-        }
+        cascade = CascadeLayer(est_configs=est_configs,
+                               n_classes=10,
+                               keep_in_mem=True,
+                               data_save_dir=osp.join(get_data_save_base(), 'test_layer', 'cascade'))
 
-        auto_cascade_kwargs = {
-            'early_stop_rounds': 4,
-            'max_layers': 0,
-            'stop_by_test': False,
-            'n_classes': 10,
-            'data_save_rounds': 4,
-            'data_save_dir': osp.join(get_data_save_base(), 'test_layer', 'auto_cascade'),
-            'keep_in_mem': True,
-            'dtype': np.float32,
-        }
+        auto_cascade = AutoGrowingCascadeLayer(est_configs=est_configs,
+                                               early_stopping_rounds=3,
+                                               data_save_rounds=4,
+                                               stop_by_test=True,
+                                               n_classes=10,
+                                               data_save_dir=osp.join(get_data_save_base(),
+                                                                      'test_layer', 'auto_cascade'))
 
-        cascade = CascadeLayer(est_configs=est_configs, kwargs=cascade_kwargs)
-
-        auto_cascade = AutoGrowingCascadeLayer(est_configs=est_configs, kwargs=auto_cascade_kwargs)
-
-        return mgs, poolayer, concat_layer, auto_cascade
+        return mgs, poolayer, concat_layer, cascade, auto_cascade
 
     def test_fit_transform():
-        mgs, poolayer, concat_layer, auto_cascade = _init()
+        mgs, poolayer, concat_layer, cascade, auto_cascade = _init()
 
         res_train, res_test = mgs.fit_transform(X, y_train, X_test, y_test)
 
@@ -116,7 +89,7 @@ def MNIST_based_test():
         print(res_train.shape, res_test.shape)
 
     def test_fit():
-        mgs, poolayer, concat_layer, auto_cascade = _init()
+        mgs, poolayer, concat_layer, cascade, auto_cascade = _init()
         res_train = mgs.fit(X, y_train)
 
         res_train = poolayer.fit(res_train, y_train)
@@ -126,7 +99,7 @@ def MNIST_based_test():
         res_train = auto_cascade.fit(res_train, y_train)
 
     def test_predict():
-        mgs, poolayer, concat_layer, auto_cascade = _init()
+        mgs, poolayer, concat_layer, cascade, auto_cascade = _init()
         res_train = mgs.fit(X, y_train)
         predicted = mgs.predict(X_test)
 
@@ -158,46 +131,24 @@ def UCI_ADULT_based_test():
     end_time = time.time()
     print('time cost: {}'.format(end_time - start_time))
 
-    def get_est_args(est_type):
-        est_args = {
-            'est_type': est_type,
-            'n_folds': 3,
-            'n_estimators': 500,
-            'max_depth': 100,
-            'n_jobs': -1,
-            'min_samples_leaf': 10
-        }
-        return est_args
-
     est_configs = [
-        get_est_args('CRF'),
-        get_est_args('CRF'),
-        get_est_args('RF'),
-        get_est_args('RF')
+        CompletelyRandomForest(),
+        CompletelyRandomForest(),
+        RandomForest(),
+        RandomForest()
     ]
 
-    cascade_kwargs = {
-        'n_classes': 2,
-        'data_save_dir': osp.join(get_data_save_base(), 'test_layer', 'cascade'),
-        'layer_id': 1,
-        'keep_in_mem': True,
-        'dtype': np.float32,
-    }
+    gc = CascadeLayer(est_configs=est_configs,
+                      n_classes=2,
+                      data_save_dir=osp.join(get_data_save_base(), 'test_layer', 'cascade'))
 
-    auto_cascade_kwargs = {
-        'early_stop_rounds': 2,
-        'max_layers': 0,
-        'stop_by_test': False,
-        'n_classes': 2,
-        'data_save_rounds': 4,
-        'data_save_dir': osp.join(get_data_save_base(), 'uci_adult', 'auto_cascade'),
-        'keep_in_mem': True,
-        'dtype': np.float32,
-    }
-
-    gc = CascadeLayer(est_configs=est_configs, kwargs=cascade_kwargs)
-
-    agc = AutoGrowingCascadeLayer(est_configs=est_configs, kwargs=auto_cascade_kwargs)
+    agc = AutoGrowingCascadeLayer(est_configs=est_configs,
+                                  early_stopping_rounds=2,
+                                  stop_by_test=False,
+                                  data_save_rounds=4,
+                                  n_classes=2,
+                                  data_save_dir=osp.join(get_data_save_base(),
+                                                         'test_layer', 'auto_cascade'))
 
     def test_uci_graph():
         model = Graph()
@@ -220,12 +171,13 @@ def UCI_ADULT_based_test():
         model.fit(x_train, y_train)
         model.transform(x_test)
 
-    # test_uci_graph()
-    # test_fit_predict()
-    # test_graph_fit_evaluate()
+    test_uci_graph()
+    test_fit_predict()
+    test_graph_fit_evaluate()
     test_graph_transform()
 
 
-# UCI_ADULT_based_test()
+MNIST_based_test()
+UCI_ADULT_based_test()
 
 

@@ -11,10 +11,6 @@ import ray
 import os.path as osp
 import os
 import numpy as np
-from ..utils.log_utils import get_logger
-
-LOGGER = get_logger('backend')
-
 
 _BASE_DIR = osp.expanduser(osp.join('~', '.forestlayer'))
 
@@ -26,8 +22,6 @@ if not os.access(_BASE_DIR, os.W_OK):
     if not osp.exists(_BASE_DIR):
         os.makedirs(_BASE_DIR)
 
-LOGGER.debug('_BASE_DIR = {}'.format(_BASE_DIR))
-
 
 def set_base_dir(dir_path):
     global _BASE_DIR
@@ -38,7 +32,6 @@ def set_base_dir(dir_path):
         _BASE_DIR = osp.join('/tmp', '.forestlayer')
         if not osp.exists(_BASE_DIR):
             os.makedirs(_BASE_DIR)
-    LOGGER.debug('Set BASE DIR to {}'.format(_BASE_DIR))
 
 
 def get_base_dir():

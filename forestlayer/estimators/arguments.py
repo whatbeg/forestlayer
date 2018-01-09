@@ -74,7 +74,8 @@ class BinClassXGBoost(EstimatorArgument):
 
 
 class RandomForest(EstimatorArgument):
-    def __init__(self, n_folds=3, n_estimators=500, max_depth=100, n_jobs=-1, max_features='sqrt'):
+    def __init__(self, n_folds=3, n_estimators=500, max_depth=100, n_jobs=-1, max_features='sqrt',
+                 min_samples_leaf=1):
         super(RandomForest, self).__init__()
         self.est_args = {
             'est_type': 'RF',
@@ -82,12 +83,14 @@ class RandomForest(EstimatorArgument):
             'n_estimators': n_estimators,
             'max_depth': max_depth,
             'n_jobs': n_jobs,
-            'max_features': max_features
+            'max_features': max_features,
+            'min_samples_leaf': min_samples_leaf
         }
 
 
 class CompletelyRandomForest(EstimatorArgument):
-    def __init__(self, n_folds=3, n_estimators=500, max_depth=100, n_jobs=-1, max_features=1):
+    def __init__(self, n_folds=3, n_estimators=500, max_depth=100, n_jobs=-1, max_features=1,
+                 min_samples_leaf=1):
         super(CompletelyRandomForest, self).__init__()
         self.est_args = {
             'est_type': 'CRF',
@@ -95,7 +98,14 @@ class CompletelyRandomForest(EstimatorArgument):
             'n_estimators': n_estimators,
             'max_depth': max_depth,
             'n_jobs': n_jobs,
-            'max_features': max_features
+            'max_features': max_features,
+            'min_samples_leaf': min_samples_leaf
         }
+
+
+class GBDT(EstimatorArgument):
+    def __init__(self, n_folds=3):
+        pass
+
 
 
