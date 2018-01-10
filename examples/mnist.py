@@ -31,14 +31,17 @@ print(x_test.shape, 'test samples')
 rf1 = CompletelyRandomForest(min_samples_leaf=10)
 rf2 = RandomForest(min_samples_leaf=10)
 
-windows = [Window(7, 7, 2, 2, 0, 0), Window(11, 11, 2, 2, 0, 0)]
+windows = [Window(win_x=7, win_y=7, stride_x=2, stride_y=2, pad_x=0, pad_y=0),
+           Window(win_x=11, win_y=11, stride_x=2, stride_y=2, pad_x=0, pad_y=0)]
+
 est_for_windows = [[rf1, rf2], [rf1, rf2]]
 
 mgs = MultiGrainScanLayer(windows=windows,
                           est_for_windows=est_for_windows,
                           n_class=10)
 
-pools = [[Pooling(2, 2, "max"), Pooling(2, 2, "max")], [Pooling(2, 2, "max"), Pooling(2, 2, "max")]]
+pools = [[Pooling(win_x=2, win_y=2, pool_strategy="max"), Pooling(win_x=2, win_y=2, pool_strategy="max")],
+         [Pooling(win_x=2, win_y=2, pool_strategy="max"), Pooling(win_x=2, win_y=2, pool_strategy="max")]]
 
 pool = PoolingLayer(pools=pools)
 
