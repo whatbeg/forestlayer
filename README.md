@@ -16,6 +16,7 @@ You can refer to [Deep Forest Paper](https://arxiv.org/abs/1702.08835), [Ray Pro
 
 ## News
 
+* [10 Jan] You can now use ForestLayer for classification and regression task. And you can use it in your data science algorithm competitions! We recommend using small layer of cascade in regression task since it's easy to overfit the data.
 * [8 Jan] You can now use ForestLayer for classification task. See [examples](https://github.com/whatbeg/forestlayer/tree/master/examples)
 
 ## Installation
@@ -157,7 +158,9 @@ ForestLayer is released under the Apache 2.0 license.
 
 ## TODO
 
-* Add model save and load mechanism
+* [] Add model save and load mechanism
+* [] Documents
+* [] Benchmarks
 * [x] Different input data load and management
 * [x] Regression task support
 * [x] Add XGBoost classifier support

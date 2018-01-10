@@ -1,6 +1,6 @@
 # -*- coding:utf-8 -*-
 """
-Base layers definition
+Base layers definition.
 """
 
 # Copyright 2017 Authors NJU PASA BigData Laboratory.

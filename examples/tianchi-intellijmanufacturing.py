@@ -63,10 +63,10 @@ feat_number_scale = pd.DataFrame(MinMaxScaler().fit_transform(feat_nume))
 # Concatenate
 feat_all = pd.concat([feat_number_scale, feat_categorical_dummies], axis=1)
 
-if not osp.exists(osp.join(get_model_save_base(), 'feat_dim_100.pkl')):
+if not osp.exists(osp.join(get_model_save_base(), 'feat_dim_120.pkl')):
     x_train, x_test, y_train, y_test = train_test_split(feat_all, feat_all, test_size=0.2, random_state=42)
 
-    encoding_dim = 100
+    encoding_dim = 120
     input_ = Input(shape=(8051,))
     encoded = Dense(encoding_dim, activation='relu')(input_)
     decoded = Dense(8051, activation='sigmoid')(encoded)
@@ -74,7 +74,7 @@ if not osp.exists(osp.join(get_model_save_base(), 'feat_dim_100.pkl')):
     autoencoder.compile(optimizer='adadelta', loss='binary_crossentropy')
     autoencoder.fit(x_train,
                     x_train,
-                    nb_epoch=3,
+                    nb_epoch=500,
                     batch_size=10,
                     shuffle=True,
                     validation_data=(x_test, x_test))
@@ -82,13 +82,13 @@ if not osp.exists(osp.join(get_model_save_base(), 'feat_dim_100.pkl')):
     # 根据上面我们训练的自编码器，截取其中编码部分定义为编码模型
     encoder = Model(input=input_, output=encoded)
     # 对特征进行编码降维
-    feat_dim_100 = encoder.predict(feat_all)
+    feat_dim_120 = encoder.predict(feat_all)
 
-    with open(osp.join(get_model_save_base(), 'feat_dim_100.pkl'), 'wb') as f:
-        pickle.dump(feat_dim_100, f)
+    with open(osp.join(get_model_save_base(), 'feat_dim_120.pkl'), 'wb') as f:
+        pickle.dump(feat_dim_120, f)
 else:
-    with open(osp.join(get_model_save_base(), 'feat_dim_100.pkl'), 'rb') as f:
-        feat_dim_100 = pickle.load(f)
+    with open(osp.join(get_model_save_base(), 'feat_dim_120.pkl'), 'rb') as f:
+        feat_dim_120 = pickle.load(f)
 
 
 est_configs = [
@@ -106,7 +106,7 @@ agc = AutoGrowingCascadeLayer(task='regression',
                               data_save_dir=data_save_dir,
                               keep_test_result=True)
 
-agc.fit_transform(feat_dim_100[:500], label, feat_dim_100[500:])
+agc.fit_transform(feat_dim_120[:500], label, feat_dim_120[500:])
 result = agc.test_results
 
 ret = pd.DataFrame()
