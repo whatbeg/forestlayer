@@ -9,8 +9,8 @@
 ForestLayer is a scalable, fast deep forest learning library based on Scikit-learn and Ray.
 It provides rich data processing, model training and serving modules to help researchers and engineers build practical deep forest learning workflows.
 It internally embedded task parallelization mechanism using Ray, which is a popular flexible, high-performance distributed execution framework proposed by U.C.Berkeley.
-ForestLayer aims to enable faster experimentation as possible, and reduce the delay from idea to result.
-Hope is that ForestLayer can bring you good researches and good products.
+<br>ForestLayer aims to enable faster experimentation as possible, and reduce the delay from idea to result.</br>
+<br>Hope is that ForestLayer can bring you good researches and good products.</br>
 
 You can refer to [Deep Forest Paper](https://arxiv.org/abs/1702.08835), [Ray Project](https://github.com/ray-project/ray) to find more details.
 
