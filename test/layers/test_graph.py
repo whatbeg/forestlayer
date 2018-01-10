@@ -145,7 +145,7 @@ def mnist_test_graph():
         LOGGER.info('test fit_evaluate passed!')
 
     test_fit()
-    # test_fit_transform()
+    test_fit_transform()
     test_fit_transform2()
     test_transform()
     test_fit_predict()

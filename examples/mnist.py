@@ -17,14 +17,16 @@ import os.path as osp
 
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
 
-x_train = x_train.reshape(60000, 1, 28, 28)[:200]
-x_test = x_test.reshape(10000, 1, 28, 28)[:100]
-x_train /= 255
-x_test /= 255
+x_train = x_train.reshape(60000, -1, 28, 28)[:200, :, :, :]
+x_test = x_test.reshape(10000, -1, 28, 28)[:100, :, :, :]
+x_train = x_train / 255.0
+x_test = x_test / 255.0
 y_train = y_train[:200]
 y_test = y_test[:100]
-print(x_train.shape[0], 'train samples')
-print(x_test.shape[0], 'test samples')
+
+
+print(x_train.shape, 'train samples')
+print(x_test.shape, 'test samples')
 
 rf1 = CompletelyRandomForest(min_samples_leaf=10)
 rf2 = RandomForest(min_samples_leaf=10)
@@ -32,7 +34,9 @@ rf2 = RandomForest(min_samples_leaf=10)
 windows = [Window(7, 7, 2, 2, 0, 0), Window(11, 11, 2, 2, 0, 0)]
 est_for_windows = [[rf1, rf2], [rf1, rf2]]
 
-mgs = MultiGrainScanLayer(windows=windows, est_for_windows=est_for_windows, n_class=10)
+mgs = MultiGrainScanLayer(windows=windows,
+                          est_for_windows=est_for_windows,
+                          n_class=10)
 
 pools = [[Pooling(2, 2, "max"), Pooling(2, 2, "max")], [Pooling(2, 2, "max"), Pooling(2, 2, "max")]]
 
@@ -62,5 +66,5 @@ model.add(mgs)
 model.add(pool)
 model.add(concatlayer)
 model.add(auto_cascade)
-model.fit_transform(x_train, y_train)
+model.fit(x_train, y_train)
 

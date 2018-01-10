@@ -165,7 +165,7 @@ class KFoldWrapper(object):
             return
         for metric in self.eval_metrics:
             acc = metric.calc_proba(y_true, y_proba)
-            LOGGER.info("{}({}.{}) = {:.4f}{}".format(
+            LOGGER.info("{}({} - {}) = {:.4f}{}".format(
                 metric.name, est_name, y_name, acc, '%' if isinstance(metric, Accuracy) else ''))
 
     def _predict_proba(self, est, X):
