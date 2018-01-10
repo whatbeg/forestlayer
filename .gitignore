@@ -108,3 +108,9 @@ ENV/
 *.xlsx
 run_data/
 run_model/
+
+# docs
+docs/site/*
+docs/_build/*
+docs/_static/
+docs/_templates/
