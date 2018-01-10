@@ -159,8 +159,8 @@ ForestLayer is released under the Apache 2.0 license.
 ## TODO
 
 * [ ] Add model save and load mechanism
-* [ ] Documents
 * [ ] Benchmarks
+* [x] Documents
 * [x] Different input data load and management
 * [x] Regression task support
 * [x] Add XGBoost classifier support
