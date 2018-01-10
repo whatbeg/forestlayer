@@ -1,6 +1,6 @@
 <a href="https://github.com/whatbeg/forestflow">
 <div align="center">
-	<img src="logo.jpg" width="30%" height="18%"/>
+	<img src="docs/imgs/logo.jpg" width="30%" height="18%"/>
 </div>
 </a>
 
@@ -158,6 +158,7 @@ ForestLayer is released under the Apache 2.0 license.
 
 ## TODO
 
+* [ ] Distributed training
 * [ ] Add model save and load mechanism
 * [ ] Benchmarks
 * [x] Documents
