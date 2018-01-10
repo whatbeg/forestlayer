@@ -44,8 +44,9 @@ def MeanPooling2x2Layer(win_x=2, win_y=2):
 
 
 def EstForWin2x2(**kwargs):
-    rf1 = CompletelyRandomForest(kwargs)
-    rf2 = RandomForest(kwargs)
+    rf1 = CompletelyRandomForest(**kwargs)
+    print(rf1.get_est_args())
+    rf2 = RandomForest(**kwargs)
     est_for_windows = [[rf1, rf2], [rf1, rf2]]
     return est_for_windows
 
