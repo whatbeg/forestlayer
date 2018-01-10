@@ -1,4 +1,12 @@
 # -*- coding:utf-8 -*-
+"""
+Log Utilities.
+"""
+
+# Copyright 2017 Authors NJU PASA BigData Laboratory.
+# Authors: Qiu Hu <huqiu00#163.com>
+# License: Apache-2.0
+
 import os
 import os.path as osp
 import time
@@ -10,11 +18,22 @@ _LOG_BASE = osp.join(get_base_dir(), 'log')
 
 
 def get_logging_base():
+    """
+    Get logging base dir, which is used to store log data.
+    logging base contains one or more logging dir.
+    :return:
+    """
     global _LOG_BASE
     return _LOG_BASE
 
 
 def set_logging_base(dir_path):
+    """
+    Set logging base dir, which is used to store log data.
+    logging base contains one or more logging dir.
+    :param dir_path:
+    :return:
+    """
     global _LOG_BASE
     _LOG_BASE = dir_path
     check_dir(_LOG_BASE)
@@ -32,6 +51,10 @@ def strftime(t=None):
 
 
 def init_fh():
+    """
+    Initialize log file handler.
+    :return:
+    """
     global fh
     if fh is not None:
         return
@@ -44,27 +67,51 @@ def init_fh():
     fh.setFormatter(logging.Formatter("[ %(asctime)s][%(module)s.%(funcName)s] %(message)s"))
 
 
-def set_logging_level(defalut_level):
+def set_logging_level(default_level):
+    """
+    Set logging level
+    :param default_level:
+    :return:
+    """
     global DEFAULT_LEVEL
-    DEFAULT_LEVEL = defalut_level
+    DEFAULT_LEVEL = default_level
 
 
 def get_logging_level():
+    """
+    Get logging level
+    :return:
+    """
     global DEFAULT_LEVEL
     return DEFAULT_LEVEL
 
 
 def set_logging_dir(default_logging_dir):
+    """
+    Set logging dir.
+    :param default_logging_dir:
+    :return:
+    """
     global DEFAULT_LOGGING_DIR
     DEFAULT_LOGGING_DIR = default_logging_dir
 
 
 def get_logging_dir():
+    """
+    Get logging dir
+    :return:
+    """
     global DEFAULT_LOGGING_DIR
     return DEFAULT_LOGGING_DIR
 
 
 def get_logger(name="forestlayer", level=None):
+    """
+    Get a logger.
+    :param name:
+    :param level:
+    :return:
+    """
     level = level or DEFAULT_LEVEL
     logger = logging.getLogger(name)
     logger.setLevel(level)
@@ -75,6 +122,12 @@ def get_logger(name="forestlayer", level=None):
 
 
 def list2str(lis, dim):
+    """
+    List to String.
+    :param lis:
+    :param dim:
+    :return:
+    """
     result = "["
     for l in lis:
         if dim == 1:

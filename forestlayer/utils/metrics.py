@@ -8,10 +8,21 @@ from sklearn import metrics
 
 
 class Metrics(object):
+    """
+    Metrics are used to evaluate predictions and ground-truth value.
+    """
     def __init__(self, name=''):
         self.name = name
 
     def __call__(self, y_true, y_pred, prefix='', logger=None):
+        """
+        Call method of metrics.
+        :param y_true:
+        :param y_pred:
+        :param prefix:
+        :param logger:
+        :return:
+        """
         if y_true is None or y_pred is None:
             return
         if not isinstance(y_pred, type(np.array)):
@@ -24,17 +35,44 @@ class Metrics(object):
             raise ValueError('y_pred.shape={} does not confirm the restriction!'.format(y_pred.shape))
 
     def calc(self, y_true, y_pred, prefix='', logger=None):
+        """
+        Calc metric from y_true and y_prediction.
+        :param y_true:
+        :param y_pred:
+        :param prefix:
+        :param logger:
+        :return:
+        """
         raise NotImplementedError
 
     def calc_proba(self, y_true, y_proba, prefix='', logger=None):
+        """
+        Calc metric from y_true and y_probability.
+        :param y_true:
+        :param y_proba:
+        :param prefix:
+        :param logger:
+        :return:
+        """
         raise NotImplementedError
 
 
 class Accuracy(Metrics):
+    """
+    Accuracy metric.
+    """
     def __init__(self, name=''):
         super(Accuracy, self).__init__(name)
 
     def calc(self, y_true, y_pred, prefix='', logger=None):
+        """
+        Calc Accuracy metric from y_true and y_prediction.
+        :param y_true:
+        :param y_pred:
+        :param prefix:
+        :param logger:
+        :return:
+        """
         if y_true is None or y_pred is None:
             return
         acc = 100. * np.sum(np.asarray(y_true) == y_pred) / len(y_true)
@@ -43,6 +81,14 @@ class Accuracy(Metrics):
         return acc
 
     def calc_proba(self, y_true, y_proba, prefix='', logger=None):
+        """
+        Calc Accuracy metric from y_true and y_probability.
+        :param y_true:
+        :param y_proba:
+        :param prefix:
+        :param logger:
+        :return:
+        """
         y_true = y_true.reshape(-1)
         y_pred = np.argmax(y_proba.reshape((-1, y_proba.shape[-1])), 1)
         acc = 100. * np.sum(y_true == y_pred) / len(y_true)
@@ -56,10 +102,26 @@ class AUC(Metrics):
         super(AUC, self).__init__(name)
 
     def calc(self, y_true, y_pred, prefix='', logger=None):
+        """
+        Calc AUC metric from y_true and y_prediction.
+        :param y_true:
+        :param y_pred:
+        :param prefix:
+        :param logger:
+        :return:
+        """
         assert y_pred.shape[1] == 2, 'auc metric is restricted to the binary classification task!'
         return self.calc_proba(y_true, y_pred, prefix, logger)
 
     def calc_proba(self, y_true, y_proba, prefix='', logger=None):
+        """
+        Calc AUC metric from y_true and y_probability.
+        :param y_true:
+        :param y_proba:
+        :param prefix:
+        :param logger:
+        :return:
+        """
         assert y_proba.shape[1] == 2, 'auc metric is restricted to the binary classification task!'
         y_true = y_true.reshape(-1)
         auc_result = auc(y_true, y_proba)
@@ -69,6 +131,9 @@ class AUC(Metrics):
 
 
 class MSE(Metrics):
+    """
+    MSE metric.
+    """
     def __init__(self, name=''):
         super(MSE, self).__init__(name)
 
@@ -76,12 +141,29 @@ class MSE(Metrics):
         return self.calc(y_true, y_pred, prefix, logger)
 
     def calc(self, y_true, y_pred, prefix='', logger=None):
+        """
+        Calc MSE metric from y_true and y_prediction.
+        :param y_true:
+        :param y_pred:
+        :param prefix:
+        :param logger:
+        :return:
+        """
         mse_result = metrics.mean_squared_error(y_true, y_pred)
         if logger is not None:
             logger.info('{} MSE({}) = {:.4f}'.format(prefix, self.name, mse_result))
         return mse_result
 
     def calc_proba(self, y_true, y_proba, prefix='', logger=None):
+        """
+        Calc MSE metric from y_true and y_prediction.
+        MSE is used to regression task, so y_proba is the y_prediction.
+        :param y_true:
+        :param y_proba:
+        :param prefix:
+        :param logger:
+        :return:
+        """
         if len(y_true.shape) == 1:
             y_proba = y_proba.reshape(-1)
         elif len(y_true.shape) == 2:

@@ -20,6 +20,17 @@ LOGGER = get_logger('estimators.kfold_wrapper')
 class KFoldWrapper(object):
     def __init__(self, name, n_folds, est_class, seed=None,
                  eval_metrics=None, cache_dir=None, keep_in_mem=None, est_args=None):
+        """
+        Initialize a KFoldWrapper.
+        :param name:
+        :param n_folds:
+        :param est_class:
+        :param seed:
+        :param eval_metrics:
+        :param cache_dir:
+        :param keep_in_mem:
+        :param est_args:
+        """
         self.name = name
         self.n_folds = n_folds
         self.est_class = est_class
@@ -137,6 +148,13 @@ class KFoldWrapper(object):
         return y_proba_train, y_probas_test
 
     def transform(self, x_tests):
+        """
+        Transform data.
+
+        :param x_tests:
+        :return:
+        """
+        # TODO: using model loaded from disk
         if x_tests is None or x_tests == []:
             return []
         if isinstance(x_tests, (list, tuple)):
@@ -169,9 +187,19 @@ class KFoldWrapper(object):
                 metric.name, est_name, y_name, acc, '%' if isinstance(metric, Accuracy) else ''))
 
     def _predict_proba(self, est, X):
+        """
+        Predict probability inner method.
+        :param est:
+        :param X:
+        :return:
+        """
         return est.predict_proba(X)
 
     def copy(self):
+        """
+        copy
+        :return:
+        """
         return KFoldWrapper(name=self.name,
                             n_folds=self.n_folds,
                             est_class=self.est_class,

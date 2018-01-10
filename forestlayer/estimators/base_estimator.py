@@ -11,7 +11,17 @@ LOGGER = get_logger('estimators.base_estimator')
 
 
 class BaseEstimator(object):
+    """
+    Base Estimators Wrapper Definition.
+    """
     def __init__(self, task=None, est_class=None, name=None, est_args=None):
+        """
+        Initialize BaseEstimators.
+        :param task: what task does this estimator to execute ('classification' or 'regression')
+        :param est_class: estimator class
+        :param name: estimator name
+        :param est_args: dict, estimator argument
+        """
         self.name = name
         self.task = task
         self.est_class = est_class
@@ -20,9 +30,22 @@ class BaseEstimator(object):
         self.est = None
 
     def _init_estimators(self):
+        """
+        Initialize an estimator.
+        :return:
+        """
         return self.est_class(**self.est_args)
 
     def fit(self, X, y, cache_dir=None):
+        """
+        Fit estimator.
+        If cache_path exists, we do not need to re-fit.
+        If cache_path is not None, save model to disk.
+        :param X:
+        :param y:
+        :param cache_dir:
+        :return:
+        """
         cache_path = self._cache_path(cache_dir=cache_dir)
         # cache it
         if is_path_exists(cache_path):
@@ -41,6 +64,15 @@ class BaseEstimator(object):
             self.est = est
 
     def predict(self, X, cache_dir=None, batch_size=None):
+        """
+        Predict results.
+        if cache_path is not None, we can load model from disk, else we take from memory.
+        and then we decide whether use batch predict.
+        :param X:
+        :param cache_dir:
+        :param batch_size:
+        :return:
+        """
         LOGGER.debug("X.shape={}".format(X.shape))
         cache_path = self._cache_path(cache_dir)
         # cache
@@ -59,6 +91,15 @@ class BaseEstimator(object):
         return y_pred
 
     def predict_proba(self, X, cache_dir=None, batch_size=None):
+        """
+        Predict probability.
+        if cache_path is not None, we can load model from disk, else we take from memory.
+        and then we decide whether use batch predict.
+        :param X:
+        :param cache_dir:
+        :param batch_size:
+        :return:
+        """
         if self.task == 'regression':
             return self.predict(X, cache_dir=cache_dir, batch_size=batch_size)
         LOGGER.debug("X.shape={}".format(X.shape))
@@ -79,6 +120,13 @@ class BaseEstimator(object):
         return y_proba
 
     def _batch_predict_proba(self, est, X, batch_size):
+        """
+        Predict probability in batch.
+        :param est:
+        :param X:
+        :param batch_size:
+        :return:
+        """
         LOGGER.debug("X.shape={}, batch_size={}".format(X.shape, batch_size))
         verbose_backup = 0
         # clear verbose
@@ -100,6 +148,13 @@ class BaseEstimator(object):
         return y_pred_proba
 
     def _batch_predict(self, est, X, batch_size):
+        """
+        Predict result in batch.
+        :param est:
+        :param X:
+        :param batch_size:
+        :return:
+        """
         LOGGER.debug("X.shape={}, batch_size={}".format(X.shape, batch_size))
         verbose_backup = 0
         # clear verbose
@@ -120,14 +175,30 @@ class BaseEstimator(object):
         return y_pred
 
     def _cache_path(self, cache_dir):
+        """
+        Get cache_path (model)
+        :param cache_dir:
+        :return:
+        """
         if cache_dir is None:
             return None
         return osp.join(cache_dir, name2path(self.name) + self.cache_suffix)
 
     def _load_model_from_disk(self, cache_path):
+        """
+        Load model from disk.
+        :param cache_path:
+        :return:
+        """
         raise NotImplementedError()
 
     def _save_model_to_disk(self, est, cache_path):
+        """
+        Save model to disk.
+        :param est:
+        :param cache_path:
+        :return:
+        """
         raise NotImplementedError()
 
     def _default_predict_batch_size(self, est, X, task):
@@ -144,18 +215,45 @@ class BaseEstimator(object):
         return 0
 
     def _fit(self, est, X, y):
+        """
+        Fit est on (X, y)
+        :param est:
+        :param X:
+        :param y:
+        :return:
+        """
         est.fit(X, y)
 
     def _predict_proba(self, est, X):
+        """
+        Predict probability inner method.
+        :param est:
+        :param X:
+        :return:
+        """
         return est.predict_proba(X)
 
     def _predict(self, est, X):
+        """
+        Predict result inner method.
+        :param est:
+        :param X:
+        :return:
+        """
         return est.predict(X)
 
     def copy(self):
+        """
+        copy
+        :return:
+        """
         return BaseEstimator(est_class=self.est_class, **self.est_args)
 
     @property
     def is_classification(self):
+        """
+        True if the task is classification.
+        :return:
+        """
         return self.task == 'classification'
 

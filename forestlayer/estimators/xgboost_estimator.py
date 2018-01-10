@@ -16,7 +16,15 @@ LOGGER = get_logger('estimators.xgboost')
 
 
 class XGBoostClassifier(BaseEstimator):
+    """
+    XGBoost Classifier extends from BaseEstimator.
+    """
     def __init__(self, name, est_args):
+        """
+
+        :param name:
+        :param est_args:
+        """
         super(XGBoostClassifier, self).__init__(task='classification',
                                                 est_class=XGBoostClassifier,
                                                 name=name,
@@ -34,6 +42,13 @@ class XGBoostClassifier(BaseEstimator):
         self.learning_rates = est_args.get('learning_rates', None)
 
     def fit(self, X, y, cache_dir=None):
+        """
+
+        :param X:
+        :param y:
+        :param cache_dir:
+        :return:
+        """
         cache_path = self._cache_path(cache_dir=cache_dir)
         # cache it
         if is_path_exists(cache_path):
@@ -64,6 +79,12 @@ class XGBoostClassifier(BaseEstimator):
         pass
 
     def _predict_proba(self, est, X):
+        """
+
+        :param est:
+        :param X:
+        :return:
+        """
         if type(X) == list or not isinstance(X, xgb.DMatrix):
             xg_test = xgb.DMatrix(X)
         else:
@@ -89,7 +110,15 @@ class XGBoostClassifier(BaseEstimator):
 
 
 class XGBoostRegressor(BaseEstimator):
+    """
+    XGBoost Classifier extends from BaseEstimator.
+    """
     def __init__(self, name, est_args):
+        """
+
+        :param name:
+        :param est_args:
+        """
         super(XGBoostRegressor, self).__init__(task='regression',
                                                est_class=XGBoostRegressor,
                                                name=name,
@@ -104,6 +133,13 @@ class XGBoostRegressor(BaseEstimator):
         self.learning_rates = est_args.get('learning_rates', None)
 
     def fit(self, X, y, cache_dir=None):
+        """
+
+        :param X:
+        :param y:
+        :param cache_dir:
+        :return:
+        """
         cache_path = self._cache_path(cache_dir=cache_dir)
         # cache it
         if is_path_exists(cache_path):
@@ -134,9 +170,21 @@ class XGBoostRegressor(BaseEstimator):
         pass
 
     def _predict(self, est, X):
+        """
+
+        :param est:
+        :param X:
+        :return:
+        """
         return self._predict_proba(est, X)
 
     def _predict_proba(self, est, X):
+        """
+
+        :param est:
+        :param X:
+        :return:
+        """
         if type(X) == list or not isinstance(X, xgb.DMatrix):
             xg_test = xgb.DMatrix(X)
         else:
@@ -145,7 +193,18 @@ class XGBoostRegressor(BaseEstimator):
         return y_pred
 
     def _load_model_from_disk(self, cache_path):
+        """
+
+        :param cache_path:
+        :return:
+        """
         return joblib.load(cache_path)
 
     def _save_model_to_disk(self, est, cache_path):
+        """
+
+        :param est:
+        :param cache_path:
+        :return:
+        """
         joblib.dump(est, cache_path)

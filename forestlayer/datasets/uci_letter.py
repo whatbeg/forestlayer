@@ -16,6 +16,10 @@ LOGGER = get_logger('datasets.uci_letter')
 
 
 def load_data():
+    """
+    Load UCI LETTER data, if not exists in data_base_dir, download it and put into data_base_dir
+    :return: x_train, y_train, x_test, y_test
+    """
     data_path = "letter-recognition.data"
     data_path = get_file(data_path,
                          origin='http://archive.ics.uci.edu/ml/machine-learning-databases/' +

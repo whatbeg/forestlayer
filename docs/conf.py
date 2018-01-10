@@ -178,8 +178,6 @@ texinfo_documents = [
      'Miscellaneous'),
 ]
 
-
-
 # -- Options for Epub output ----------------------------------------------
 
 # Bibliographic Dublin Core info.
@@ -200,7 +198,15 @@ epub_copyright = copyright
 # A list of files that should not be packed into the epub file.
 epub_exclude_files = ['search.html']
 
-
-
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {'https://docs.python.org/': None}
+
+
+def skip(ap, what, name, obj, skip, options):
+    if name == '__init__':
+        return False
+    return skip
+
+
+def setup(app):
+    app.connect('autodoc-skip-member', skip)

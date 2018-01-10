@@ -842,6 +842,20 @@ class AutoGrowingCascadeLayer(Layer):
     def _create_cascade_layer(self, task='classification', est_configs=None, n_classes=None,
                               data_save_dir=None, model_save_dir=None, layer_id=None, keep_in_mem=False,
                               dtype=None, metrics=None, seed=None):
+        """
+        Create a cascade layer.
+        :param task:
+        :param est_configs:
+        :param n_classes:
+        :param data_save_dir:
+        :param model_save_dir:
+        :param layer_id:
+        :param keep_in_mem:
+        :param dtype:
+        :param metrics:
+        :param seed:
+        :return:
+        """
         return CascadeLayer(dtype=dtype, task=task, est_configs=est_configs, layer_id=layer_id, n_classes=n_classes,
                             keep_in_mem=keep_in_mem, data_save_dir=data_save_dir, model_save_dir=model_save_dir,
                             metrics=metrics, seed=seed)
@@ -853,6 +867,11 @@ class AutoGrowingCascadeLayer(Layer):
         pass
 
     def add(self, est):
+        """
+        Add an estimator to the auto growing cascade layer
+        :param est:
+        :return:
+        """
         if isinstance(est, EstimatorArgument):
             self.est_configs.append(est.get_est_args())
         elif isinstance(est, dict):
@@ -861,6 +880,12 @@ class AutoGrowingCascadeLayer(Layer):
             raise ValueError("Unknown estimator information {}".format(est))
 
     def fit(self, x_trains, y_train):
+        """
+        Fit with x_trians, y_trains.
+        :param x_trains:
+        :param y_train:
+        :return:
+        """
         if not isinstance(x_trains, (list, tuple)):
             x_trains = [x_trains]
         # only supports one y_train
@@ -979,6 +1004,10 @@ class AutoGrowingCascadeLayer(Layer):
 
     @property
     def larger_better(self):
+        """
+        True if the evaluation metric larger is better.
+        :return:
+        """
         if isinstance(self.eval_metrics[0], (MSE, )):
             return False
         return True
@@ -1155,6 +1184,12 @@ class AutoGrowingCascadeLayer(Layer):
             pass
 
     def transform(self, X, y=None):
+        """
+        Transform inputs X.
+        :param X:
+        :param y:
+        :return:
+        """
         if not isinstance(X, (list, tuple)):
             X = [X]
         n_groups = len(X)
@@ -1192,6 +1227,13 @@ class AutoGrowingCascadeLayer(Layer):
             pass
 
     def evaluate(self, inputs, labels, eval_metrics=None):
+        """
+        Evaluate inputs.
+        :param inputs:
+        :param labels:
+        :param eval_metrics:
+        :return:
+        """
         if eval_metrics is None:
             eval_metrics = [Accuracy('evaluate')]
         if isinstance(labels, (list, tuple)):
@@ -1202,6 +1244,11 @@ class AutoGrowingCascadeLayer(Layer):
             metric.calc(labels, pred, logger=LOGGER)
 
     def predict_proba(self, X):
+        """
+        Predict probability of X.
+        :param X:
+        :return:
+        """
         if not isinstance(X, (list, tuple)):
             X = [X]
         x_proba = self.transform(X)
@@ -1211,6 +1258,11 @@ class AutoGrowingCascadeLayer(Layer):
         return total_proba
 
     def predict(self, X):
+        """
+        Predict with inputs X.
+        :param X:
+        :return:
+        """
         total_proba = self.predict_proba(X)
         if self.is_classification:
             return np.argmax(total_proba.reshape((-1, self.n_classes)), axis=1)
@@ -1219,9 +1271,20 @@ class AutoGrowingCascadeLayer(Layer):
 
     @property
     def num_layers(self):
+        """
+        Number of layers.
+        :return:
+        """
         return self.n_layers
 
     def _save_data(self, layer_id, x_train, y_train):
+        """
+        Save the intermediate training data of the layer.
+        :param layer_id:
+        :param x_train:
+        :param y_train:
+        :return:
+        """
         if self.data_save_dir is None:
             return
         data_path = osp.join(self.data_save_dir, "layer_{}-{}.pkl".format(layer_id, 'train'))
@@ -1233,6 +1296,15 @@ class AutoGrowingCascadeLayer(Layer):
             pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
 
     def save_data(self, layer_id, x_train, y_train, x_test, y_test):
+        """
+        Save the intermediate training data and testing data in this layer.
+        :param layer_id:
+        :param x_train:
+        :param y_train:
+        :param x_test:
+        :param y_test:
+        :return:
+        """
         if self.data_save_dir is None:
             return
         for phase in ['train', 'test']:
@@ -1249,7 +1321,9 @@ class AutoGrowingCascadeLayer(Layer):
 
     def save_test_result(self, x_proba_test):
         """
-        Save prediction result for Test data without label.
+        Save prediction result for testing data without label.
+        :param x_proba_test:
+        :return:
         """
         if self.data_save_dir is None:
             return

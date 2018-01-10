@@ -18,6 +18,11 @@ LOGGER = get_logger('datasets.uci_adult')
 
 
 def load_data(one_hot=True):
+    """
+    Load UCI ADULT data. If not exists in data/, download it and put into data_base_dir
+    :param one_hot: whether use one-hot encoding
+    :return: X_train, y_train, X_test, y_test
+    """
     train_path = 'adult.data'
     test_path = 'adult.test'
     features_path = 'features'
@@ -44,6 +49,14 @@ def load_data(one_hot=True):
 
 
 def load_util(data_path, feature_parsers, one_hot):
+    """
+    UCI ADULT dataset load utility.
+
+    :param data_path: path of data to load
+    :param feature_parsers: feature parsers to parse every single feature
+    :param one_hot: whether use one-hot encoding
+    :return: X, y
+    """
     with open(data_path) as f:
         rows = [row.strip().split(',') for row in f.readlines() if len(row.strip()) > 0 and not row.startswith("|")]
         n_train = len(rows)

@@ -11,6 +11,13 @@ LOGGER = get_logger('estimators.sklearn_estimator')
 
 
 def forest_predict_batch_size(clf, X, task):
+    """
+    Decide predict batch size by calculating memory occupation.
+    :param clf:
+    :param X:
+    :param task:
+    :return:
+    """
     import psutil
     free_memory = psutil.virtual_memory().free
     if free_memory < 2e9:
@@ -29,17 +36,38 @@ def forest_predict_batch_size(clf, X, task):
 
 
 class SKlearnBaseEstimator(BaseEstimator):
+    """
+    SKlearn base estimators inherited from BaseEstimator.
+    """
     def _save_model_to_disk(self, est, cache_path):
+        """
+        Save model to disk using joblib.
+        :param est:
+        :param cache_path:
+        :return:
+        """
         joblib.dump(est, cache_path)
 
     def _load_model_from_disk(self, cache_path):
+        """
+        Load model from disk using joblib.
+        :param cache_path:
+        :return:
+        """
         return joblib.load(cache_path)
 
     def copy(self):
+        """
+        copy
+        :return:
+        """
         return SKlearnBaseEstimator(est_class=self.est_class, **self.est_args)
 
 
 class RFClassifier(SKlearnBaseEstimator):
+    """
+    Random Forest Classifier
+    """
     def __init__(self, name, kwargs):
         from sklearn.ensemble import RandomForestClassifier
         super(RFClassifier, self).__init__('classification', RandomForestClassifier, name, kwargs)
@@ -49,6 +77,9 @@ class RFClassifier(SKlearnBaseEstimator):
 
 
 class CompletelyRFClassifier(SKlearnBaseEstimator):
+    """
+    Completely Random Forest Classifier
+    """
     def __init__(self, name, kwargs):
         from sklearn.ensemble import ExtraTreesClassifier
         super(CompletelyRFClassifier, self).__init__('classification', ExtraTreesClassifier, name, kwargs)
@@ -58,18 +89,27 @@ class CompletelyRFClassifier(SKlearnBaseEstimator):
 
 
 class GBDTClassifier(SKlearnBaseEstimator):
+    """
+    Gradient Boosting Decision Tree Classifier.
+    """
     def __init__(self, name, kwargs):
         from sklearn.ensemble import GradientBoostingClassifier
         super(GBDTClassifier, self).__init__('classification', GradientBoostingClassifier, name, kwargs)
 
 
 class SKXGBoostClassifier(SKlearnBaseEstimator):
+    """
+    XGBoost Classifier using Sklearn interfaces.
+    """
     def __init__(self, name, kwargs):
         from xgboost import XGBClassifier
         super(SKXGBoostClassifier, self).__init__('classification', XGBClassifier, name, kwargs)
 
 
 class RFRegressor(SKlearnBaseEstimator):
+    """
+    Random Forest Regressor.
+    """
     def __init__(self, name, kwargs):
         from sklearn.ensemble import RandomForestRegressor
         super(RFRegressor, self).__init__('regression', RandomForestRegressor, name, kwargs)
@@ -79,6 +119,9 @@ class RFRegressor(SKlearnBaseEstimator):
 
 
 class CompletelyRFRegressor(SKlearnBaseEstimator):
+    """
+    Completely Random Forest Regressor.
+    """
     def __init__(self, name, kwargs):
         from sklearn.ensemble import ExtraTreesRegressor
         super(CompletelyRFRegressor, self).__init__('regression', ExtraTreesRegressor, name, kwargs)
@@ -88,12 +131,18 @@ class CompletelyRFRegressor(SKlearnBaseEstimator):
 
 
 class GBDTRegressor(SKlearnBaseEstimator):
+    """
+    Gradient Boosting Decision Tree Regressor.
+    """
     def __init__(self, name, kwargs):
         from sklearn.ensemble import GradientBoostingRegressor
         super(GBDTRegressor, self).__init__('regression', GradientBoostingRegressor, name, kwargs)
 
 
 class SKXGBoostRegressor(SKlearnBaseEstimator):
+    """
+    XGBoost Regressor using Sklearn interfaces.
+    """
     def __init__(self, name, kwargs):
         from xgboost import XGBRegressor
         super(SKXGBoostRegressor, self).__init__('regression', XGBRegressor, name, kwargs)

@@ -7,5 +7,4 @@ Initialize datasets.
 # Authors: Qiu Hu <huqiu00#163.com>
 # License: Apache-2.0
 
-from uci_adult import *
 
