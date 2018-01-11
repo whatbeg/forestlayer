@@ -626,7 +626,7 @@ class CascadeLayer(Layer):
         # transform EstimatorArgument to dict that represents estimator arguments
         for eci, est_config in enumerate(self.est_configs):
             if isinstance(est_config, EstimatorArgument):
-                self.est_configs[eci] = est_config.get_est_args()
+                self.est_configs[eci] = est_config.get_est_args().copy()
         self.layer_id = layer_id
         if not name:
             name = 'layer-{}'.format(self.layer_id)

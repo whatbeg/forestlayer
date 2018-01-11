@@ -223,4 +223,20 @@ class GBDT(EstimatorArgument):
         }
 
 
+def Basic4x2(n_folds=3, n_estimators=500, max_depth=100, n_jobs=-1, min_samples_leaf=1):
+    crf = CompletelyRandomForest(n_folds=n_folds,
+                                 n_estimators=n_estimators,
+                                 max_depth=max_depth,
+                                 n_jobs=n_jobs,
+                                 min_samples_leaf=min_samples_leaf)
+    rf = RandomForest(n_folds=n_folds,
+                      n_estimators=n_estimators,
+                      max_depth=max_depth,
+                      n_jobs=n_jobs,
+                      min_samples_leaf=min_samples_leaf)
+    est_configs = [
+        crf, crf, crf, crf,
+        rf, rf, rf, rf
+    ]
+    return est_configs
 

@@ -7,7 +7,7 @@ UCI_LETTER dataset loading.
 # Authors: Qiu Hu <huqiu00#163.com>
 # License: Apache-2.0
 
-from .dataset import get_data_base
+from .dataset import get_dataset_dir
 from keras.utils.data_utils import get_file
 from ..utils.log_utils import get_logger, get_logging_level
 import numpy as np
@@ -26,7 +26,7 @@ def load_data():
                          origin='http://archive.ics.uci.edu/ml/machine-learning-databases/' +
                                 'letter-recognition/letter-recognition.data',
                          cache_subdir='uci_letter',
-                         cache_dir=get_data_base())
+                         cache_dir=get_dataset_dir())
     LOGGER.info("Load data from {}".format(data_path))
     with open(data_path) as f:
         rows = [row.strip().split(',') for row in f.readlines()]

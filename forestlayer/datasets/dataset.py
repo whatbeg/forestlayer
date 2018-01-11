@@ -16,7 +16,7 @@ _DATASET_DIR = osp.join(get_base_dir(), 'data')
 _DATA_CACHE_DIR = osp.join(get_base_dir(), 'data-cache')
 
 
-def get_data_base():
+def get_dataset_dir():
     """
     Get data base dir, data_base_dir is used to store input data used to learning.
     :return: data_base_dir
@@ -28,7 +28,7 @@ def get_data_base():
     return _DATASET_DIR
 
 
-def set_data_dir(dir_path):
+def set_dataset_dir(dir_path):
     """
     Set data base dir, data_base_dir is used to store input data used to learning.
     :param dir_path: set data_base_dir to dir_path

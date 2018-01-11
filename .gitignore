@@ -103,9 +103,8 @@ ENV/
 # pycharm IDE
 .idea/
 
-*.data
-*.test
-*.xlsx
+# data
+data/
 run_data/
 run_model/
 

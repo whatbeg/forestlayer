@@ -10,7 +10,7 @@ UCI_ADULT dataset loading.
 from forestlayer.preprocessing import FeatureParser
 import numpy as np
 import os.path as osp
-from .dataset import get_data_base
+from .dataset import get_dataset_dir
 from keras.utils.data_utils import get_file
 from ..utils.log_utils import get_logger, get_logging_level
 
@@ -19,7 +19,8 @@ LOGGER = get_logger('datasets.uci_adult')
 
 def load_data(one_hot=True):
     """
-    Load UCI ADULT data. If not exists in data/, download it and put into data_base_dir
+    Load UCI ADULT data. If not exists in data/, download it and put into data_base_dir.
+
     :param one_hot: whether use one-hot encoding
     :return: X_train, y_train, X_test, y_test
     """
@@ -30,15 +31,15 @@ def load_data(one_hot=True):
     train_path = get_file(train_path,
                           origin='http://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data',
                           cache_subdir='uci_adult',
-                          cache_dir=get_data_base())
+                          cache_dir=get_dataset_dir())
     test_path = get_file(test_path,
                          origin='http://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test',
                          cache_subdir='uci_adult',
-                         cache_dir=get_data_base())
+                         cache_dir=get_dataset_dir())
     features_path = get_file(features_path,
                              origin='http://7xt9qk.com1.z0.glb.clouddn.com/features',
                              cache_subdir='uci_adult',
-                             cache_dir=get_data_base())
+                             cache_dir=get_dataset_dir())
     LOGGER.info('Load data from directory: {}'.format(osp.dirname(train_path)))
     feature_parsers = []
     with open(features_path) as f:

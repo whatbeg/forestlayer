@@ -18,7 +18,7 @@ def get_windows_channel(X, X_win, des_id, nw, nh, win_x, win_y, stride_x, stride
     """
     X: N x C x H x W
     X_win: N x nc x nh x nw
-    (k, di, dj) in range(X.channle, win_y, win_x)
+    (k, di, dj) in range(X.channel, win_y, win_x)
     """
     # des_id = (k * win_y + di) * win_x + dj
     dj = des_id % win_x
@@ -40,7 +40,10 @@ def get_windows(X, win_x, win_y, stride_x=1, stride_y=1, pad_x=0, pad_y=0):
     :param stride_y:
     :param pad_x:
     :param pad_y:
-    :return: numpy.ndarray. n x nh x nw x nc
+    :return: numpy.ndarray. n x nh x nw x nc,
+                            nc = win_y * win_x * c,
+                            nh = (h - win_y) / stride_y + 1,
+                            nw = (w - win_x) / stride_x + 1
     """
     assert len(X.shape) == 4, 'len(X.shape) should be 4, but {}'.format(X.shape)
     n, c, h, w = X.shape
@@ -160,7 +163,7 @@ class Pooling(object):
             for di in range(nh):
                 for dj in range(nw):
                     si = di * self.win_x
-                    sj = di * self.win_y
+                    sj = dj * self.win_y  # big bug. should be dj, previous is di.
                     src = X[:, k, si:si+self.win_x, sj:sj+self.win_y]
                     src = src.reshape((X.shape[0], -1))
                     if self.pool_strategy == 'max':
@@ -169,8 +172,6 @@ class Pooling(object):
                         X_pool[:, k, di, dj] = np.mean(src, axis=1)
                     else:
                         raise ValueError('Unknown pool strategy!')
-
-        # LOGGER.info("[{} Pooled {} to shape {}]".format(self.name, X.shape, X_pool.shape))
         return X_pool
 
     def transform(self, X):
