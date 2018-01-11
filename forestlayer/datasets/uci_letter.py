@@ -17,7 +17,8 @@ LOGGER = get_logger('datasets.uci_letter')
 
 def load_data():
     """
-    Load UCI LETTER data, if not exists in data_base_dir, download it and put into data_base_dir
+    Load UCI LETTER data, if not exists in data_base_dir, download it and put into data_base_dir.
+
     :return: x_train, y_train, x_test, y_test
     """
     LOGGER.setLevel(get_logging_level())

@@ -30,6 +30,7 @@ class FeatureParser(object):
     def get_continuous(self, f_data):
         """
         Get continuous data.
+
         :param f_data:
         :return:
         """
@@ -41,6 +42,7 @@ class FeatureParser(object):
     def get_data(self, f_data):
         """
         Get continuous or categorical data.
+
         :param f_data:
         :return:
         """
