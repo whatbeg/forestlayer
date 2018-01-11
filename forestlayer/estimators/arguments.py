@@ -24,6 +24,7 @@ class EstimatorArgument(object):
     def get_est_args(self):
         """
         Get estimator argument.
+
         :return: estimator argument
         """
         return self.est_args.copy()
@@ -39,7 +40,7 @@ class MultiClassXGBoost(EstimatorArgument):
                  verbose_eval=10, learning_rates=None):
         """
         Multi-class XGBoost Classifier Argument describes arguments of multi-class xgboost classifier.
-        Parameter can refer to xgboost document: http://xgboost.readthedocs.io/en/latest/python/python_api.html
+        Parameters can refer to xgboost document: http://xgboost.readthedocs.io/en/latest/python/python_api.html
 
         :param n_folds: how many folds to execute in cross validation
         :param nthread: number of threads to execute
@@ -144,6 +145,7 @@ class RandomForest(EstimatorArgument):
                  min_samples_leaf=1):
         """
         Random Forest Argument.
+
         :param n_folds:
         :param n_estimators:
         :param max_depth:
@@ -171,6 +173,7 @@ class CompletelyRandomForest(EstimatorArgument):
                  min_samples_leaf=1):
         """
         Completely Random Forest Argument.
+
         :param n_folds:
         :param n_estimators:
         :param max_depth:
@@ -198,6 +201,7 @@ class GBDT(EstimatorArgument):
                  min_samples_leaf=1, subsample=1.0):
         """
         Gradient Boosting Decision Tree Argument.
+
         :param n_folds:
         :param n_estimators:
         :param max_depth:

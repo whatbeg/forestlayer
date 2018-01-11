@@ -17,6 +17,7 @@ class BaseEstimator(object):
     def __init__(self, task=None, est_class=None, name=None, est_args=None):
         """
         Initialize BaseEstimators.
+
         :param task: what task does this estimator to execute ('classification' or 'regression')
         :param est_class: estimator class
         :param name: estimator name

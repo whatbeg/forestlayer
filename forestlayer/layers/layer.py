@@ -38,6 +38,10 @@ class Layer(object):
     def __init__(self, batch_size=None, dtype=None, name=None):
         """
         Initialize a layer.
+
+        :param batch_size:
+        :param dtype:
+        :param name:
         """
         self.LOGGER = get_logger('layer')
         self.batch_size = batch_size
@@ -58,8 +62,9 @@ class Layer(object):
 
     def fit(self, x_trains, y_trains):
         """
-        Fit datasets, return a list or single ndarray: train_outputs
+        Fit datasets, return a list or single ndarray: train_outputs.
         NOTE: may change x_trains, y_trains
+
         :param x_trains: train data
         :param y_trains: train labels
         :return: train_outputs
@@ -68,7 +73,8 @@ class Layer(object):
 
     def fit_transform(self, x_trains, y_trains, x_tests=None, y_tests=None):
         """
-        Fit and Transform datasets, return two lists or two single ndarrays: train_outputs, test_outputs
+        Fit and Transform datasets, return two lists or two single ndarrays: train_outputs, test_outputs.
+
         :param x_trains: train datasets
         :param y_trains: train labels
         :param x_tests: test datasets
@@ -1015,6 +1021,7 @@ class AutoGrowingCascadeLayer(Layer):
     def fit_transform(self, x_trains, y_train, x_tests=None, y_test=None):
         """
         NOTE: Only support ONE x_train and one x_test, so y_train is a single numpy array instead of list of it.
+
         :param x_trains:
         :param y_train:
         :param x_tests:
@@ -1186,6 +1193,7 @@ class AutoGrowingCascadeLayer(Layer):
     def transform(self, X, y=None):
         """
         Transform inputs X.
+
         :param X:
         :param y:
         :return:
@@ -1229,6 +1237,7 @@ class AutoGrowingCascadeLayer(Layer):
     def evaluate(self, inputs, labels, eval_metrics=None):
         """
         Evaluate inputs.
+
         :param inputs:
         :param labels:
         :param eval_metrics:
@@ -1246,6 +1255,7 @@ class AutoGrowingCascadeLayer(Layer):
     def predict_proba(self, X):
         """
         Predict probability of X.
+
         :param X:
         :return:
         """
@@ -1260,6 +1270,7 @@ class AutoGrowingCascadeLayer(Layer):
     def predict(self, X):
         """
         Predict with inputs X.
+
         :param X:
         :return:
         """
@@ -1273,6 +1284,7 @@ class AutoGrowingCascadeLayer(Layer):
     def num_layers(self):
         """
         Number of layers.
+
         :return:
         """
         return self.n_layers
@@ -1280,6 +1292,7 @@ class AutoGrowingCascadeLayer(Layer):
     def _save_data(self, layer_id, x_train, y_train):
         """
         Save the intermediate training data of the layer.
+
         :param layer_id:
         :param x_train:
         :param y_train:
@@ -1298,6 +1311,7 @@ class AutoGrowingCascadeLayer(Layer):
     def save_data(self, layer_id, x_train, y_train, x_test, y_test):
         """
         Save the intermediate training data and testing data in this layer.
+
         :param layer_id:
         :param x_train:
         :param y_train:
@@ -1322,6 +1336,7 @@ class AutoGrowingCascadeLayer(Layer):
     def save_test_result(self, x_proba_test):
         """
         Save prediction result for testing data without label.
+
         :param x_proba_test:
         :return:
         """

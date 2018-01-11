@@ -13,6 +13,7 @@ LOGGER = get_logger('estimators.sklearn_estimator')
 def forest_predict_batch_size(clf, X, task):
     """
     Decide predict batch size by calculating memory occupation.
+
     :param clf: classifier
     :param X: training data
     :param task: learning task
@@ -50,6 +51,7 @@ class SKlearnBaseEstimator(BaseEstimator):
     def _save_model_to_disk(self, est, cache_path):
         """
         Save model to disk using joblib.
+
         :param est: estimator
         :param cache_path: cache path
         :return: None
@@ -59,6 +61,7 @@ class SKlearnBaseEstimator(BaseEstimator):
     def _load_model_from_disk(self, cache_path):
         """
         Load model from disk using joblib.
+
         :param cache_path: cache path
         :return:
         """
@@ -67,6 +70,7 @@ class SKlearnBaseEstimator(BaseEstimator):
     def copy(self):
         """
         copy
+
         :return:
         """
         return SKlearnBaseEstimator(est_class=self.est_class, **self.est_args)
