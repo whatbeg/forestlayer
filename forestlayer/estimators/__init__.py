@@ -17,7 +17,8 @@ from ..utils.metrics import Accuracy, MSE
 
 def est_class_from_type(task, est_type):
     """
-    Get estimator class from task ('classification' or 'regression') and estimator type (a string)
+    Get estimator class from task ('classification' or 'regression') and estimator type (a string).
+
     :param task: what task does this estimator to execute ('classification' or 'regression')
     :param est_type: estimator type (a string)
     :return: a concrete estimator instance
@@ -48,7 +49,8 @@ def est_class_from_type(task, est_type):
 
 def get_estimator(name, task, est_type, est_args):
     """
-    Get an estimator
+    Get an estimator.
+
     :param name: estimator name
     :param task: what task does this estimator to execute ('classification' or 'regression')
     :param est_type: estimator type (a string)
@@ -62,7 +64,8 @@ def get_estimator(name, task, est_type, est_args):
 def get_estimator_kfold(name, n_folds=3, task='classification', est_type='RF', eval_metrics=None, seed=None,
                         cache_dir=None, keep_in_mem=True, est_args=None):
     """
-    A factory method to get a k-fold estimator
+    A factory method to get a k-fold estimator.
+
     :param name: estimator name
     :param n_folds: how many folds to execute in cross validation
     :param task: what task does this estimator to execute ('classification' or 'regression')

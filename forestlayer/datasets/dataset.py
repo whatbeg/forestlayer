@@ -9,7 +9,6 @@ Base dataset.
 
 import os.path as osp
 import os
-from ..utils.log_utils import get_logger
 from ..backend.backend import get_base_dir
 
 _DATASET_DIR = osp.join(get_base_dir(), 'data')

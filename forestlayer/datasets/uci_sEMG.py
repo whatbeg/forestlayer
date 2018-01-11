@@ -1,6 +1,6 @@
 # -*- coding:utf-8 -*-
 """
-UCI_YEAST dataset loading.
+UCI_sEMG dataset loading.
 """
 
 # Copyright 2017 Authors NJU PASA BigData Laboratory.
