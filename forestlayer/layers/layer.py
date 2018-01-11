@@ -100,8 +100,25 @@ class Layer(object):
 
 
 class MultiGrainScanLayer(Layer):
+    """
+    Multi-grain Scan Layer
+    """
     def __init__(self, batch_size=None, dtype=None, name=None, task='classification',
                  windows=None, est_for_windows=None, n_class=None, keep_in_mem=False, eval_metrics=None, seed=None):
+        """
+        Initialize a multi-grain scan layer.
+
+        :param batch_size:
+        :param dtype:
+        :param name:
+        :param task:
+        :param windows:
+        :param est_for_windows:
+        :param n_class:
+        :param keep_in_mem:
+        :param eval_metrics:
+        :param seed:
+        """
         if not name:
             prefix = 'multi_grain_scan'
             name = prefix + '_' + str(id(self))
@@ -126,9 +143,24 @@ class MultiGrainScanLayer(Layer):
         pass
 
     def scan(self, window, x):
+        """
+        Multi-grain scan.
+
+        :param window:
+        :param x:
+        :return:
+        """
         return window.fit_transform(x)
 
     def _init_estimator(self, est_arguments, wi, ei):
+        """
+        Initialize an estimator.
+
+        :param est_arguments:
+        :param wi:
+        :param ei:
+        :return:
+        """
         est_args = est_arguments.get_est_args()
         est_name = 'win - {} - estimator - {} - {}folds'.format(wi, ei, est_args['n_folds'])
         n_folds = int(est_args['n_folds'])
@@ -150,6 +182,13 @@ class MultiGrainScanLayer(Layer):
                                    est_args=est_args)
 
     def fit(self, x_trains, y_trains):
+        """
+        Fit.
+
+        :param x_trains:
+        :param y_trains:
+        :return:
+        """
         if isinstance(x_trains, (list, tuple)):
             assert len(x_trains) == 1, "Multi grain scan Layer only supports exactly one input now!"
             x_trains = x_trains[0]
@@ -187,6 +226,15 @@ class MultiGrainScanLayer(Layer):
         return x_win_est_train
 
     def fit_transform(self, x_trains, y_trains, x_tests=None, y_tests=None):
+        """
+        Fit transform.
+
+        :param x_trains:
+        :param y_trains:
+        :param x_tests:
+        :param y_tests:
+        :return:
+        """
         if x_tests is None:
             return self.fit(x_trains, y_trains), None
         if isinstance(x_trains, (list, tuple)):
@@ -261,6 +309,12 @@ class MultiGrainScanLayer(Layer):
         return x_win_est_train, x_win_est_test
 
     def transform(self, x_trains):
+        """
+        Transform.
+
+        :param x_trains:
+        :return:
+        """
         assert x_trains is not None, 'x_trains should not be None!'
         if isinstance(x_trains, (list, tuple)):
             assert len(x_trains) == 1, "Multi grain scan Layer only supports exactly one input now!"
@@ -305,7 +359,18 @@ class MultiGrainScanLayer(Layer):
 
 
 class PoolingLayer(Layer):
+    """
+    Pooling layer.
+    """
     def __init__(self, batch_size=None, dtype=None, name=None, pools=None):
+        """
+        Initialize a pooling layer.
+
+        :param batch_size:
+        :param dtype:
+        :param name:
+        :param pools:
+        """
         super(PoolingLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
         # [[pool/7x7/est1, pool/7x7/est2], [pool/11x11/est1, pool/11x11/est1], [pool/13x13/est1, pool/13x13/est1], ...]
         self.pools = pools
@@ -317,6 +382,13 @@ class PoolingLayer(Layer):
         pass
 
     def fit(self, x_trains, y_trains=None):
+        """
+        Fit.
+
+        :param x_trains:
+        :param y_trains:
+        :return:
+        """
         # inputs shape: [[(60000, 10, 11, 11), (60000, 10, 11, 11)], [.., ..], ...]
         if len(self.pools) != len(x_trains):
             raise ValueError('len(pools) does not equal to len(inputs), you must set right pools!')
@@ -332,6 +404,15 @@ class PoolingLayer(Layer):
         return x_trains
 
     def fit_transform(self, x_trains, y_trains=None, x_tests=None, y_tests=None):
+        """
+        Fit transform.
+
+        :param x_trains:
+        :param y_trains:
+        :param x_tests:
+        :param y_tests:
+        :return:
+        """
         if x_tests is None:
             return self.fit(x_trains, y_trains), None
         # inputs shape: [[(60000, 10, 11, 11), (60000, 10, 11, 11)], [.., ..], ...]
@@ -354,6 +435,12 @@ class PoolingLayer(Layer):
         return x_trains, x_tests
 
     def transform(self, x_trains):
+        """
+        Transform.
+
+        :param x_trains:
+        :return:
+        """
         assert x_trains is not None, 'x_trains should not be None!'
         if not isinstance(x_trains, (list, tuple)):
             x_trains = [x_trains]
@@ -382,7 +469,18 @@ class PoolingLayer(Layer):
 
 
 class ConcatLayer(Layer):
+    """
+    Concatenate layer.
+    """
     def __init__(self, batch_size=None, dtype=None, name=None, axis=-1):
+        """
+        Initialize a concat layer.
+
+        :param batch_size:
+        :param dtype:
+        :param name:
+        :param axis:
+        """
         super(ConcatLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
         # [[pool/7x7/est1, pool/7x7/est2], [pool/11x11/est1, pool/11x11/est1], [pool/13x13/est1, pool/13x13/est1], ...]
         # to
@@ -396,6 +494,12 @@ class ConcatLayer(Layer):
         pass
 
     def _fit(self, x_trains):
+        """
+        fit inner method.
+
+        :param x_trains:
+        :return:
+        """
         if not isinstance(x_trains, (list, tuple)):
             x_trains = [x_trains]
         # inputs shape: [[(60000, 10, 6, 6), (60000, 10, 6, 6)], [.., ..], ...]
@@ -411,6 +515,12 @@ class ConcatLayer(Layer):
         return concat_train
 
     def transform(self, x_trains):
+        """
+        Transform.
+
+        :param x_trains:
+        :return:
+        """
         concat_train = self._fit(x_trains)
         self.LOGGER.info("[transform] concat train shape: {}".format(list2str(concat_train, 1)))
         return concat_train
@@ -419,11 +529,27 @@ class ConcatLayer(Layer):
         raise NotImplementedError
 
     def fit(self, x_trains, y_trains=None):
+        """
+        Fit.
+
+        :param x_trains:
+        :param y_trains:
+        :return:
+        """
         concat_train = self._fit(x_trains)
         self.LOGGER.info("concat train shape: {}".format(list2str(concat_train, 1)))
         return concat_train
 
     def fit_transform(self, x_trains, y_trains, x_tests=None, y_tests=None):
+        """
+        Fit transform.
+
+        :param x_trains:
+        :param y_trains:
+        :param x_tests:
+        :param y_tests:
+        :return:
+        """
         if x_tests is None:
             return self.fit(x_trains, y_trains), None
         # inputs shape: [[(60000, 10, 6, 6), (60000, 10, 6, 6)], [.., ..], ...]
@@ -1135,15 +1261,15 @@ class AutoGrowingCascadeLayer(Layer):
                     # log and save the final results of the optimal layer
                     if y_test is not None:
                         self.LOGGER.info('[Result][Early Stop][Optimal Layer Detected] opt_layer={},'.format(opt_layer_id) +
-                                    ' {}_train={:.4f}{}, {}_test={:.4f}{}'.format(
-                                      self.eval_metrics[0].name, layer_train_metrics[opt_layer_id],
-                                      self._percent, self.eval_metrics[0].name, layer_test_metrics[opt_layer_id],
-                                      self._percent))
+                                         ' {}_train={:.4f}{}, {}_test={:.4f}{}'.format(
+                                          self.eval_metrics[0].name, layer_train_metrics[opt_layer_id],
+                                          self._percent, self.eval_metrics[0].name, layer_test_metrics[opt_layer_id],
+                                          self._percent))
                     else:
                         # print(layer_train_metrics[opt_layer_id])
                         self.LOGGER.info('[Result][Early Stop][Optimal Layer Detected] opt_layer={},'.format(opt_layer_id) +
-                                    ' {}_train={:.4f}{}'.format(self.eval_metrics[0].name,
-                                                                layer_train_metrics[opt_layer_id], self._percent))
+                                         ' {}_train={:.4f}{}'.format(self.eval_metrics[0].name,
+                                                                     layer_train_metrics[opt_layer_id], self._percent))
                     self.n_layers = layer_id + 1
                     self.save_data(opt_layer_id, *opt_data)
                     # wash the fit cascades after optimal layer id to save memory
@@ -1164,17 +1290,18 @@ class AutoGrowingCascadeLayer(Layer):
             self.opt_layer_id = opt_layer_id
             if y_test is not None:
                 self.LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.4f}{}, {}_test={:.4f}{}'
-                            ' optimal_layer={}, {}_optimal_train={:.4f}{},'
-                            ' {}_optimal_test={:.4f}{}'.format(
-                                self.max_layers, self.eval_metrics[0].name, layer_train_metrics[-1], self._percent,
-                                self.eval_metrics[0].name, layer_test_metrics[-1], self._percent, opt_layer_id,
-                                self.eval_metrics[0].name, layer_train_metrics[opt_layer_id], self._percent,
-                                self.eval_metrics[0].name, layer_test_metrics[opt_layer_id], self._percent))
+                                 ' optimal_layer={}, {}_optimal_train={:.4f}{},'
+                                 ' {}_optimal_test={:.4f}{}'.format(
+                                    self.max_layers, self.eval_metrics[0].name, layer_train_metrics[-1], self._percent,
+                                    self.eval_metrics[0].name, layer_test_metrics[-1], self._percent, opt_layer_id,
+                                    self.eval_metrics[0].name, layer_train_metrics[opt_layer_id], self._percent,
+                                    self.eval_metrics[0].name, layer_test_metrics[opt_layer_id], self._percent))
             else:
                 self.LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.4f}{},'
-                            ' optimal_layer={}, {}_optimal_train={:.4f}{}'.format(
-                             self.max_layers, self.eval_metrics[0].name, layer_train_metrics[-1], self._percent,
-                             opt_layer_id, self.eval_metrics[0].name, layer_train_metrics[opt_layer_id], self._percent))
+                                 ' optimal_layer={}, {}_optimal_train={:.4f}{}'.format(
+                                  self.max_layers,
+                                  self.eval_metrics[0].name, layer_train_metrics[-1], self._percent, opt_layer_id,
+                                  self.eval_metrics[0].name, layer_train_metrics[opt_layer_id], self._percent))
             self.save_data(layer_id, *opt_data)
             self.n_layers = layer_id + 1
             # if y_test is None, we predict x_test and save its predictions

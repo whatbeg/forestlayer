@@ -27,6 +27,7 @@ class Graph(object):
     def __init__(self, task='classification'):
         """
         Initialize a graph for specific task.
+
         :param task:
         """
         self.LOGGER = get_logger('forestlayer.layers.graph')
@@ -43,6 +44,7 @@ class Graph(object):
     def _add(self, layer):
         """
         layer add inner method, just add one layer.
+
         :param layer:
         :return:
         """
@@ -54,6 +56,7 @@ class Graph(object):
     def add(self, layer, *layers):
         """
         Add one or more layers.
+
         :param layer: at least one layer to be add
         :param layers: additional layers, optional
         :return:
@@ -65,6 +68,7 @@ class Graph(object):
     def build(self):
         """
         Print the graph.
+
         :return:
         """
         self.LOGGER.info("graph build finished!")
@@ -73,6 +77,7 @@ class Graph(object):
     def fit(self, x_trains, y_trains):
         """
         Fit with x_trians, y_trains.
+
         :param x_trains:
         :param y_trains:
         :return: self
@@ -100,6 +105,7 @@ class Graph(object):
         If x_tests is None, we do not evaluate test metrics.
         If x_tests is not None but y_tests is None, we consider that user wants to train on training data and predict
          on testing data by the way, so we will save predict results for tests.
+
         :param x_trains: numpy ndarray or list of numpy ndarray.
         :param y_trains: numpy ndarray or list of numpy ndarray.
         :param x_tests: optional. numpy ndarray or list of numpy ndarray.
@@ -125,6 +131,7 @@ class Graph(object):
     def transform(self, inputs):
         """
         Transform inputs.
+
         :param inputs:
         :return:
         """
@@ -142,6 +149,7 @@ class Graph(object):
     def predict(self, inputs):
         """
         Predict outputs of the inputs.
+
         :param inputs:
         :return:
         """
@@ -153,6 +161,7 @@ class Graph(object):
     def predict_proba(self, inputs):
         """
         Predict probability outputs of the inputs.
+
         :param inputs:
         :return:
         """
@@ -171,6 +180,7 @@ class Graph(object):
     def is_classification(self):
         """
         True if the task is classification.
+
         :return:
         """
         return self.task == 'classification'
@@ -178,6 +188,7 @@ class Graph(object):
     def evaluate(self, inputs, labels, eval_metrics=None):
         """
         Evaluate inputs with labels.
+
         :param inputs:
         :param labels:
         :param eval_metrics:
@@ -197,6 +208,7 @@ class Graph(object):
     def to_debug_string(self):
         """
         To debug string, to see the graph structure.
+
         :return:
         """
         debug_str = '\n'

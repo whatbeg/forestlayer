@@ -34,6 +34,7 @@ class BaseEstimator(object):
     def _init_estimators(self):
         """
         Initialize an estimator.
+
         :return:
         """
         return self.est_class(**self.est_args)
@@ -43,6 +44,7 @@ class BaseEstimator(object):
         Fit estimator.
         If cache_path exists, we do not need to re-fit.
         If cache_path is not None, save model to disk.
+
         :param X:
         :param y:
         :param cache_dir:
@@ -70,6 +72,7 @@ class BaseEstimator(object):
         Predict results.
         if cache_path is not None, we can load model from disk, else we take from memory.
         and then we decide whether use batch predict.
+
         :param X:
         :param cache_dir:
         :param batch_size:
@@ -97,6 +100,7 @@ class BaseEstimator(object):
         Predict probability.
         if cache_path is not None, we can load model from disk, else we take from memory.
         and then we decide whether use batch predict.
+
         :param X:
         :param cache_dir:
         :param batch_size:
@@ -124,6 +128,7 @@ class BaseEstimator(object):
     def _batch_predict_proba(self, est, X, batch_size):
         """
         Predict probability in batch.
+
         :param est:
         :param X:
         :param batch_size:
@@ -152,6 +157,7 @@ class BaseEstimator(object):
     def _batch_predict(self, est, X, batch_size):
         """
         Predict result in batch.
+
         :param est:
         :param X:
         :param batch_size:
@@ -179,6 +185,7 @@ class BaseEstimator(object):
     def _cache_path(self, cache_dir):
         """
         Get cache_path (model)
+
         :param cache_dir:
         :return:
         """
@@ -189,6 +196,7 @@ class BaseEstimator(object):
     def _load_model_from_disk(self, cache_path):
         """
         Load model from disk.
+
         :param cache_path:
         :return:
         """
@@ -197,6 +205,7 @@ class BaseEstimator(object):
     def _save_model_to_disk(self, est, cache_path):
         """
         Save model to disk.
+
         :param est:
         :param cache_path:
         :return:
@@ -219,6 +228,7 @@ class BaseEstimator(object):
     def _fit(self, est, X, y):
         """
         Fit est on (X, y)
+
         :param est:
         :param X:
         :param y:
@@ -229,6 +239,7 @@ class BaseEstimator(object):
     def _predict_proba(self, est, X):
         """
         Predict probability inner method.
+
         :param est:
         :param X:
         :return:
@@ -238,6 +249,7 @@ class BaseEstimator(object):
     def _predict(self, est, X):
         """
         Predict result inner method.
+
         :param est:
         :param X:
         :return:
@@ -247,6 +259,7 @@ class BaseEstimator(object):
     def copy(self):
         """
         copy
+
         :return:
         """
         return BaseEstimator(est_class=self.est_class, **self.est_args)
@@ -255,6 +268,7 @@ class BaseEstimator(object):
     def is_classification(self):
         """
         True if the task is classification.
+
         :return:
         """
         return self.task == 'classification'

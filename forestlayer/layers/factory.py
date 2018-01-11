@@ -15,6 +15,7 @@ from .window import Window, Pooling
 def MGSWindow(wins=(7, 7), strides=(1, 1), pads=(0, 0)):
     """
     Multi-grain Scan window.
+
     :param wins:
     :param strides:
     :param pads:
@@ -29,6 +30,7 @@ def MGSWindow(wins=(7, 7), strides=(1, 1), pads=(0, 0)):
 def MaxPooling(win_x=2, win_y=2):
     """
     Max Pooling.
+
     :param win_x:
     :param win_y:
     :return:
@@ -41,6 +43,7 @@ def MaxPooling(win_x=2, win_y=2):
 def MeanPooling(win_x=2, win_y=2):
     """
     Mean Pooling.
+
     :param win_x:
     :param win_y:
     :return:
@@ -53,6 +56,7 @@ def MeanPooling(win_x=2, win_y=2):
 def MaxPooling2x2Layer(win_x=2, win_y=2):
     """
     MaxPooling Layer with 2x2 pools, each pooling is MaxPooling(win_x, win_y).
+
     :param win_x:
     :param win_y:
     :return:
@@ -65,6 +69,7 @@ def MaxPooling2x2Layer(win_x=2, win_y=2):
 def MeanPooling2x2Layer(win_x=2, win_y=2):
     """
     MeanPooling Layer with 2x2 pools, each pooling is MeanPooling(win_x, win_y).
+
     :param win_x:
     :param win_y:
     :return:
@@ -77,6 +82,7 @@ def MeanPooling2x2Layer(win_x=2, win_y=2):
 def EstForWin2x2(**kwargs):
     """
     Estimator For Windows with 2x2 estimators, one CompletelyRandomForest, one RandomForest.
+
     :param kwargs:
     :return:
     """

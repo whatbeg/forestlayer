@@ -78,6 +78,7 @@ class Window(object):
     def __init__(self, win_x=None, win_y=None, stride_x=1, stride_y=1, pad_x=0, pad_y=0, name=None):
         """
         A 2D window has several key parameters.
+
         :param win_x: window length at X-axis
         :param win_y: window length at Y-axis
         :param stride_x: stride at X-axis to move every time
@@ -102,6 +103,7 @@ class Window(object):
     def fit_transform(self, X):
         """
         Fit and transform the input X.
+
         :param X:
         :return:
         """
@@ -117,6 +119,7 @@ class Pooling(object):
     def __init__(self, win_x=None, win_y=None, pool_strategy=None, name=None):
         """
         Pooling has several key parameters: win_x, win_y, pool_strategy.
+
         :param win_x: pooling window length at X-axis
         :param win_y: pooling window length at Y-axis
         :param pool_strategy: pooling strategy, [max or mean]
@@ -135,6 +138,7 @@ class Pooling(object):
     def fit_transform(self, X):
         """
         Fit transform the input X.
+
         :param X:
         :return:
         """
@@ -144,6 +148,7 @@ class Pooling(object):
     def _transform(self, X):
         """
         Transform inner method.
+
         :param X:
         :return:
         """
@@ -171,6 +176,7 @@ class Pooling(object):
     def transform(self, X):
         """
         Transform the input X.
+
         :param X:
         :return:
         """
