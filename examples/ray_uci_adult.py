@@ -16,14 +16,14 @@ ray.init()
 
 
 @ray.remote(num_cpus=2)
-def load_uci_data(filename):
-    return uci_adult.load_data(filename)
+def load_uci_data():
+    return uci_adult.load_data()
 
 
 start_time = time.time()
 
-data = [load_uci_data.remote(f) for f in ("adult_4x.data", "adult_4x.test")]
-(x_train, y_train), (x_test, y_test) = ray.get(data)
+data = load_uci_data.remote()
+(x_train, y_train, x_test, y_test) = ray.get(data)
 
 print(x_train.shape[0], 'train samples')
 print(x_test.shape[0], 'test samples')

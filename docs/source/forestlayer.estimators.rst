@@ -1,8 +1,16 @@
-API estimators
+estimators
 ===============================
 
 estimators\.arguments
 -----------------------------------------
+
+init
+---------------
+
+.. automodule:: forestlayer.estimators
+    :members:
+    :undoc-members:
+    :show-inheritance:
 
 .. automodule:: forestlayer.estimators.arguments
     :members:
@@ -41,11 +49,3 @@ estimators\.xgboost\_estimator
     :undoc-members:
     :show-inheritance:
 
-
-init
----------------
-
-.. automodule:: forestlayer.estimators
-    :members:
-    :undoc-members:
-    :show-inheritance:

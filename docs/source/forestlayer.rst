@@ -1,8 +1,5 @@
-API forestlayer
+API
 ===================
-
-Modules
------------
 
 .. toctree::
 

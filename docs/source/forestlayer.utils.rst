@@ -1,4 +1,4 @@
-API utils
+utils
 ==========================
 
 utils\.log\_utils
@@ -33,11 +33,3 @@ utils\.utils
     :undoc-members:
     :show-inheritance:
 
-
-Module contents
----------------
-
-.. automodule:: forestlayer.utils
-    :members:
-    :undoc-members:
-    :show-inheritance:

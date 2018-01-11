@@ -1,4 +1,4 @@
-API datasets
+datasets
 =============================
 
 datasets\.dataset

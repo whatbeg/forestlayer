@@ -1,6 +1,13 @@
-API layers
+layers
 ===========================
 
+layers\.layer
+---------------------------------
+
+.. automodule:: forestlayer.layers.layer
+    :members:
+    :undoc-members:
+    :show-inheritance:
 
 layers\.factory
 -----------------------------------
@@ -18,14 +25,6 @@ layers\.graph
     :undoc-members:
     :show-inheritance:
 
-layers\.layer
----------------------------------
-
-.. automodule:: forestlayer.layers.layer
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 layers\.window
 ----------------------------------
 
@@ -33,5 +32,4 @@ layers\.window
     :members:
     :undoc-members:
     :show-inheritance:
-
 
