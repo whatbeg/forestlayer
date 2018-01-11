@@ -20,20 +20,21 @@ x_train = x_train.reshape(60000, -1, 28, 28)[:200, :, :, :]
 x_test = x_test.reshape(10000, -1, 28, 28)[:100, :, :, :]
 x_train = x_train / 255.0
 x_test = x_test / 255.0
-y_train = y_train[:200]
-y_test = y_test[:100]
+# y_train = y_train[:200]
+# y_test = y_test[:100]
 
 print(x_train.shape, 'train samples')
 print(x_test.shape, 'test samples')
 
 windows = [MGSWindow((7, 7), (2, 2)),
-           MGSWindow((7, 7), (2, 2))]
+           MGSWindow((11, 11), (2, 2))]
 
 est_for_windows = EstForWin2x2(min_samples_leaf=10)
 
 mgs = MultiGrainScanLayer(windows=windows,
                           est_for_windows=est_for_windows,
-                          n_class=10)
+                          n_class=10,
+                          keep_in_mem=True)
 
 pool = MaxPooling2x2Layer(2, 2)
 
@@ -54,7 +55,8 @@ auto_cascade = AutoGrowingCascadeLayer(est_configs=est_configs,
                                        stop_by_test=True,
                                        n_classes=10,
                                        data_save_dir=data_save_dir,
-                                       model_save_dir=model_save_dir)
+                                       model_save_dir=model_save_dir,
+                                       keep_in_mem=True)
 
 model = Graph()
 model.add(mgs)
@@ -62,4 +64,4 @@ model.add(pool)
 model.add(concatlayer)
 model.add(auto_cascade)
 model.fit(x_train, y_train)
-
+model.evaluate(x_test, y_test)
