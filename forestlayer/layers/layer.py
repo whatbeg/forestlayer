@@ -11,12 +11,10 @@ from __future__ import print_function
 import numpy as np
 import copy
 import datetime
-from ..utils.log_utils import get_logger, list2str
+from ..utils.log_utils import get_logger, list2str, get_logging_level
 from ..utils.storage_utils import *
 from ..utils.metrics import Accuracy, AUC, MSE
 from ..estimators import get_estimator_kfold, EstimatorArgument
-
-LOGGER = get_logger('layer')
 
 
 class Layer(object):
@@ -41,6 +39,7 @@ class Layer(object):
         """
         Initialize a layer.
         """
+        self.LOGGER = get_logger('layer')
         self.batch_size = batch_size
         if not name:
             prefix = self.__class__.__name__
@@ -156,7 +155,7 @@ class MultiGrainScanLayer(Layer):
         for win in self.windows:
             x_wins_train.append(self.scan(win, x_trains))
         # [[win, win], [win, win], ...], len = len(test_sets)
-        LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
+        self.LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
         x_win_est_train = []
         for wi, ests_for_win in enumerate(self.est_for_windows):
             if not isinstance(ests_for_win, (list, tuple)):
@@ -178,7 +177,7 @@ class MultiGrainScanLayer(Layer):
             x_win_est_train.append(win_est_train)
         if len(x_win_est_train) == 0:
             return x_wins_train
-        LOGGER.info('x_win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
+        self.LOGGER.info('x_win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
         return x_win_est_train
 
     def fit_transform(self, x_trains, y_trains, x_tests=None, y_tests=None):
@@ -206,11 +205,11 @@ class MultiGrainScanLayer(Layer):
             x_wins_test.append(tmp_wins_test)
         # [[win, win], [win, win], ...], len = len(test_sets)
         # test_sets = [('testOfWin{}'.format(i), x, y) for i, x, y in enumerate(zip(x_wins_test, y_tests))]
-        LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
+        self.LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
         log_info = 'X_wins of tests: '
         for i in range(len(x_wins_test)):
             log_info += '{}, '.format([win.shape for win in x_wins_test[i]])
-        LOGGER.info(log_info)
+        self.LOGGER.info(log_info)
         x_win_est_train = []
         x_win_est_test = []
         for wi, ests_for_win in enumerate(self.est_for_windows):
@@ -248,11 +247,11 @@ class MultiGrainScanLayer(Layer):
             x_win_est_test.append(win_est_test)
         if len(x_win_est_train) == 0:
             return x_wins_train, x_wins_test
-        LOGGER.info('x_win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
+        self.LOGGER.info('x_win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
         if len(x_win_est_test) > 0:
-            LOGGER.info('x_win_est_test[0].shape: {}'.format(list2str(x_win_est_test[0], 2)))
+            self.LOGGER.info('x_win_est_test[0].shape: {}'.format(list2str(x_win_est_test[0], 2)))
         if len(x_win_est_test) > 1:
-            LOGGER.info('x_win_est_test[1].shape: {}'.format(list2str(x_win_est_test[1], 2)))
+            self.LOGGER.info('x_win_est_test[1].shape: {}'.format(list2str(x_win_est_test[1], 2)))
         return x_win_est_train, x_win_est_test
 
     def transform(self, x_trains):
@@ -265,7 +264,7 @@ class MultiGrainScanLayer(Layer):
         for win in self.windows:
             x_wins_train.append(self.scan(win, x_trains))
         # [[win, win], [win, win], ...], len = len(test_sets)
-        LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
+        self.LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
         x_win_est_train = []
         for wi, ests_for_win in enumerate(self.est_for_windows):
             if not isinstance(ests_for_win, (list, tuple)):
@@ -283,7 +282,7 @@ class MultiGrainScanLayer(Layer):
             x_win_est_train.append(win_est_train)
         if len(x_win_est_train) == 0:
             return x_wins_train
-        LOGGER.info('[transform] win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
+        self.LOGGER.info('[transform] win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
         return x_win_est_train
 
     def predict(self, X):
@@ -323,7 +322,7 @@ class PoolingLayer(Layer):
                                  ' len(inputs[{}]), you must set right pools!'.format(pi, pi))
             for pj, pl in enumerate(pool):
                 x_trains[pi][pj] = pl.fit_transform(x_trains[pi][pj])
-        LOGGER.info('x_trains pooled: {}'.format(list2str(x_trains, 2)))
+        self.LOGGER.info('x_trains pooled: {}'.format(list2str(x_trains, 2)))
         return x_trains
 
     def fit_transform(self, x_trains, y_trains=None, x_tests=None, y_tests=None):
@@ -343,9 +342,9 @@ class PoolingLayer(Layer):
                 x_trains[pi][pj] = pl.fit_transform(x_trains[pi][pj])
                 for ti, ts in enumerate(x_tests[pi][pj]):
                     x_tests[pi][pj][ti] = pl.fit_transform(ts)
-        LOGGER.info('x_trains pooled: {}'.format(list2str(x_trains, 2)))
+        self.LOGGER.info('x_trains pooled: {}'.format(list2str(x_trains, 2)))
         if len(x_tests) > 0:
-            LOGGER.info('x_tests pooled: {}'.format(list2str(x_tests, 3)))
+            self.LOGGER.info('x_tests pooled: {}'.format(list2str(x_tests, 3)))
         return x_trains, x_tests
 
     def transform(self, x_trains):
@@ -363,7 +362,7 @@ class PoolingLayer(Layer):
                                  ' len(inputs[{}]), you must set right pools!'.format(pi, pi))
             for pj, pl in enumerate(pool):
                 x_trains[pi][pj] = pl.transform(x_trains[pi][pj])
-        LOGGER.info('[transform] x_trains pooled: {}'.format(list2str(x_trains, 2)))
+        self.LOGGER.info('[transform] x_trains pooled: {}'.format(list2str(x_trains, 2)))
         return x_trains
 
     def evaluate(self, inputs, labels):
@@ -407,7 +406,7 @@ class ConcatLayer(Layer):
 
     def transform(self, x_trains):
         concat_train = self._fit(x_trains)
-        LOGGER.info("[transform] concat train shape: {}".format(list2str(concat_train, 1)))
+        self.LOGGER.info("[transform] concat train shape: {}".format(list2str(concat_train, 1)))
         return concat_train
 
     def evaluate(self, inputs, labels=None):
@@ -415,7 +414,7 @@ class ConcatLayer(Layer):
 
     def fit(self, x_trains, y_trains=None):
         concat_train = self._fit(x_trains)
-        LOGGER.info("concat train shape: {}".format(list2str(concat_train, 1)))
+        self.LOGGER.info("concat train shape: {}".format(list2str(concat_train, 1)))
         return concat_train
 
     def fit_transform(self, x_trains, y_trains, x_tests=None, y_tests=None):
@@ -431,7 +430,7 @@ class ConcatLayer(Layer):
             else:
                 concat_res = np.concatenate(bottoms, self.axis)
             concat_train.append(concat_res)
-        LOGGER.info("concat train shape: {}".format(list2str(concat_train, 1)))
+        self.LOGGER.info("concat train shape: {}".format(list2str(concat_train, 1)))
         # x_tests = [] if x_tests is None else x_tests
         if len(x_tests) > 0 and len(x_tests[0][0]) != 1:
             raise ValueError("Now Concat Layer only supports one test_data in test_set")
@@ -447,7 +446,7 @@ class ConcatLayer(Layer):
             else:
                 concat_res = np.concatenate(bottoms, self.axis)
             concat_test.append(concat_res)
-        LOGGER.info("concat test data shape: {}".format(list2str(concat_test, 1)))
+        self.LOGGER.info("concat test data shape: {}".format(list2str(concat_test, 1)))
         return concat_train, concat_test
 
     def predict(self, X):
@@ -573,7 +572,7 @@ class CascadeLayer(Layer):
         assert x_train.shape[0] == y_train.shape[0], 'x_train.shape[0] = {} not equal to y_train.shape[0] = {}'.format(
             x_train.shape[0], y_train.shape[0]
         )
-        LOGGER.info('X_train.shape={},y_train.shape={}'.format(x_train.shape, y_train.shape))
+        self.LOGGER.info('X_train.shape={},y_train.shape={}'.format(x_train.shape, y_train.shape))
         n_trains = x_train.shape[0]
         n_classes = self.n_classes  # if regression, n_classes = 1
         if self.task == 'classification' and n_classes is None:
@@ -600,7 +599,7 @@ class CascadeLayer(Layer):
         # now supports one eval_metrics
         metric = self.eval_metrics[0]
         train_avg_acc = metric.calc_proba(y_train, eval_proba_train,
-                                          'layer - {} - [train] average'.format(self.layer_id), logger=LOGGER)
+                                          'layer - {} - [train] average'.format(self.layer_id), logger=self.LOGGER)
         self.train_avg_metric = train_avg_acc
         return x_proba_train
 
@@ -629,7 +628,7 @@ class CascadeLayer(Layer):
             y_test_shape = (0,)
         else:
             y_test_shape = y_test.shape
-        LOGGER.info('X_train.shape={},y_train.shape={} / X_test.shape={},y_test.shape={}'.format(
+        self.LOGGER.info('X_train.shape={},y_train.shape={} / X_test.shape={},y_test.shape={}'.format(
             x_train.shape, y_train.shape, x_test.shape, y_test_shape
         ))
         n_trains = x_train.shape[0]
@@ -669,12 +668,12 @@ class CascadeLayer(Layer):
         eval_proba_test /= self.n_estimators
         metric = self.eval_metrics[0]
         train_avg_metric = metric.calc_proba(y_train, eval_proba_train,
-                                             'layer - {} - [train] average'.format(self.layer_id), logger=LOGGER)
+                                             'layer - {} - [train] average'.format(self.layer_id), logger=self.LOGGER)
         self.train_avg_metric = train_avg_metric
         # judge whether y_test is None, which means users are to predict test probas
         if y_test is not None:
             test_avg_metric = metric.calc_proba(y_test, eval_proba_test,
-                                                'layer - {} - [test] average'.format(self.layer_id), logger=LOGGER)
+                                                'layer - {} - [test] average'.format(self.layer_id), logger=self.LOGGER)
             self.test_avg_metric = test_avg_metric
         # if y_test is None, we need to generate test prediction, so keep eval_proba_test
         if y_test is None:
@@ -755,7 +754,7 @@ class CascadeLayer(Layer):
             y = y[0]
         pred = self.predict(X)
         for metric in eval_metrics:
-            metric.calc(y, pred, logger=LOGGER)
+            metric.calc(y, pred, logger=self.LOGGER)
 
 
 class AutoGrowingCascadeLayer(Layer):
@@ -892,7 +891,7 @@ class AutoGrowingCascadeLayer(Layer):
         if isinstance(y_train, (list, tuple)):
             y_train = y_train[0]
         if self.stop_by_test is True:
-            LOGGER.warn('stop_by_test is True, but we do not obey it when fit(x_train, y_train)!')
+            self.LOGGER.warn('stop_by_test is True, but we do not obey it when fit(x_train, y_train)!')
         self.layer_fit_cascades = []
         n_groups_train = len(x_trains)
         self.n_group_train = n_groups_train
@@ -911,9 +910,9 @@ class AutoGrowingCascadeLayer(Layer):
             group_ends.append(group_starts[i] + group_dims[i])
             x_train_group = np.hstack((x_train_group, x_train))
 
-        LOGGER.info('group_starts={}'.format(group_starts))
-        LOGGER.info('group_dims={}'.format(group_dims))
-        LOGGER.info('X_train_group={}'.format(x_train_group.shape))
+        self.LOGGER.info('group_starts={}'.format(group_starts))
+        self.LOGGER.info('group_dims={}'.format(group_dims))
+        self.LOGGER.info('X_train_group={}'.format(x_train_group.shape))
         self.group_starts = group_starts
         self.group_ends = group_ends
         self.group_dims = group_dims
@@ -963,9 +962,9 @@ class AutoGrowingCascadeLayer(Layer):
                 # early stopping
                 if layer_id - opt_layer_id >= self.early_stop_rounds > 0:
                     # log and save the final results of the optimal layer
-                    LOGGER.info('[Result][Early Stop][Optimal Layer Detected] opt_layer={},'.format(opt_layer_id) +
-                                ' {}_train={:.4f}{},'.format(self.eval_metrics[0].name,
-                                                             layer_metric_list[opt_layer_id], self._percent))
+                    self.LOGGER.info('[Result][Early Stop][Optimal Layer Detected] opt_layer={},'.format(opt_layer_id) +
+                                     ' {}_train={:.4f}{},'.format(self.eval_metrics[0].name,
+                                                                  layer_metric_list[opt_layer_id], self._percent))
                     self.n_layers = layer_id + 1
                     self._save_data(opt_layer_id, *opt_data)
                     # wash the fit cascades after optimal layer id to save memory
@@ -980,10 +979,11 @@ class AutoGrowingCascadeLayer(Layer):
             opt_data = [x_cur_train, y_train]
             opt_layer_id = get_opt_layer_id(layer_metric_list, larger_better=self.larger_better)
             self.opt_layer_id = opt_layer_id
-            LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.4f}{},'
-                        ' optimal_layer={}, {}_optimal_train={:.4f}{}'.format(
-                            self.max_layers, self.eval_metrics[0].name, layer_metric_list[-1], self._percent,
-                            opt_layer_id, self.eval_metrics[0].name, layer_metric_list[opt_layer_id], self._percent))
+            self.LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.4f}{},'
+                             ' optimal_layer={}, {}_optimal_train={:.4f}{}'.format(
+                                self.max_layers,
+                                self.eval_metrics[0].name, layer_metric_list[-1], self._percent, opt_layer_id,
+                                self.eval_metrics[0].name, layer_metric_list[opt_layer_id], self._percent))
             self._save_data(layer_id, *opt_data)
             self.n_layers = layer_id + 1
             # wash the fit cascades after optimal layer id to save memory
@@ -1040,7 +1040,7 @@ class AutoGrowingCascadeLayer(Layer):
         n_tests = x_tests[0].shape[0]
         if y_test is None and self.stop_by_test is True:
             self.stop_by_test = False
-            LOGGER.warn('stop_by_test is True, but we do not obey it when fit(x_train, y_train, x_test, None)!')
+            self.LOGGER.warn('stop_by_test is True, but we do not obey it when fit(x_train, y_train, x_test, None)!')
         assert n_groups_train == n_groups_test, 'n_group_train must equal to n_group_test!'
         # Initialize the groups
         x_train_group = np.zeros((n_trains, 0), dtype=x_trains[0].dtype)
@@ -1062,9 +1062,9 @@ class AutoGrowingCascadeLayer(Layer):
             assert x_test.shape[1] == group_dims[i]
             x_test_group = np.hstack((x_test_group, x_test))
 
-        LOGGER.info('group_starts={}'.format(group_starts))
-        LOGGER.info('group_dims={}'.format(group_dims))
-        LOGGER.info('X_train_group={}, X_test_group={}'.format(x_train_group.shape, x_test_group.shape))
+        self.LOGGER.info('group_starts={}'.format(group_starts))
+        self.LOGGER.info('group_dims={}'.format(group_dims))
+        self.LOGGER.info('X_train_group={}, X_test_group={}'.format(x_train_group.shape, x_test_group.shape))
         self.group_starts = group_starts
         self.group_ends = group_ends
         self.group_dims = group_dims
@@ -1127,14 +1127,14 @@ class AutoGrowingCascadeLayer(Layer):
                 if layer_id - opt_layer_id >= self.early_stop_rounds > 0:
                     # log and save the final results of the optimal layer
                     if y_test is not None:
-                        LOGGER.info('[Result][Early Stop][Optimal Layer Detected] opt_layer={},'.format(opt_layer_id) +
+                        self.LOGGER.info('[Result][Early Stop][Optimal Layer Detected] opt_layer={},'.format(opt_layer_id) +
                                     ' {}_train={:.4f}{}, {}_test={:.4f}{}'.format(
                                       self.eval_metrics[0].name, layer_train_metrics[opt_layer_id],
                                       self._percent, self.eval_metrics[0].name, layer_test_metrics[opt_layer_id],
                                       self._percent))
                     else:
                         # print(layer_train_metrics[opt_layer_id])
-                        LOGGER.info('[Result][Early Stop][Optimal Layer Detected] opt_layer={},'.format(opt_layer_id) +
+                        self.LOGGER.info('[Result][Early Stop][Optimal Layer Detected] opt_layer={},'.format(opt_layer_id) +
                                     ' {}_train={:.4f}{}'.format(self.eval_metrics[0].name,
                                                                 layer_train_metrics[opt_layer_id], self._percent))
                     self.n_layers = layer_id + 1
@@ -1156,7 +1156,7 @@ class AutoGrowingCascadeLayer(Layer):
                 opt_layer_id = get_opt_layer_id(layer_train_metrics, self.larger_better)
             self.opt_layer_id = opt_layer_id
             if y_test is not None:
-                LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.4f}{}, {}_test={:.4f}{}'
+                self.LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.4f}{}, {}_test={:.4f}{}'
                             ' optimal_layer={}, {}_optimal_train={:.4f}{},'
                             ' {}_optimal_test={:.4f}{}'.format(
                                 self.max_layers, self.eval_metrics[0].name, layer_train_metrics[-1], self._percent,
@@ -1164,7 +1164,7 @@ class AutoGrowingCascadeLayer(Layer):
                                 self.eval_metrics[0].name, layer_train_metrics[opt_layer_id], self._percent,
                                 self.eval_metrics[0].name, layer_test_metrics[opt_layer_id], self._percent))
             else:
-                LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.4f}{},'
+                self.LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.4f}{},'
                             ' optimal_layer={}, {}_optimal_train={:.4f}{}'.format(
                              self.max_layers, self.eval_metrics[0].name, layer_train_metrics[-1], self._percent,
                              opt_layer_id, self.eval_metrics[0].name, layer_train_metrics[opt_layer_id], self._percent))
@@ -1203,9 +1203,9 @@ class AutoGrowingCascadeLayer(Layer):
             assert x_test.shape[1] == self.group_dims[i]
             x_test_group = np.hstack((x_test_group, x_test))
 
-        LOGGER.info('[transform] group_starts={}'.format(self.group_starts))
-        LOGGER.info('[transform] group_dims={}'.format(self.group_dims))
-        LOGGER.info('[transform] X_test_group={}'.format(x_test_group.shape))
+        self.LOGGER.info('[transform] group_starts={}'.format(self.group_starts))
+        self.LOGGER.info('[transform] group_dims={}'.format(self.group_dims))
+        self.LOGGER.info('[transform] X_test_group={}'.format(x_test_group.shape))
 
         if self.look_index_cycle is None:
             self.look_index_cycle = [[i, ] for i in range(n_groups)]
@@ -1213,7 +1213,7 @@ class AutoGrowingCascadeLayer(Layer):
         layer_id = 0
         try:
             while layer_id <= self.opt_layer_id:
-                LOGGER.info('Transforming layer - {} / {}'.format(layer_id, self.n_layers))
+                self.LOGGER.info('Transforming layer - {} / {}'.format(layer_id, self.n_layers))
                 x_cur_test = np.zeros((n_examples, 0), dtype=np.float32)
                 train_ids = self.look_index_cycle[layer_id % n_groups]
                 for gid in train_ids:
@@ -1241,7 +1241,7 @@ class AutoGrowingCascadeLayer(Layer):
             labels = labels[0]
         pred = self.predict(inputs)
         for metric in eval_metrics:
-            metric.calc(labels, pred, logger=LOGGER)
+            metric.calc(labels, pred, logger=self.LOGGER)
 
     def predict_proba(self, X):
         """
@@ -1290,7 +1290,7 @@ class AutoGrowingCascadeLayer(Layer):
         data_path = osp.join(self.data_save_dir, "layer_{}-{}.pkl".format(layer_id, 'train'))
         check_dir(data_path)
         data = {"X": x_train, "y": y_train}
-        LOGGER.info("Saving Data in {} ... X.shape={}, y.shape={}".format(
+        self.LOGGER.info("Saving Data in {} ... X.shape={}, y.shape={}".format(
             data_path, data["X"].shape, data["y"].shape))
         with open(data_path, "wb") as f:
             pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
@@ -1314,7 +1314,7 @@ class AutoGrowingCascadeLayer(Layer):
                 data = {"X": x_train, "y": y_train}
             else:
                 data = {"X": x_test, "y": y_test if y_test is not None else np.zeros((0,))}
-            LOGGER.info("Saving {} Data in {} ... X.shape={}, y.shape={}".format(
+            self.LOGGER.info("Saving {} Data in {} ... X.shape={}, y.shape={}".format(
                 phase, data_path, data["X"].shape, data["y"].shape))
             with open(data_path, "wb") as f:
                 pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
@@ -1328,13 +1328,13 @@ class AutoGrowingCascadeLayer(Layer):
         if self.data_save_dir is None:
             return
         if x_proba_test is None:
-            LOGGER.info('x_proba_test is None, DO NOT SAVE!')
+            self.LOGGER.info('x_proba_test is None, DO NOT SAVE!')
             return
         if x_proba_test.shape[1] != self.n_classes:
-            LOGGER.info('x_proba_test.shape[1] = {} is not equal to n_classes'.format(x_proba_test.shape[1]))
+            self.LOGGER.info('x_proba_test.shape[1] = {} is not equal to n_classes'.format(x_proba_test.shape[1]))
         prefix = datetime.datetime.now().strftime('%m_%d_%H_%M')
         file_name = osp.join(self.data_save_dir, 'submission_' + prefix + '.csv')
-        LOGGER.info('[Save][Test Output] x_proba_test={}, Saving to {}'.format(x_proba_test.shape, file_name))
+        self.LOGGER.info('[Save][Test Output] x_proba_test={}, Saving to {}'.format(x_proba_test.shape, file_name))
         if self.is_classification:
             np.savetxt(file_name, np.argmax(x_proba_test, axis=1), fmt="%d", delimiter=',')
         else:

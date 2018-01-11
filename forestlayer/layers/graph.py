@@ -13,8 +13,6 @@ from ..layers.layer import Layer
 import copy
 import numpy as np
 
-LOGGER = get_logger('forestflow.layers.graph')
-
 
 class Graph(object):
     """
@@ -31,6 +29,7 @@ class Graph(object):
         Initialize a graph for specific task.
         :param task:
         """
+        self.LOGGER = get_logger('forestlayer.layers.graph')
         self.layers = []
         self.task = task
         self.FIT = False
@@ -48,7 +47,7 @@ class Graph(object):
         :return:
         """
         if layer is None or not isinstance(layer, Layer):
-            LOGGER.info('layer [{}] is invalid!'.format(layer))
+            self.LOGGER.info('layer [{}] is invalid!'.format(layer))
             return
         self.layers.append(layer)
 
@@ -68,8 +67,8 @@ class Graph(object):
         Print the graph.
         :return:
         """
-        LOGGER.info("graph build finished!")
-        LOGGER.info(self.to_debug_string())
+        self.LOGGER.info("graph build finished!")
+        self.LOGGER.info(self.to_debug_string())
 
     def fit(self, x_trains, y_trains):
         """
@@ -88,9 +87,9 @@ class Graph(object):
         else:
             labels = copy.deepcopy(y_trains)
         for layer in self.layers:
-            LOGGER.info(" -------------- Now fitting layer [{}] --------------".format(layer))
+            self.LOGGER.info(" -------------- Now fitting layer [{}] --------------".format(layer))
             inputs = layer.fit(inputs, labels)
-        LOGGER.info("graph fit finished!")
+        self.LOGGER.info("graph fit finished!")
         self.FIT = True
         return self
 
@@ -117,9 +116,9 @@ class Graph(object):
         if y_tests is not None and not isinstance(y_tests, (list, tuple)):
             y_tests = [y_tests]
         for li, layer in enumerate(self.layers):
-            LOGGER.info(" -------------- Now fitting layer - [{}] [{}] --------------".format(li, layer))
+            self.LOGGER.info(" -------------- Now fitting layer - [{}] [{}] --------------".format(li, layer))
             x_trains, x_tests = layer.fit_transform(x_trains, y_trains, x_tests, y_tests)
-        LOGGER.info("graph fit_transform finished!")
+        self.LOGGER.info("graph fit_transform finished!")
         self.FIT = True
         return x_trains, x_tests
 
@@ -137,7 +136,7 @@ class Graph(object):
             X = inputs
         for layer in self.layers:
             X = layer.transform(X)
-        LOGGER.info("graph transform finished!")
+        self.LOGGER.info("graph transform finished!")
         return X
 
     def predict(self, inputs):
@@ -193,7 +192,7 @@ class Graph(object):
         if not isinstance(eval_metrics, (list, tuple)):
             eval_metrics = [eval_metrics]
         for metric in eval_metrics:
-            metric(labels, self.predict_proba(inputs), prefix='', logger=LOGGER)
+            metric(labels, self.predict_proba(inputs), prefix='', logger=self.LOGGER)
 
     def to_debug_string(self):
         """

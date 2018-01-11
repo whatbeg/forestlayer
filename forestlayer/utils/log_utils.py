@@ -20,6 +20,7 @@ _LOG_BASE = osp.join(get_base_dir(), 'log')
 def get_logging_base():
     """
     Get logging base dir, which is used to store log data.
+    Default logging base is ~/.forestlayer/log
     logging base contains one or more logging dir.
     :return:
     """
@@ -30,6 +31,7 @@ def get_logging_base():
 def set_logging_base(dir_path):
     """
     Set logging base dir, which is used to store log data.
+    Default logging base is ~/.forestlayer/log
     logging base contains one or more logging dir.
     :param dir_path:
     :return:
@@ -42,6 +44,7 @@ def set_logging_base(dir_path):
 logging.basicConfig(format="[ %(asctime)s][%(module)s.%(funcName)s] %(message)s")
 
 DEFAULT_LEVEL = logging.INFO
+OLD_LOGGING_DIR = osp.join(get_logging_base(), "forestlayer")
 DEFAULT_LOGGING_DIR = osp.join(get_logging_base(), "forestlayer")
 fh = None
 
@@ -55,11 +58,12 @@ def init_fh():
     Initialize log file handler.
     :return:
     """
-    global fh
-    if fh is not None:
+    global fh, DEFAULT_LOGGING_DIR, OLD_LOGGING_DIR
+    if fh is not None and DEFAULT_LOGGING_DIR == OLD_LOGGING_DIR:
         return
     if DEFAULT_LOGGING_DIR is None:
         return
+    OLD_LOGGING_DIR = DEFAULT_LOGGING_DIR
     if not osp.exists(DEFAULT_LOGGING_DIR):
         os.makedirs(DEFAULT_LOGGING_DIR)
     logging_path = osp.join(DEFAULT_LOGGING_DIR, strftime() + ".log")
@@ -89,7 +93,9 @@ def get_logging_level():
 def set_logging_dir(default_logging_dir):
     """
     Set logging dir.
-    :param default_logging_dir:
+    Default logging dir is ~/.forestlayer/log/forestlayer
+    NOTE: Now we recommend not to modify logging dir, because it might cause unknown in-identity.
+    :param default_logging_dir: ~/.forestlayer/log/forestlayer
     :return:
     """
     global DEFAULT_LOGGING_DIR
@@ -98,7 +104,8 @@ def set_logging_dir(default_logging_dir):
 
 def get_logging_dir():
     """
-    Get logging dir
+    Get logging dir.
+    Default logging dir is ~/.forestlayer/log/forestlayer
     :return:
     """
     global DEFAULT_LOGGING_DIR

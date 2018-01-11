@@ -9,7 +9,7 @@ multi-grain scan windows.
 
 import numpy as np
 from joblib import Parallel, delayed
-from ..utils.log_utils import get_logger
+from ..utils.log_utils import get_logger, get_logging_level
 
 LOGGER = get_logger('multi-grain scan window')
 
@@ -86,6 +86,7 @@ class Window(object):
         :param pad_y: if padding is not None, padding pad_y to the Y-axis of images.
         :param name: window name
         """
+        LOGGER.setLevel(get_logging_level())
         assert win_x is not None and win_y is not None, "win_x, win_y should not be None!"
         self.win_x = win_x
         self.win_y = win_y
@@ -121,6 +122,7 @@ class Pooling(object):
         :param pool_strategy: pooling strategy, [max or mean]
         :param name: pooling name
         """
+        LOGGER.setLevel(get_logging_level())
         assert win_x is not None and win_y is not None, "win_x, win_y should not be None!"
         self.win_x = win_x
         self.win_y = win_y

@@ -12,8 +12,6 @@ import os
 from ..utils.log_utils import get_logger
 from ..backend.backend import get_base_dir
 
-LOGGER = get_logger('datasets.dataset')
-
 _DATASET_DIR = osp.join(get_base_dir(), 'data')
 _DATA_CACHE_DIR = osp.join(get_base_dir(), 'data-cache')
 

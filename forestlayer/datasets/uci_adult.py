@@ -12,7 +12,7 @@ import numpy as np
 import os.path as osp
 from .dataset import get_data_base
 from keras.utils.data_utils import get_file
-from ..utils.log_utils import get_logger
+from ..utils.log_utils import get_logger, get_logging_level
 
 LOGGER = get_logger('datasets.uci_adult')
 
@@ -23,6 +23,7 @@ def load_data(one_hot=True):
     :param one_hot: whether use one-hot encoding
     :return: X_train, y_train, X_test, y_test
     """
+    LOGGER.setLevel(get_logging_level())
     train_path = 'adult.data'
     test_path = 'adult.test'
     features_path = 'features'

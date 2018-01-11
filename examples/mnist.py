@@ -13,18 +13,28 @@ from forestlayer.estimators.arguments import CompletelyRandomForest, RandomFores
 from forestlayer.layers.window import Window, Pooling
 from forestlayer.utils.storage_utils import get_data_save_base, get_model_save_base
 from keras.datasets import mnist
+from forestlayer.utils.log_utils import set_logging_level, set_logging_dir, get_logging_dir
 import os.path as osp
+
+set_logging_dir(osp.abspath('./../log/examples/mnist'))
+
+import logging
+
+
+# set_logging_level(logging.DEBUG)
+
+print(get_logging_dir())
 
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
 
 x_train = x_train.reshape(60000, -1, 28, 28)
 x_test = x_test.reshape(10000, -1, 28, 28)
-# x_train = x_train[:200, :, :, :]
-# x_test = x_test[:100, :, :, :]
+x_train = x_train[:200, :, :, :]
+x_test = x_test[:100, :, :, :]
 x_train = x_train / 255.0
 x_test = x_test / 255.0
-# y_train = y_train[:200]
-# y_test = y_test[:100]
+y_train = y_train[:200]
+y_test = y_test[:100]
 
 print(x_train.shape, 'train samples')
 print(x_test.shape, 'test samples')

@@ -5,7 +5,7 @@ Base Estimators Wrapper Definition.
 
 import numpy as np
 from ..utils.storage_utils import *
-from ..utils.log_utils import get_logger
+from ..utils.log_utils import get_logger, get_logging_level
 
 LOGGER = get_logger('estimators.base_estimator')
 
@@ -22,6 +22,7 @@ class BaseEstimator(object):
         :param name: estimator name
         :param est_args: dict, estimator argument
         """
+        LOGGER.setLevel(get_logging_level())
         self.name = name
         self.task = task
         self.est_class = est_class
@@ -209,7 +210,7 @@ class BaseEstimator(object):
         ------
         predict_batch_size (int): default=0
             if = 0,  predict_proba without batches
-            if > 0, then predict_proba without batches
+            if > 0, then predict_proba with batches
             sklearn predict_proba is not so inefficient, has to do this
         """
         return 0

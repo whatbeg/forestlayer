@@ -7,6 +7,8 @@ Argument class definition.
 # Authors: Qiu Hu <huqiu00#163.com>
 # License: Apache-2.0
 
+from ..utils.log_utils import get_logger
+
 
 class EstimatorArgument(object):
     """
@@ -16,6 +18,7 @@ class EstimatorArgument(object):
     initialization parameters, but put the EstimatorArgument that describes the estimator.
     """
     def __init__(self):
+        self.LOGGER = get_logger('estimator.argument')
         self.est_args = {}
 
     def get_est_args(self):

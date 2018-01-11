@@ -14,8 +14,6 @@ from ..utils.metrics import Accuracy
 from ..utils.log_utils import get_logger
 from ..utils.storage_utils import name2path
 
-LOGGER = get_logger('estimators.kfold_wrapper')
-
 
 class KFoldWrapper(object):
     def __init__(self, name, n_folds, est_class, seed=None,
@@ -31,6 +29,7 @@ class KFoldWrapper(object):
         :param keep_in_mem:
         :param est_args:
         """
+        self.LOGGER = get_logger('estimators.kfold_wrapper')
         self.name = name
         self.n_folds = n_folds
         self.est_class = est_class
@@ -158,7 +157,7 @@ class KFoldWrapper(object):
         if x_tests is None or x_tests == []:
             return []
         if isinstance(x_tests, (list, tuple)):
-            LOGGER.warn('transform(x_tests) only support single ndarray instead of list of ndarrays')
+            self.LOGGER.warn('transform(x_tests) only support single ndarray instead of list of ndarrays')
             x_tests = x_tests[0]
         proba_result = None
         for k, est in enumerate(self.fit_estimators):
@@ -183,7 +182,7 @@ class KFoldWrapper(object):
             return
         for metric in self.eval_metrics:
             acc = metric.calc_proba(y_true, y_proba)
-            LOGGER.info("{}({} - {}) = {:.4f}{}".format(
+            self.LOGGER.info("{}({} - {}) = {:.4f}{}".format(
                 metric.name, est_name, y_name, acc, '%' if isinstance(metric, Accuracy) else ''))
 
     def _predict_proba(self, est, X):

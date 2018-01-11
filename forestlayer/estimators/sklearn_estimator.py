@@ -13,21 +13,25 @@ LOGGER = get_logger('estimators.sklearn_estimator')
 def forest_predict_batch_size(clf, X, task):
     """
     Decide predict batch size by calculating memory occupation.
-    :param clf:
-    :param X:
-    :param task:
-    :return:
+    :param clf: classifier
+    :param X: training data
+    :param task: learning task
+    :return: batch_size
     """
     import psutil
     free_memory = psutil.virtual_memory().free
+    LOGGER.debug('free_memory: {}'.format(free_memory))
     if free_memory < 2e9:
         free_memory = int(2e9)
+    # max_mem_size = max(half of free memory, 10GB)
     max_mem_size = max(int(free_memory * 0.5), int(8e10))
+    LOGGER.debug('max_mem_size: {}'.format(max_mem_size))
     if task == 'regression':
         mem_size_1 = clf.n_estimators * 16
     else:
         mem_size_1 = clf.n_classes_ * clf.n_estimators * 16
     batch_size = (max_mem_size - 1) / mem_size_1 + 1
+    LOGGER.debug('batch_size = {} / {} = {}'.format(max_mem_size - 1, mem_size_1, batch_size))
     if batch_size < 10:
         batch_size = 10
     if batch_size >= X.shape[0]:
@@ -39,19 +43,22 @@ class SKlearnBaseEstimator(BaseEstimator):
     """
     SKlearn base estimators inherited from BaseEstimator.
     """
+    def __init__(self, task=None, est_class=None, name=None, est_args=None):
+        super(SKlearnBaseEstimator, self).__init__(task, est_class, name, est_args)
+
     def _save_model_to_disk(self, est, cache_path):
         """
         Save model to disk using joblib.
-        :param est:
-        :param cache_path:
-        :return:
+        :param est: estimator
+        :param cache_path: cache path
+        :return: None
         """
         joblib.dump(est, cache_path)
 
     def _load_model_from_disk(self, cache_path):
         """
         Load model from disk using joblib.
-        :param cache_path:
+        :param cache_path: cache path
         :return:
         """
         return joblib.load(cache_path)
