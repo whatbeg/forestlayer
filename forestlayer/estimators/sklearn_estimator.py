@@ -29,6 +29,7 @@ def forest_predict_batch_size(clf, X, task):
     if task == 'regression':
         mem_size_1 = clf.n_estimators * 16
     else:
+        LOGGER.debug('mem_size_1 = {} * {} * 16'.format(clf.n_classes_, clf.n_estimators))
         mem_size_1 = clf.n_classes_ * clf.n_estimators * 16
     batch_size = (max_mem_size - 1) / mem_size_1 + 1
     LOGGER.debug('batch_size = {} / {} = {}'.format(max_mem_size - 1, mem_size_1, batch_size))

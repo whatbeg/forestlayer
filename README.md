@@ -61,7 +61,8 @@ rf2 = RandomForest(min_samples_leaf=10)
 windows = [Window(win_x=7, win_y=7, stride_x=2, stride_y=2, pad_x=0, pad_y=0),
            Window(11, 11, 2, 2)]
 
-est_for_windows = [[rf1, rf2], [rf1, rf2]]
+est_for_windows = [[rf1, rf2],
+                   [rf1, rf2]]
 
 mgs = MultiGrainScanLayer(windows=windows,
                           est_for_windows=est_for_windows,
@@ -71,10 +72,10 @@ mgs = MultiGrainScanLayer(windows=windows,
 After multi-grain scan, we consider that building a pooling layer to reduce the dimension of generated feature vectors, so that reduce the computation and storage complexity and risk of overfiting.
 ``` python
 from forestlayer.layers.layer import PoolingLayer
-from forestlayer.layers.window import Pooling
+from forestlayer.layers.factory import MaxPooling
 
-pools = [[Pooling(win_x=2, win_y=2, pool_strategy="max"), Pooling(2, 2, "max")],
-         [Pooling(win_x=2, win_y=2, pool_strategy="max"), Pooling(2, 2, "max")]]
+pools = [[MaxPooling(2, 2), MaxPooling(2, 2)],
+         [MaxPooling(2, 2), MaxPooling(2, 2)]]
 
 pool = PoolingLayer(pools=pools)
 ```

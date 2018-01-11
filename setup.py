@@ -16,7 +16,9 @@ install_requires = [
     'keras',
     'ray',
     'joblib',
-    'xgboost'
+    'xgboost',
+    'psutil',
+    'matplotlib'
 ]
 
 setup(

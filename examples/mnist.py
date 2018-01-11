@@ -11,30 +11,24 @@ from __future__ import print_function
 from forestlayer.layers import Graph, MultiGrainScanLayer, PoolingLayer, ConcatLayer, AutoGrowingCascadeLayer
 from forestlayer.estimators.arguments import CompletelyRandomForest, RandomForest
 from forestlayer.layers.window import Window, Pooling
+from forestlayer.layers.factory import MeanPooling
 from forestlayer.utils.storage_utils import get_data_save_base, get_model_save_base
 from keras.datasets import mnist
-from forestlayer.utils.log_utils import set_logging_level, set_logging_dir, get_logging_dir
+from forestlayer.utils.log_utils import set_logging_dir
 import os.path as osp
 
 set_logging_dir(osp.abspath('./../log/examples/mnist'))
-
-import logging
-
-
-# set_logging_level(logging.DEBUG)
-
-print(get_logging_dir())
 
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
 
 x_train = x_train.reshape(60000, -1, 28, 28)
 x_test = x_test.reshape(10000, -1, 28, 28)
-x_train = x_train[:200, :, :, :]
-x_test = x_test[:100, :, :, :]
+# x_train = x_train[:200, :, :, :]
+# x_test = x_test[:100, :, :, :]
 x_train = x_train / 255.0
 x_test = x_test / 255.0
-y_train = y_train[:200]
-y_test = y_test[:100]
+# y_train = y_train[:200]
+# y_test = y_test[:100]
 
 print(x_train.shape, 'train samples')
 print(x_test.shape, 'test samples')
@@ -43,16 +37,18 @@ rf1 = CompletelyRandomForest(min_samples_leaf=10)
 rf2 = RandomForest(min_samples_leaf=10)
 
 windows = [Window(win_x=7, win_y=7, stride_x=2, stride_y=2, pad_x=0, pad_y=0),
-           Window(11, 11, 2, 2)]
+           Window(10, 10, 2, 2),
+           Window(13, 13, 2, 2)]
 
-est_for_windows = [[rf1, rf2], [rf1, rf2]]
+est_for_windows = [[rf1, rf2], [rf1, rf2], [rf1, rf2]]
 
 mgs = MultiGrainScanLayer(windows=windows,
                           est_for_windows=est_for_windows,
                           n_class=10)
 
-pools = [[Pooling(win_x=2, win_y=2, pool_strategy="max"), Pooling(2, 2, "max")],
-         [Pooling(win_x=2, win_y=2, pool_strategy="max"), Pooling(2, 2, "max")]]
+pools = [[MeanPooling(2, 2), MeanPooling(2, 2)],
+         [MeanPooling(2, 2), MeanPooling(2, 2)],
+         [MeanPooling(2, 2), MeanPooling(2, 2)]]
 
 pool = PoolingLayer(pools=pools)
 
