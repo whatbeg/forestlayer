@@ -155,6 +155,8 @@ class Pooling(object):
         :param X:
         :return:
         """
+        if X is None or X is []:
+            return X
         n, c, h, w = X.shape
         nh = (h - 1) / self.win_x + 1
         nw = (w - 1) / self.win_y + 1
@@ -181,6 +183,8 @@ class Pooling(object):
         :param X:
         :return:
         """
+        if X is None or X is []:
+            return X
         return self._transform(X)
 
 

@@ -8,3 +8,13 @@ Base utilities.
 # License: Apache-2.0
 
 
+def check_list_depth(lis):
+    if lis is None:
+        return 0
+    depth = 0
+    tmp = lis
+    while isinstance(tmp, (list, tuple)):
+        depth += 1
+        tmp = tmp[0]
+    return depth
+

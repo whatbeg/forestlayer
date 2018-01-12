@@ -159,6 +159,7 @@ ForestLayer is released under the Apache 2.0 license.
 
 ## TODO
 
+* [ ] model.summary()
 * [ ] Distributed training
 * [ ] Add model save and load mechanism
 * [ ] Benchmarks

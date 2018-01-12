@@ -14,6 +14,7 @@ import datetime
 import os.path as osp
 import pickle
 from ..utils.log_utils import get_logger, list2str
+from ..utils.utils import check_list_depth
 from ..utils.storage_utils import check_dir
 from ..utils.metrics import Accuracy, AUC, MSE
 from ..estimators import get_estimator_kfold, EstimatorArgument
@@ -138,10 +139,10 @@ class MultiGrainScanLayer(Layer):
         self.keep_in_mem = keep_in_mem
         self.eval_metrics = eval_metrics
 
-    def call(self, x_trains, **kwargs):
+    def call(self, x_train, **kwargs):
         pass
 
-    def __call__(self, x_trains, **kwargs):
+    def __call__(self, x_train, **kwargs):
         pass
 
     def scan(self, window, x):
@@ -183,25 +184,27 @@ class MultiGrainScanLayer(Layer):
                                    keep_in_mem=self.keep_in_mem,
                                    est_args=est_args)
 
-    def fit(self, x_trains, y_trains):
+    def _check_input(self, x, y):
+        if isinstance(x, (list, tuple)):
+            assert len(x) == 1, "Multi grain scan Layer only supports exactly one input now!"
+            x = x[0]
+        if isinstance(y, (list, tuple)):
+            assert len(y) == 1, "Multi grain scan Layer only supports exactly one input now!"
+            y = y[0]
+        return x, y
+
+    def fit(self, x_train, y_train):
         """
         Fit.
 
-        :param x_trains:
-        :param y_trains:
+        :param x_train:
+        :param y_train:
         :return:
         """
-        if isinstance(x_trains, (list, tuple)):
-            assert len(x_trains) == 1, "Multi grain scan Layer only supports exactly one input now!"
-            x_trains = x_trains[0]
-        if isinstance(y_trains, (list, tuple)):
-            assert len(y_trains) == 1, "Multi grain scan Layer only supports exactly one input now!"
-            y_trains = y_trains[0]
-        # Construct test sets
+        x_train, y_train = self._check_input(x_train, y_train)
         x_wins_train = []
         for win in self.windows:
-            x_wins_train.append(self.scan(win, x_trains))
-        # [[win, win], [win, win], ...], len = len(test_sets)
+            x_wins_train.append(self.scan(win, x_train))
         self.LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
         x_win_est_train = []
         for wi, ests_for_win in enumerate(self.est_for_windows):
@@ -212,7 +215,7 @@ class MultiGrainScanLayer(Layer):
             _, nh, nw, _ = x_wins_train[wi].shape
             # (60000, 121, 49)
             x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
-            y_win = y_trains[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
+            y_win = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
             for ei, est in enumerate(ests_for_win):
                 if isinstance(est, EstimatorArgument):
                     est = self._init_estimator(est, wi, ei)
@@ -227,45 +230,31 @@ class MultiGrainScanLayer(Layer):
         self.LOGGER.info('x_win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
         return x_win_est_train
 
-    def fit_transform(self, x_trains, y_trains, x_tests=None, y_tests=None):
+    def fit_transform(self, x_train, y_train, x_test=None, y_test=None):
         """
-        Fit transform.
+        Fit and transform.
 
-        :param x_trains:
-        :param y_trains:
-        :param x_tests:
-        :param y_tests:
+        :param x_train:
+        :param y_train:
+        :param x_test:
+        :param y_test:
         :return:
         """
-        if x_tests is None:
-            return self.fit(x_trains, y_trains), None
-        if isinstance(x_trains, (list, tuple)):
-            assert len(x_trains) == 1, "Multi grain scan Layer only supports exactly one input now!"
-            x_trains = x_trains[0]
-        if isinstance(y_trains, (list, tuple)):
-            assert len(y_trains) == 1, "Multi grain scan Layer only supports exactly one input now!"
-            y_trains = y_trains[0]
-        if x_tests is not None and not isinstance(x_tests, (list, tuple)):
-            x_tests = [x_tests]
-        if y_tests is not None and not isinstance(y_tests, (list, tuple)):
-            y_tests = [y_tests]
+        if x_test is None:
+            return self.fit(x_train, y_train), None
+        x_train, y_train = self._check_input(x_train, y_train)
+        x_test, y_test = self._check_input(x_test, y_test)
         # Construct test sets
         x_wins_train = []
         x_wins_test = []
         for win in self.windows:
-            x_wins_train.append(self.scan(win, x_trains))
+            x_wins_train.append(self.scan(win, x_train))
         for win in self.windows:
-            tmp_wins_test = []
-            for test_data in x_tests:
-                tmp_wins_test.append(self.scan(win, test_data))
-            x_wins_test.append(tmp_wins_test)
-        # [[win, win], [win, win], ...], len = len(test_sets)
-        # test_sets = [('testOfWin{}'.format(i), x, y) for i, x, y in enumerate(zip(x_wins_test, y_tests))]
+            x_wins_test.append(self.scan(win, x_test))
+        # Deprecated: [[win, win], [win, win], ...], len = len(test_sets)
+        # Deprecated: test_sets = [('testOfWin{}'.format(i), x, y) for i, x, y in enumerate(zip(x_wins_test, y_tests))]
         self.LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
-        log_info = 'X_wins of tests: '
-        for i in range(len(x_wins_test)):
-            log_info += '{}, '.format([win.shape for win in x_wins_test[i]])
-        self.LOGGER.info(log_info)
+        self.LOGGER.info('X_wins of  test: {}'.format([win.shape for win in x_wins_test]))
         x_win_est_train = []
         x_win_est_test = []
         for wi, ests_for_win in enumerate(self.est_for_windows):
@@ -277,54 +266,46 @@ class MultiGrainScanLayer(Layer):
             _, nh, nw, _ = x_wins_train[wi].shape
             # (60000, 121, 49)
             x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
-            y_win = y_trains[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
-            for ti, ts in enumerate(x_wins_test[wi]):
-                x_wins_test[wi][ti] = ts.reshape((ts.shape[0], -1, ts.shape[-1]))
-            if y_tests is None:
-                tmp_y_tests = [None for _ in range(len(x_wins_test))]
-            else:
-                tmp_y_tests = copy.deepcopy(y_tests)
-                for i, y_test in enumerate(y_tests):
-                    tmp_y_tests[i] = y_test[:, np.newaxis].repeat(x_wins_test[wi][i].shape[1], axis=1)
-            test_sets = [('testOfWin{}'.format(wi), tw, tmp_y_tests[i]) for i, tw in enumerate(x_wins_test[wi])]
+            y_win = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
+            x_wins_test[wi] = x_wins_test[wi].reshape((x_wins_test[wi].shape[0], -1, x_wins_test[wi].shape[-1]))
+            y_win_test = y_test[:, np.newaxis].repeat(x_wins_test[wi].shape[1], axis=1)
+            test_sets = [('testOfWin{}'.format(wi), x_wins_test[wi], y_win_test)]
+            # fit estimators for this window
             for ei, est in enumerate(ests_for_win):
                 if isinstance(est, EstimatorArgument):
                     est = self._init_estimator(est, wi, ei)
                 # (60000, 121, 10)
                 y_proba_train, y_probas_test = est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
-                for i in range(len(y_probas_test)):
-                    # (60000, 10, 11, 11)
-                    y_probas_test[i] = y_probas_test[i].reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                assert len(y_probas_test) == 1, 'assume there is only one test set!'
+                y_probas_test = y_probas_test[0]
+                y_probas_test = y_probas_test.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
                 win_est_train.append(y_proba_train)
                 win_est_test.append(y_probas_test)
-                self.est_for_windows[wi][ei] = est
+                if self.keep_in_mem:
+                    self.est_for_windows[wi][ei] = est
             x_win_est_train.append(win_est_train)
             x_win_est_test.append(win_est_test)
         if len(x_win_est_train) == 0:
             return x_wins_train, x_wins_test
         self.LOGGER.info('x_win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
-        if len(x_win_est_test) > 0:
-            self.LOGGER.info('x_win_est_test[0].shape: {}'.format(list2str(x_win_est_test[0], 2)))
-        if len(x_win_est_test) > 1:
-            self.LOGGER.info('x_win_est_test[1].shape: {}'.format(list2str(x_win_est_test[1], 2)))
+        self.LOGGER.info(' x_win_est_test.shape: {}'.format(list2str(x_win_est_test, 2)))
         return x_win_est_train, x_win_est_test
 
-    def transform(self, x_trains):
+    def transform(self, x_train):
         """
         Transform.
 
-        :param x_trains:
+        :param x_train:
         :return:
         """
-        assert x_trains is not None, 'x_trains should not be None!'
-        if isinstance(x_trains, (list, tuple)):
-            assert len(x_trains) == 1, "Multi grain scan Layer only supports exactly one input now!"
-            x_trains = x_trains[0]
-        # Construct test sets
+        assert x_train is not None, 'x_trains should not be None!'
+        if isinstance(x_train, (list, tuple)):
+            assert len(x_train) == 1, "Multi grain scan Layer only supports exactly one input now!"
+            x_train = x_train[0]
         x_wins_train = []
         for win in self.windows:
-            x_wins_train.append(self.scan(win, x_trains))
+            x_wins_train.append(self.scan(win, x_train))
         # [[win, win], [win, win], ...], len = len(test_sets)
         self.LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
         x_win_est_train = []
@@ -419,46 +400,48 @@ class PoolingLayer(Layer):
             return self.fit(x_trains, y_trains), None
         # inputs shape: [[(60000, 10, 11, 11), (60000, 10, 11, 11)], [.., ..], ...]
         if len(self.pools) != len(x_trains):
-            raise ValueError('len(pools) does not equal to len(inputs), you must set right pools!')
-        x_tests = x_tests if x_tests is not None else []
+            raise ValueError('len(pools) does not equal to len(x_trains), you must set right pools!')
+        if len(self.pools) != len(x_tests):
+            raise ValueError('len(pools) does not equal to len(x_tests), you must set right pools!')
         for pi, pool in enumerate(self.pools):
             if not isinstance(pool, (list, tuple)):
                 pool = [pool]
             if len(pool) != len(x_trains[pi]):
                 raise ValueError('len(pools[{}]) does not equal to'
-                                 ' len(inputs[{}]), you must set right pools!'.format(pi, pi))
+                                 ' len(train inputs[{}]), you must set right pools!'.format(pi, pi))
+            if len(pool) != len(x_tests[pi]):
+                raise ValueError('len(pools[{}]) does not equal to'
+                                 ' len(test inputs[{}]), you must set right pools!'.format(pi, pi))
             for pj, pl in enumerate(pool):
                 x_trains[pi][pj] = pl.fit_transform(x_trains[pi][pj])
-                for ti, ts in enumerate(x_tests[pi][pj]):
-                    x_tests[pi][pj][ti] = pl.fit_transform(ts)
+                x_tests[pi][pj] = pl.fit_transform(x_tests[pi][pj])
         self.LOGGER.info('x_trains pooled: {}'.format(list2str(x_trains, 2)))
-        if len(x_tests) > 0:
-            self.LOGGER.info('x_tests pooled: {}'.format(list2str(x_tests, 3)))
+        self.LOGGER.info('x_tests  pooled: {}'.format(list2str(x_tests, 2)))
         return x_trains, x_tests
 
-    def transform(self, x_trains):
+    def transform(self, xs):
         """
         Transform.
 
-        :param x_trains:
+        :param xs:
         :return:
         """
-        assert x_trains is not None, 'x_trains should not be None!'
-        if not isinstance(x_trains, (list, tuple)):
-            x_trains = [x_trains]
+        assert xs is not None, 'x_trains should not be None!'
+        if not isinstance(xs, (list, tuple)):
+            xs = [xs]
         # inputs shape: [[(60000, 10, 11, 11), (60000, 10, 11, 11)], [.., ..], ...]
-        if len(self.pools) != len(x_trains):
+        if len(self.pools) != len(xs):
             raise ValueError('len(pools) does not equal to len(inputs), you must set right pools!')
         for pi, pool in enumerate(self.pools):
             if not isinstance(pool, (list, tuple)):
                 pool = [pool]
-            if len(pool) != len(x_trains[pi]):
+            if len(pool) != len(xs[pi]):
                 raise ValueError('len(pools[{}]) does not equal to'
                                  ' len(inputs[{}]), you must set right pools!'.format(pi, pi))
             for pj, pl in enumerate(pool):
-                x_trains[pi][pj] = pl.transform(x_trains[pi][pj])
-        self.LOGGER.info('[transform] x_trains pooled: {}'.format(list2str(x_trains, 2)))
-        return x_trains
+                xs[pi][pj] = pl.transform(xs[pi][pj])
+        self.LOGGER.info('[transform] x_trains pooled: {}'.format(list2str(xs, 2)))
+        return xs
 
     def evaluate(self, inputs, labels):
         raise NotImplementedError
@@ -495,37 +478,37 @@ class ConcatLayer(Layer):
     def __call__(self, *args, **kwargs):
         pass
 
-    def _fit(self, x_trains):
+    def _fit(self, xs):
         """
         fit inner method.
 
-        :param x_trains:
+        :param xs:
         :return:
         """
-        if not isinstance(x_trains, (list, tuple)):
-            x_trains = [x_trains]
+        if not isinstance(xs, (list, tuple)):
+            xs = [xs]
         # inputs shape: [[(60000, 10, 6, 6), (60000, 10, 6, 6)], [.., ..], ...]
-        concat_train = []
-        for bottoms in x_trains:
+        concat_results = []
+        for bottoms in xs:
             if self.axis == -1:
                 for i, bottom in enumerate(bottoms):
                     bottoms[i] = bottom.reshape((bottom.shape[0], -1))
                 concat_res = np.concatenate(bottoms, 1)
             else:
                 concat_res = np.concatenate(bottoms, self.axis)
-            concat_train.append(concat_res)
-        return concat_train
+            concat_results.append(concat_res)
+        return concat_results
 
-    def transform(self, x_trains):
+    def transform(self, xs):
         """
         Transform.
 
-        :param x_trains:
+        :param xs:
         :return:
         """
-        concat_train = self._fit(x_trains)
-        self.LOGGER.info("[transform] concat train shape: {}".format(list2str(concat_train, 1)))
-        return concat_train
+        concat = self._fit(xs)
+        self.LOGGER.info("[transform] concatenated shape: {}".format(list2str(concat, 1)))
+        return concat
 
     def evaluate(self, inputs, labels=None):
         raise NotImplementedError
@@ -555,32 +538,10 @@ class ConcatLayer(Layer):
         if x_tests is None:
             return self.fit(x_trains, y_trains), None
         # inputs shape: [[(60000, 10, 6, 6), (60000, 10, 6, 6)], [.., ..], ...]
-        concat_train = []
-        for bottoms in x_trains:
-            if self.axis == -1:
-                for i, bottom in enumerate(bottoms):
-                    bottoms[i] = bottom.reshape((bottom.shape[0], -1))
-                concat_res = np.concatenate(bottoms, 1)
-            else:
-                concat_res = np.concatenate(bottoms, self.axis)
-            concat_train.append(concat_res)
+        concat_train = self._fit(x_trains)
         self.LOGGER.info("concat train shape: {}".format(list2str(concat_train, 1)))
-        # x_tests = [] if x_tests is None else x_tests
-        if len(x_tests) > 0 and len(x_tests[0][0]) != 1:
-            raise ValueError("Now Concat Layer only supports one test_data in test_set")
-        for bottoms in x_tests:
-            for i, bot in enumerate(bottoms):
-                bottoms[i] = bot[0]
-        concat_test = []
-        for bottoms in x_tests:
-            if self.axis == -1:
-                for i, bottom in enumerate(bottoms):
-                    bottoms[i] = bottom.reshape((bottom.shape[0], -1))
-                concat_res = np.concatenate(bottoms, 1)
-            else:
-                concat_res = np.concatenate(bottoms, self.axis)
-            concat_test.append(concat_res)
-        self.LOGGER.info("concat test data shape: {}".format(list2str(concat_test, 1)))
+        concat_test = self._fit(x_tests)
+        self.LOGGER.info(" concat test shape: {}".format(list2str(concat_test, 1)))
         return concat_train, concat_test
 
     def predict(self, X):
@@ -611,7 +572,8 @@ class CascadeLayer(Layer):
                             TODO: support dump model to disk to save memory
         :param data_save_dir: directory to save intermediate data into
         :param model_save_dir: directory to save fit estimators into
-        :param metrics: evaluation metrics used in training model and evaluating testing data
+        :param metrics: str, evaluation metrics used in training model and evaluating testing data.
+                        Support: 'accuracy', 'auc', 'mse', default is accuracy (classification) and mse (regression).
         :param seed: random seed, also called random state in scikit-learn random forest
 
         # Properties
@@ -648,14 +610,14 @@ class CascadeLayer(Layer):
         if self.metrics == 'accuracy':
             self.eval_metrics = [Accuracy('accuracy')]
         elif self.metrics == 'auc':
-            self.eval_metrics = [AUC('auc')]
-        elif self.metrics == 'MSE':
+            self.eval_metrics = [AUC('AUC')]
+        elif self.metrics == 'mse':
             self.eval_metrics = [MSE('Mean Square Error')]
         else:
             if self.task == 'regression':
                 self.eval_metrics = [MSE('Mean Square Error')]
             else:
-                self.eval_metrics = [Accuracy('accuracy')]
+                self.eval_metrics = [Accuracy('Accuracy')]
         # whether this layer the last layer of Auto-growing cascade layer
         self.complete = False
         self.fit_estimators = [None for _ in range(self.n_estimators)]
@@ -669,7 +631,66 @@ class CascadeLayer(Layer):
     def __call__(self, inputs, **kwargs):
         self.call(inputs, **kwargs)
 
+    def _concat(self, x, depth):
+        """
+        Concatenation inner method, to make multiple inputs to be single input, so that to feed it into classifiers.
+
+        :param x: input data, single ndarray(depth=0) or list(depth=1) or 2D list (depth=2), at most 2D.
+        :param depth: as stated above, single ndarray(depth=0) or list(depth=1) or 2D list (depth=2)
+        :return: concatenated data
+        """
+        if depth == 0:
+            return x
+        elif depth == 1:
+            for i, bottom in enumerate(x):
+                x[i] = bottom.reshape((bottom.shape[0], -1))
+            x = np.concatenate(x, 1)
+        elif depth == 2:
+            for i, bottoms in enumerate(x):
+                for j, bot in enumerate(bottoms):
+                    bottoms[j] = bot.reshape((bot.shape[0], -1))
+                x[i] = np.concatenate(bottoms, 1)
+            for i, bottom in enumerate(x):
+                x[i] = bottom.reshape((bottom.shape[0], -1))
+            x = np.concatenate(x, 1)
+        else:
+            raise ValueError('_concat failed. depth should be less than 2!')
+        return x
+
+    def _validate_input(self, x_train, y_train, x_test=None, y_test=None):
+        """
+        Validate input, check if x_train / x_test s' depth, and do some necessary transform like concatenation.
+
+        :param x_train:
+        :param y_train:
+        :param x_test:
+        :param y_test:
+        :return:
+        """
+        assert x_train is not None and y_train is not None, 'x_train is None or y_train should not be None'
+        train_depth = 0
+        if isinstance(x_train, (list, tuple)):
+            train_depth = check_list_depth(x_train)
+        x_train = self._concat(x_train, train_depth)
+        if x_test is not None:
+            test_depth = 0
+            if isinstance(x_test, (list, tuple)):
+                test_depth = check_list_depth(x_test)
+            x_test = self._concat(x_test, test_depth)
+        if isinstance(y_train, (list, tuple)) and y_train is not None:
+            y_train = None if len(y_train) == 0 else y_train[0]
+        if isinstance(y_test, (list, tuple)) and y_test is not None:
+            y_test = None if len(y_test) == 0 else y_test[0]
+        return x_train, y_train, x_test, y_test
+
     def _init_estimators(self, layer_id, est_id):
+        """
+        Initialize a k_fold estimator.
+
+        :param layer_id:
+        :param est_id:
+        :return:
+        """
         est_args = self.est_configs[est_id].copy()
         est_name = 'layer - {} - estimator - {} - {}folds'.format(layer_id, est_id, est_args['n_folds'])
         n_folds = int(est_args['n_folds'])
@@ -694,19 +715,15 @@ class CascadeLayer(Layer):
         """
         Fit and Transform datasets, return one numpy ndarray: train_output
         NOTE: Only one train set and one test set.
+
         :param x_train: train datasets
         :param y_train: train labels
         :return: train_output
         """
-        if isinstance(x_train, (list, tuple)):
-            x_train = None if len(x_train) == 0 else x_train[0]
-        if isinstance(y_train, (list, tuple)):
-            y_train = None if len(y_train) == 0 else y_train[0]
-        assert x_train is not None and y_train is not None, 'x_train is None or y_train is None'
-        assert x_train.shape[0] == y_train.shape[0], 'x_train.shape[0] = {} not equal to y_train.shape[0] = {}'.format(
-            x_train.shape[0], y_train.shape[0]
-        )
-        self.LOGGER.info('X_train.shape={},y_train.shape={}'.format(x_train.shape, y_train.shape))
+        x_train, y_train, _, _ = self._validate_input(x_train, y_train)
+        assert x_train.shape[0] == y_train.shape[0], 'x_train.shape[0] = {} not equal to y_train.shape[0]' \
+                                                     ' = {}'.format(x_train.shape[0], y_train.shape[0])
+        self.LOGGER.info('X_train.shape={}, y_train.shape={}'.format(x_train.shape, y_train.shape))
         n_trains = x_train.shape[0]
         n_classes = self.n_classes  # if regression, n_classes = 1
         if self.task == 'classification' and n_classes is None:
@@ -723,7 +740,8 @@ class CascadeLayer(Layer):
             y_proba_train, _ = est.fit_transform(x_train, y_train, y_stratify, test_sets=None)
             # print(y_proba_train.shape, y_proba_test.shape)
             if y_proba_train is None:
-                raise RuntimeError("layer - {} - estimator - {} fit FAILED!".format(self.layer_id, ei))
+                raise RuntimeError("layer - {} - estimator - {} fit FAILED!,"
+                                   " y_proba_train is None!".format(self.layer_id, ei))
             self.check_shape(y_proba_train, n_trains, n_classes)
             if self.keep_in_mem:
                 self.fit_estimators[ei] = est
@@ -742,29 +760,23 @@ class CascadeLayer(Layer):
         Fit and Transform datasets, return two numpy ndarray: train_output, test_output
         NOTE: Only one train set and one test set.
         if x_test is None, we invoke _fit_transform to get one numpy ndarray: train_output
-        :param x_train: train datasets
-        :param y_train: train labels
-        :param x_test: test datasets
-        :param y_test: test labels, can be None
+
+        :param x_train: training data
+        :param y_train: training label
+        :param x_test: testing data
+        :param y_test: testing label, can be None,
+                       if None, we see that the fit_transform must give the predictions of x_test.
         :return: train_output, test_output
         """
         if x_test is None:
             return self.fit(x_train, y_train), None
-        if isinstance(x_train, (list, tuple)):
-            x_train = None if len(x_train) == 0 else x_train[0]
-        if isinstance(y_train, (list, tuple)):
-            y_train = None if len(y_train) == 0 else y_train[0]
-        if isinstance(x_test, (list, tuple)):
-            x_test = None if len(x_test) == 0 else x_test[0]
-        if isinstance(y_test, (list, tuple)):
-            y_test = None if len(y_test) == 0 else y_test[0]
+        x_train, y_train, x_test, y_test = self._validate_input(x_train, y_train, x_test, y_test)
         if y_test is None:
             y_test_shape = (0,)
         else:
             y_test_shape = y_test.shape
-        self.LOGGER.info('X_train.shape={},y_train.shape={} / X_test.shape={},y_test.shape={}'.format(
-            x_train.shape, y_train.shape, x_test.shape, y_test_shape
-        ))
+        self.LOGGER.info('X_train.shape={}, y_train.shape={}'.format(x_train.shape, y_train.shape))
+        self.LOGGER.info(' X_test.shape={},  y_test.shape={}'.format(x_test.shape, y_test_shape))
         n_trains = x_train.shape[0]
         n_tests = x_test.shape[0]
         n_classes = self.n_classes  # if regression, n_classes = 1
@@ -788,7 +800,8 @@ class CascadeLayer(Layer):
                 y_proba_test = y_proba_test[0]
             # print(y_proba_train.shape, y_proba_test.shape)
             if y_proba_train is None:
-                raise RuntimeError("layer - {} - estimator - {} fit FAILED!".format(self.layer_id, ei))
+                raise RuntimeError("layer - {} - estimator - {} fit FAILED!,"
+                                   " y_proba_train is None".format(self.layer_id, ei))
             self.check_shape(y_proba_train, n_trains, n_classes)
             if y_proba_test is not None:
                 self.check_shape(y_proba_test, n_tests, n_classes)
@@ -802,7 +815,8 @@ class CascadeLayer(Layer):
         eval_proba_test /= self.n_estimators
         metric = self.eval_metrics[0]
         train_avg_metric = metric.calc_proba(y_train, eval_proba_train,
-                                             'layer - {} - [train] average'.format(self.layer_id), logger=self.LOGGER)
+                                             'layer - {} - [train] average {}'.format(self.layer_id, metric.name),
+                                             logger=self.LOGGER)
         self.train_avg_metric = train_avg_metric
         # judge whether y_test is None, which means users are to predict test probas
         if y_test is not None:
@@ -822,15 +836,17 @@ class CascadeLayer(Layer):
     @property
     def n_estimators(self):
         """
-        Number of estimators of this layer
+        Number of estimators of this layer.
+
         :return:
         """
         return len(self.est_configs)
 
     def transform(self, X):
         """
-        Transform datasets, return one numpy ndarray
+        Transform datasets, return one numpy ndarray.
         NOTE: Only one train set and one test set.
+
         :param X: train datasets
         :return:
         """
@@ -854,14 +870,21 @@ class CascadeLayer(Layer):
         return self.task == 'classification'
 
     def predict(self, X):
+        """
+        Predict data X.
+
+        :param X:
+        :return:
+        """
         proba_sum = self.predict_proba(X)
         n_classes = self.n_classes
         return np.argmax(proba_sum.reshape((-1, n_classes)), axis=1)
 
     def predict_proba(self, X):
         """
-        Transform datasets, return one numpy ndarray
+        Transform datasets, return one numpy ndarray.
         NOTE: Only one train set and one test set.
+
         :param X: train datasets
         :return:
         """
@@ -881,6 +904,14 @@ class CascadeLayer(Layer):
         return proba_sum
 
     def evaluate(self, X, y, eval_metrics=None):
+        """
+        Evaluate dataset (X, y) with evaluation metrics.
+
+        :param X: data
+        :param y: label
+        :param eval_metrics: evaluation metrics
+        :return: None
+        """
         if eval_metrics is None:
             eval_metrics = [Accuracy('evaluate')]
         if isinstance(y, (list, tuple)):
@@ -953,7 +984,7 @@ class AutoGrowingCascadeLayer(Layer):
             self.eval_metrics = [Accuracy('accuracy')]
         elif self.metrics == 'auc':
             self.eval_metrics = [AUC('auc')]
-        elif self.metrics == 'MSE':
+        elif self.metrics == 'mse':
             self.eval_metrics = [MSE('Mean Square Error')]
         else:
             if self.task == 'regression':
@@ -977,6 +1008,7 @@ class AutoGrowingCascadeLayer(Layer):
                               dtype=None, metrics=None, seed=None):
         """
         Create a cascade layer.
+
         :param task:
         :param est_configs:
         :param n_classes:
@@ -1001,7 +1033,8 @@ class AutoGrowingCascadeLayer(Layer):
 
     def add(self, est):
         """
-        Add an estimator to the auto growing cascade layer
+        Add an estimator to the auto growing cascade layer.
+
         :param est:
         :return:
         """
@@ -1012,18 +1045,33 @@ class AutoGrowingCascadeLayer(Layer):
         else:
             raise ValueError("Unknown estimator information {}".format(est))
 
+    @property
+    def _percent(self):
+        return '%' if isinstance(self.eval_metrics[0], Accuracy) else ''
+
+    @property
+    def is_classification(self):
+        return self.task == 'classification'
+
+    @property
+    def larger_better(self):
+        """
+        True if the evaluation metric larger is better.
+        :return:
+        """
+        if isinstance(self.eval_metrics[0], (MSE, )):
+            return False
+        return True
+
     def fit(self, x_trains, y_train):
         """
-        Fit with x_trians, y_trains.
+        Fit with x_trains, y_trains.
+
         :param x_trains:
         :param y_train:
         :return:
         """
-        if not isinstance(x_trains, (list, tuple)):
-            x_trains = [x_trains]
-        # only supports one y_train
-        if isinstance(y_train, (list, tuple)):
-            y_train = y_train[0]
+        x_trains, y_train, _, _ = self._validate_input(x_trains, y_train)
         if self.stop_by_test is True:
             self.LOGGER.warn('stop_by_test is True, but we do not obey it when fit(x_train, y_train)!')
         self.layer_fit_cascades = []
@@ -1035,9 +1083,8 @@ class AutoGrowingCascadeLayer(Layer):
         group_starts, group_ends, group_dims = [], [], []
         # train set
         for i, x_train in enumerate(x_trains):
-            assert x_train.shape[0] == n_trains, 'x_train.shape[0]={} not equal to n_trains={}'.format(
-                x_train.shape[0], n_trains
-            )
+            assert x_train.shape[0] == n_trains, 'x_train.shape[0]={} not equal to' \
+                                                 ' n_trains={}'.format(x_train.shape[0], n_trains)
             x_train = x_train.reshape(n_trains, -1)
             group_dims.append(x_train.shape[1])
             group_starts.append(i if i == 0 else group_ends[i - 1])
@@ -1128,24 +1175,6 @@ class AutoGrowingCascadeLayer(Layer):
         except KeyboardInterrupt:
             pass
 
-    @property
-    def _percent(self):
-        return '%' if isinstance(self.eval_metrics[0], Accuracy) else ''
-
-    @property
-    def is_classification(self):
-        return self.task == 'classification'
-
-    @property
-    def larger_better(self):
-        """
-        True if the evaluation metric larger is better.
-        :return:
-        """
-        if isinstance(self.eval_metrics[0], (MSE, )):
-            return False
-        return True
-
     def fit_transform(self, x_trains, y_train, x_tests=None, y_test=None):
         """
         NOTE: Only support ONE x_train and one x_test, so y_train is a single numpy array instead of list of it.
@@ -1158,25 +1187,18 @@ class AutoGrowingCascadeLayer(Layer):
         """
         if x_tests is None:
             return self.fit(x_trains, y_train), None
-        if not isinstance(x_trains, (list, tuple)):
-            x_trains = [x_trains]
-        # only supports one y_train
-        if isinstance(y_train, (list, tuple)):
-            y_train = y_train[0]
-        if y_test is not None and isinstance(y_test, (list, tuple)):
-            y_test = y_test[0]
-        if not isinstance(x_tests, (list, tuple)):
-            x_tests = [x_tests]
+        x_trains, y_train, x_tests, y_test = self._validate_input(x_trains, y_train, x_tests, y_test)
         self.layer_fit_cascades = []
         n_groups_train = len(x_trains)
         self.n_group_train = n_groups_train
         n_groups_test = len(x_tests)
         n_trains = len(y_train)
-        n_tests = x_tests[0].shape[0]
+        n_tests = x_tests[0].shape[0]  # y_test might be None
         if y_test is None and self.stop_by_test is True:
             self.stop_by_test = False
             self.LOGGER.warn('stop_by_test is True, but we do not obey it when fit(x_train, y_train, x_test, None)!')
-        assert n_groups_train == n_groups_test, 'n_group_train must equal to n_group_test!'
+        assert n_groups_train == n_groups_test, 'n_group_train must equal to n_group_test!,' \
+                                                ' but {} and {}'.format(n_groups_train, n_groups_test)
         # Initialize the groups
         x_train_group = np.zeros((n_trains, 0), dtype=x_trains[0].dtype)
         x_test_group = np.zeros((n_tests, 0), dtype=x_tests[0].dtype)
@@ -1262,16 +1284,18 @@ class AutoGrowingCascadeLayer(Layer):
                 if layer_id - opt_layer_id >= self.early_stop_rounds > 0:
                     # log and save the final results of the optimal layer
                     if y_test is not None:
-                        self.LOGGER.info('[Result][Early Stop][Optimal Layer Detected] opt_layer={},'.format(opt_layer_id) +
+                        self.LOGGER.info('[Result][Early Stop][Optimal Layer Detected]'
+                                         ' opt_layer={},'.format(opt_layer_id) +
                                          ' {}_train={:.4f}{}, {}_test={:.4f}{}'.format(
                                           self.eval_metrics[0].name, layer_train_metrics[opt_layer_id],
                                           self._percent, self.eval_metrics[0].name, layer_test_metrics[opt_layer_id],
                                           self._percent))
                     else:
-                        # print(layer_train_metrics[opt_layer_id])
-                        self.LOGGER.info('[Result][Early Stop][Optimal Layer Detected] opt_layer={},'.format(opt_layer_id) +
+                        self.LOGGER.info('[Result][Early Stop][Optimal Layer Detected]'
+                                         ' opt_layer={},'.format(opt_layer_id) +
                                          ' {}_train={:.4f}{}'.format(self.eval_metrics[0].name,
-                                                                     layer_train_metrics[opt_layer_id], self._percent))
+                                                                     layer_train_metrics[opt_layer_id],
+                                                                     self._percent))
                     self.n_layers = layer_id + 1
                     self.save_data(opt_layer_id, *opt_data)
                     # wash the fit cascades after optimal layer id to save memory
@@ -1377,9 +1401,9 @@ class AutoGrowingCascadeLayer(Layer):
         if isinstance(labels, (list, tuple)):
             assert len(labels) == 1, 'only support single labels array'
             labels = labels[0]
-        pred = self.predict(inputs)
+        predictions = self.predict(inputs)
         for metric in eval_metrics:
-            metric.calc(labels, pred, logger=self.LOGGER)
+            metric.calc(labels, predictions, logger=self.LOGGER)
 
     def predict_proba(self, X):
         """
@@ -1408,6 +1432,38 @@ class AutoGrowingCascadeLayer(Layer):
             return np.argmax(total_proba.reshape((-1, self.n_classes)), axis=1)
         else:
             return total_proba.reshape((-1, self.n_classes))
+
+    def _depack(self, x, depth):
+        if depth == 0:
+            return [x]
+        elif depth == 1:
+            return x
+        elif depth == 2:
+            x_cp = []
+            for bottom in x:
+                for xj in bottom:
+                    x_cp.append(xj)
+            return x_cp
+        else:
+            raise ValueError('_concat failed. depth should be less than 2!')
+
+    def _validate_input(self, x_train, y_train, x_test=None, y_test=None):
+        assert x_train is not None and y_train is not None, 'x_train is None or y_train is None'
+        train_depth = 0
+        if isinstance(x_train, (list, tuple)):
+            train_depth = check_list_depth(x_train)
+        x_train = self._depack(x_train, train_depth)
+        if x_test is not None:
+            test_depth = 0
+            if isinstance(x_test, (list, tuple)):
+                test_depth = check_list_depth(x_test)
+            x_test = self._depack(x_test, test_depth)
+        # only supports one y_train
+        if isinstance(y_train, (list, tuple)) and len(y_train) > 0:
+            y_train = y_train[0]
+        if y_test is not None and isinstance(y_test, (list, tuple)):
+            y_test = y_test[0]
+        return x_train, y_train, x_test, y_test
 
     @property
     def num_layers(self):
