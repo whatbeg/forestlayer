@@ -10,7 +10,6 @@ Storage Utilities, include cache utilities.
 import os.path as osp
 import os
 from ..backend.backend import get_base_dir
-import pickle
 
 
 _DATA_SAVE_BASE = osp.join(get_base_dir(), 'run_data')

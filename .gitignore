@@ -108,6 +108,8 @@ data/
 run_data/
 run_model/
 
+benchmark/
+
 # docs
 docs/site/*
 docs/_build/*

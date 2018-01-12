@@ -1,6 +1,6 @@
 # -*- coding:utf-8 -*-
 """
-MNIST Example.
+Fashion MNIST Example.
 """
 
 # Copyright 2017 Authors NJU PASA BigData Laboratory.
@@ -13,22 +13,22 @@ from forestlayer.estimators.arguments import CompletelyRandomForest, RandomFores
 from forestlayer.layers.window import Window
 from forestlayer.layers.factory import MeanPooling
 from forestlayer.utils.storage_utils import get_data_save_base, get_model_save_base
-from keras.datasets import mnist
+from keras.datasets import fashion_mnist
 from forestlayer.utils.log_utils import set_logging_dir
 import os.path as osp
 
-set_logging_dir(osp.abspath('./../log/examples/mnist'))
+set_logging_dir(osp.abspath('./../log/examples/fashion_mnist'))
 
-(x_train, y_train), (x_test, y_test) = mnist.load_data()
+(x_train, y_train), (x_test, y_test) = fashion_mnist.load_data()
 
 x_train = x_train.reshape(60000, -1, 28, 28)
 x_test = x_test.reshape(10000, -1, 28, 28)
-x_train = x_train[:200, :, :, :]
-x_test = x_test[:100, :, :, :]
+# x_train = x_train[:200, :, :, :]
+# x_test = x_test[:100, :, :, :]
 x_train = x_train / 255.0
 x_test = x_test / 255.0
-y_train = y_train[:200]
-y_test = y_test[:100]
+# y_train = y_train[:200]
+# y_test = y_test[:100]
 
 print(x_train.shape, 'train')
 print(x_test.shape, 'test')
@@ -65,8 +65,8 @@ est_configs = [
     RandomForest()
 ]
 
-data_save_dir = osp.join(get_data_save_base(), 'mnist')
-model_save_dir = osp.join(get_model_save_base(), 'mnist')
+data_save_dir = osp.join(get_data_save_base(), 'fashion_mnist')
+model_save_dir = osp.join(get_model_save_base(), 'fashion_mnist')
 
 auto_cascade = AutoGrowingCascadeLayer(est_configs=est_configs,
                                        early_stopping_rounds=4,
@@ -81,4 +81,3 @@ model.add(pool)
 model.add(concatlayer)
 model.add(auto_cascade)
 model.fit_transform(x_train, y_train, x_test, y_test)
-

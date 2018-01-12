@@ -11,8 +11,10 @@ from __future__ import print_function
 import numpy as np
 import copy
 import datetime
-from ..utils.log_utils import get_logger, list2str, get_logging_level
-from ..utils.storage_utils import *
+import os.path as osp
+import pickle
+from ..utils.log_utils import get_logger, list2str
+from ..utils.storage_utils import check_dir
 from ..utils.metrics import Accuracy, AUC, MSE
 from ..estimators import get_estimator_kfold, EstimatorArgument
 
