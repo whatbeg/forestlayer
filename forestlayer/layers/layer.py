@@ -9,12 +9,11 @@ Base layers definition.
 
 from __future__ import print_function
 import numpy as np
-import copy
 import datetime
 import os.path as osp
 import pickle
 from ..utils.log_utils import get_logger, list2str
-from ..utils.utils import check_list_depth
+from ..utils.layer_utils import check_list_depth
 from ..utils.storage_utils import check_dir
 from ..utils.metrics import Accuracy, AUC, MSE
 from ..estimators import get_estimator_kfold, EstimatorArgument

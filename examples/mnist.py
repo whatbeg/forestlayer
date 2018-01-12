@@ -78,7 +78,7 @@ auto_cascade = AutoGrowingCascadeLayer(est_configs=est_configs,
 model = Graph()
 model.add(mgs)
 model.add(pool)
-# model.add(concatlayer)
+model.add(concatlayer)
 model.add(auto_cascade)
 model.fit_transform(x_train, y_train, x_test, y_test)
 

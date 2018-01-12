@@ -52,12 +52,13 @@ est_configs = Basic4x2(n_folds=1)
 
 auto_cascade = AutoGrowingCascadeLayer(est_configs=est_configs,
                                        early_stopping_rounds=4,
-                                       n_classes=6)
+                                       n_classes=6,
+                                       look_index_cycle=[[0, 1], [2, 3], [4, 5]])
 
 model = Graph()
 model.add(mgs)
 model.add(pool_layer)
-model.add(concat_layer)
+# model.add(concat_layer)
 model.add(auto_cascade)
 model.fit_transform(x_train, y_train, x_test, y_test)
 

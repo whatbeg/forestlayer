@@ -10,8 +10,10 @@ DAG definition
 from ..utils.log_utils import get_logger
 from ..utils.metrics import Accuracy, MSE
 from ..layers.layer import Layer
+from ..utils.layer_utils import print_summary
 import copy
 import numpy as np
+import time
 
 
 class Graph(object):
@@ -74,6 +76,9 @@ class Graph(object):
         self.LOGGER.info("graph build finished!")
         self.LOGGER.info(self.to_debug_string())
 
+    def summary(self):
+        print_summary(self)
+
     def fit(self, x_trains, y_trains):
         """
         Fit with x_trians, y_trains.
@@ -82,6 +87,7 @@ class Graph(object):
         :param y_trains:
         :return: self
         """
+        start_time = time.time()
         self.build()
         if not isinstance(x_trains, (list, tuple)):
             inputs = [x_trains]
@@ -94,7 +100,8 @@ class Graph(object):
         for layer in self.layers:
             self.LOGGER.info(" -------------- Now fitting layer [{}] --------------".format(layer))
             inputs = layer.fit(inputs, labels)
-        self.LOGGER.info("graph fit finished!")
+        time_cost = time.time() - start_time
+        self.LOGGER.info("graph fit finished! Time Cost: {} s".format(time_cost))
         self.FIT = True
         return self
 
@@ -112,6 +119,7 @@ class Graph(object):
         :param y_tests: optional. numpy ndarray or list of numpy ndarray.
         :return:
         """
+        start_time = time.time()
         self.build()
         if not isinstance(x_trains, (list, tuple)):
             x_trains = [x_trains]
@@ -124,7 +132,8 @@ class Graph(object):
         for li, layer in enumerate(self.layers):
             self.LOGGER.info(" -------------- Now fitting layer - [{}] [{}] --------------".format(li, layer))
             x_trains, x_tests = layer.fit_transform(x_trains, y_trains, x_tests, y_tests)
-        self.LOGGER.info("graph fit_transform finished!")
+        time_cost = time.time() - start_time
+        self.LOGGER.info("graph fit_transform finished! Time Cost: {} s".format(time_cost))
         self.FIT = True
         return x_trains, x_tests
 
