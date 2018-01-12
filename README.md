@@ -115,6 +115,8 @@ model.add(concatlayer)
 model.add(auto_cascade)
 ```
 
+You also can call `model.summary()` like Keras to see the appearance of the model.
+
 After building the model, you can fit the model, and then evaluate or predict using the fit model.
 ``` python
 model.fit(x_train, y_train)
@@ -159,10 +161,10 @@ ForestLayer is released under the Apache 2.0 license.
 
 ## TODO
 
-* [ ] model.summary()
 * [ ] Distributed training
 * [ ] Add model save and load mechanism
-* [ ] Benchmarks
+* [x] model.summary() (experiment)
+* [x] Benchmarks (Part of it)
 * [x] Documents
 * [x] Different input data load and management
 * [x] Regression task support
