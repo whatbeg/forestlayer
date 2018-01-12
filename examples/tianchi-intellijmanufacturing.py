@@ -14,17 +14,17 @@ from sklearn.preprocessing import MinMaxScaler
 from keras.layers import Dense, Input
 from keras.models import Model
 from forestlayer.layers.layer import AutoGrowingCascadeLayer
-from forestlayer.estimators.arguments import CompletelyRandomForest, RandomForest
+from forestlayer.estimators.arguments import CompletelyRandomForest, RandomForest, XGBRegressor, GBDT
 from forestlayer.backend.backend import set_base_dir
-from forestlayer.datasets.dataset import get_data_base
+from forestlayer.datasets.dataset import get_dataset_dir
 from forestlayer.utils.storage_utils import get_data_save_base, get_model_save_base
 import os.path as osp
 import pickle
 
 set_base_dir(osp.expanduser(osp.join('~', 'forestlayer')))
 
-train = pd.read_excel(osp.join(get_data_base(), 'tianchi-intellijmanufacturing/train.xlsx'))
-testA = pd.read_excel(osp.join(get_data_base(), 'tianchi-intellijmanufacturing/test_A.xlsx'))
+train = pd.read_excel(osp.join(get_dataset_dir(), 'tianchi-intellijmanufacturing/train.xlsx'))
+testA = pd.read_excel(osp.join(get_dataset_dir(), 'tianchi-intellijmanufacturing/test_A.xlsx'))
 
 train_test = pd.concat([train, testA], axis=0, ignore_index=True)
 
@@ -64,6 +64,7 @@ feat_number_scale = pd.DataFrame(MinMaxScaler().fit_transform(feat_nume))
 feat_all = pd.concat([feat_number_scale, feat_categorical_dummies], axis=1)
 
 if not osp.exists(osp.join(get_model_save_base(), 'feat_dim_120.pkl')):
+    print("Cannot Find {}".format(osp.join(get_model_save_base(), 'feat_dim_120.pkl')))
     x_train, x_test, y_train, y_test = train_test_split(feat_all, feat_all, test_size=0.2, random_state=42)
 
     encoding_dim = 120
@@ -87,15 +88,19 @@ if not osp.exists(osp.join(get_model_save_base(), 'feat_dim_120.pkl')):
     with open(osp.join(get_model_save_base(), 'feat_dim_120.pkl'), 'wb') as f:
         pickle.dump(feat_dim_120, f)
 else:
+    print("Find {}".format(osp.join(get_model_save_base(), 'feat_dim_120.pkl')))
     with open(osp.join(get_model_save_base(), 'feat_dim_120.pkl'), 'rb') as f:
         feat_dim_120 = pickle.load(f)
-
 
 est_configs = [
     CompletelyRandomForest(),
     CompletelyRandomForest(),
-    RandomForest(),
-    RandomForest()
+    RandomForest(n_estimators=100),
+    RandomForest(n_estimators=100),
+    GBDT(n_estimators=100),
+    GBDT(n_estimators=100),
+    # XGBRegressor(),
+    # XGBRegressor()
 ]
 
 data_save_dir = osp.join(get_data_save_base(), 'tianchi-intellijmanu')
@@ -112,7 +117,7 @@ result = agc.test_results
 ret = pd.DataFrame()
 ret["ID"] = testA["ID"]
 ret["Y"] = result
-ret.to_csv(osp.join(data_save_dir, "result.csv"), index=False, header=False)
+ret.to_csv(osp.join(data_save_dir, "result0111.csv"), index=False, header=False)
 
 
 print("Application end!")

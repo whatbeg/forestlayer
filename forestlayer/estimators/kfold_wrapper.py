@@ -20,6 +20,7 @@ class KFoldWrapper(object):
                  eval_metrics=None, cache_dir=None, keep_in_mem=None, est_args=None):
         """
         Initialize a KFoldWrapper.
+
         :param name:
         :param n_folds:
         :param est_class:
@@ -47,6 +48,7 @@ class KFoldWrapper(object):
     def _init_estimator(self, k):
         """
         Initialize k-th estimator in K-fold CV.
+
         :param k: the order number of k-th estimator.
         :return: initialed estimator
         """

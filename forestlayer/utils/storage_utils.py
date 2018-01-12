@@ -74,7 +74,7 @@ def get_model_save_base():
     :return:
     """
     global _MODEL_SAVE_BASE
-    _MODEL_SAVE_BASE = osp.join(get_base_dir(), 'run_data')
+    _MODEL_SAVE_BASE = osp.join(get_base_dir(), 'run_model')
     return _MODEL_SAVE_BASE
 
 
