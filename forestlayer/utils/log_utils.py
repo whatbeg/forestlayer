@@ -22,6 +22,7 @@ def get_logging_base():
     Get logging base dir, which is used to store log data.
     Default logging base is ~/.forestlayer/log
     logging base contains one or more logging dir.
+
     :return:
     """
     global _LOG_BASE
@@ -33,6 +34,7 @@ def set_logging_base(dir_path):
     Set logging base dir, which is used to store log data.
     Default logging base is ~/.forestlayer/log
     logging base contains one or more logging dir.
+
     :param dir_path:
     :return:
     """
@@ -56,6 +58,7 @@ def strftime(t=None):
 def init_fh():
     """
     Initialize log file handler.
+
     :return:
     """
     global fh, DEFAULT_LOGGING_DIR, OLD_LOGGING_DIR
@@ -73,7 +76,8 @@ def init_fh():
 
 def set_logging_level(default_level):
     """
-    Set logging level
+    Set logging level.
+
     :param default_level:
     :return:
     """
@@ -83,7 +87,8 @@ def set_logging_level(default_level):
 
 def get_logging_level():
     """
-    Get logging level
+    Get logging level.
+
     :return:
     """
     global DEFAULT_LEVEL
@@ -95,6 +100,7 @@ def set_logging_dir(default_logging_dir):
     Set logging dir.
     Default logging dir is ~/.forestlayer/log/forestlayer
     NOTE: Now we recommend not to modify logging dir, because it might cause unknown in-identity.
+
     :param default_logging_dir: ~/.forestlayer/log/forestlayer
     :return:
     """
@@ -106,6 +112,7 @@ def get_logging_dir():
     """
     Get logging dir.
     Default logging dir is ~/.forestlayer/log/forestlayer
+
     :return:
     """
     global DEFAULT_LOGGING_DIR
@@ -115,6 +122,7 @@ def get_logging_dir():
 def get_logger(name="forestlayer", level=None):
     """
     Get a logger.
+
     :param name:
     :param level:
     :return:
@@ -131,6 +139,7 @@ def get_logger(name="forestlayer", level=None):
 def list2str(lis, dim):
     """
     List to String.
+
     :param lis:
     :param dim:
     :return:
