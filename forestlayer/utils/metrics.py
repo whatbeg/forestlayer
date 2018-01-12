@@ -17,6 +17,7 @@ class Metrics(object):
     def __call__(self, y_true, y_pred, prefix='', logger=None):
         """
         Call method of metrics.
+
         :param y_true:
         :param y_pred:
         :param prefix:
@@ -37,6 +38,7 @@ class Metrics(object):
     def calc(self, y_true, y_pred, prefix='', logger=None):
         """
         Calc metric from y_true and y_prediction.
+
         :param y_true:
         :param y_pred:
         :param prefix:
@@ -48,6 +50,7 @@ class Metrics(object):
     def calc_proba(self, y_true, y_proba, prefix='', logger=None):
         """
         Calc metric from y_true and y_probability.
+
         :param y_true:
         :param y_proba:
         :param prefix:
@@ -67,6 +70,7 @@ class Accuracy(Metrics):
     def calc(self, y_true, y_pred, prefix='', logger=None):
         """
         Calc Accuracy metric from y_true and y_prediction.
+
         :param y_true:
         :param y_pred:
         :param prefix:
@@ -83,6 +87,7 @@ class Accuracy(Metrics):
     def calc_proba(self, y_true, y_proba, prefix='', logger=None):
         """
         Calc Accuracy metric from y_true and y_probability.
+
         :param y_true:
         :param y_proba:
         :param prefix:
@@ -104,6 +109,7 @@ class AUC(Metrics):
     def calc(self, y_true, y_pred, prefix='', logger=None):
         """
         Calc AUC metric from y_true and y_prediction.
+
         :param y_true:
         :param y_pred:
         :param prefix:
@@ -116,6 +122,7 @@ class AUC(Metrics):
     def calc_proba(self, y_true, y_proba, prefix='', logger=None):
         """
         Calc AUC metric from y_true and y_probability.
+
         :param y_true:
         :param y_proba:
         :param prefix:
@@ -143,6 +150,7 @@ class MSE(Metrics):
     def calc(self, y_true, y_pred, prefix='', logger=None):
         """
         Calc MSE metric from y_true and y_prediction.
+
         :param y_true:
         :param y_pred:
         :param prefix:
@@ -158,6 +166,7 @@ class MSE(Metrics):
         """
         Calc MSE metric from y_true and y_prediction.
         MSE is used to regression task, so y_proba is the y_prediction.
+
         :param y_true:
         :param y_proba:
         :param prefix:

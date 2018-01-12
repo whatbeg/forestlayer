@@ -11,6 +11,12 @@ from __future__ import print_function
 
 
 def check_list_depth(lis):
+    """
+    Check list's depth.
+
+    :param lis:
+    :return:
+    """
     if lis is None:
         return 0
     depth = 0
@@ -22,6 +28,15 @@ def check_list_depth(lis):
 
 
 def print_summary(graph, line_length=None, positions=None, print_fn=print):
+    """
+    Print summary for a graph.
+
+    :param graph:
+    :param line_length:
+    :param positions:
+    :param print_fn:
+    :return:
+    """
     line_length = line_length or 65
     positions = positions or [.45, .75, 1.]
     if positions[-1] <= 1:

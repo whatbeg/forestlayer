@@ -27,6 +27,7 @@ def name2path(name):
 def is_path_exists(path):
     """
     Judge if path exists.
+
     :param path:
     :return:
     """
@@ -36,6 +37,7 @@ def is_path_exists(path):
 def check_dir(path):
     """
     Check directory existence, if not, create the directory.
+
     :param path:
     :return:
     """
@@ -49,6 +51,7 @@ def check_dir(path):
 def get_data_save_base():
     """
     Get data save base dir.
+
     :return:
     """
     global _DATA_SAVE_BASE
@@ -59,6 +62,7 @@ def get_data_save_base():
 def set_data_save_base(dir_path):
     """
     Set data save base dir.
+
     :param dir_path:
     :return:
     """
@@ -70,6 +74,7 @@ def set_data_save_base(dir_path):
 def get_model_save_base():
     """
     Get model save base dir.
+
     :return:
     """
     global _MODEL_SAVE_BASE
