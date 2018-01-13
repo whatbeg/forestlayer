@@ -15,10 +15,10 @@ from forestlayer.layers.graph import Graph
 from forestlayer.estimators.arguments import CompletelyRandomForest, RandomForest, Basic4x2
 
 x_train, y_train, x_test, y_test = uci_sEMG.load_data()
-# x_train = x_train[:12]
-# y_train = y_train[:12]
-# x_test = x_test[:8]
-# y_test = y_test[:8]
+# x_train = x_train[:18]
+# y_train = y_train[:18]
+# x_test = x_test[:12]
+# y_test = y_test[:12]
 
 print("x_train.shape = {}, y_train.shape = {}".format(x_train.shape, y_train.shape))
 print("x_test.shape = {}, y_test.shape = {}".format(x_test.shape, y_test.shape))
@@ -48,7 +48,7 @@ pool_layer = PoolingLayer(pools=pools)
 
 concat_layer = ConcatLayer()
 
-est_configs = Basic4x2(n_folds=1)
+est_configs = Basic4x2()
 
 auto_cascade = AutoGrowingCascadeLayer(est_configs=est_configs,
                                        early_stopping_rounds=4,

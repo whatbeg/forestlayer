@@ -63,34 +63,52 @@ feat_number_scale = pd.DataFrame(MinMaxScaler().fit_transform(feat_nume))
 # Concatenate
 feat_all = pd.concat([feat_number_scale, feat_categorical_dummies], axis=1)
 
-if not osp.exists(osp.join(get_model_save_base(), 'feat_dim_120.pkl')):
-    print("Cannot Find {}".format(osp.join(get_model_save_base(), 'feat_dim_120.pkl')))
+
+def auto_encoder():
+    if not osp.exists(osp.join(get_model_save_base(), 'feat_dim_120.pkl')):
+        print("Cannot Find {}".format(osp.join(get_model_save_base(), 'feat_dim_120.pkl')))
+        x_train, x_test, y_train, y_test = train_test_split(feat_all, feat_all, test_size=0.2, random_state=42)
+
+        encoding_dim = 120
+        input_ = Input(shape=(8051,))
+        encoded = Dense(encoding_dim, activation='relu')(input_)
+        decoded = Dense(8051, activation='sigmoid')(encoded)
+        autoencoder = Model(input=input_, output=decoded)
+        autoencoder.compile(optimizer='adadelta', loss='binary_crossentropy')
+        autoencoder.fit(x_train,
+                        x_train,
+                        nb_epoch=500,
+                        batch_size=10,
+                        shuffle=True,
+                        validation_data=(x_test, x_test))
+
+        # 根据上面我们训练的自编码器，截取其中编码部分定义为编码模型
+        encoder = Model(input=input_, output=encoded)
+        # 对特征进行编码降维
+        feat_dim_120 = encoder.predict(feat_all)
+
+        with open(osp.join(get_model_save_base(), 'feat_dim_120.pkl'), 'wb') as f:
+            pickle.dump(feat_dim_120, f)
+    else:
+        print("Find {}".format(osp.join(get_model_save_base(), 'feat_dim_120.pkl')))
+        with open(osp.join(get_model_save_base(), 'feat_dim_120.pkl'), 'rb') as f:
+            feat_dim_120 = pickle.load(f)
+    return feat_dim_120
+
+
+def PCA():
+    from sklearn.decomposition import PCA
+    pca = PCA(n_components=120)
     x_train, x_test, y_train, y_test = train_test_split(feat_all, feat_all, test_size=0.2, random_state=42)
+    pca.fit(x_train, y_train)
+    feat_dim_120 = pca.transform(feat_all)
+    print('PCA finished! feat_dim_120.shape = {}'.format(feat_dim_120.shape))
+    return feat_dim_120
 
-    encoding_dim = 120
-    input_ = Input(shape=(8051,))
-    encoded = Dense(encoding_dim, activation='relu')(input_)
-    decoded = Dense(8051, activation='sigmoid')(encoded)
-    autoencoder = Model(input=input_, output=decoded)
-    autoencoder.compile(optimizer='adadelta', loss='binary_crossentropy')
-    autoencoder.fit(x_train,
-                    x_train,
-                    nb_epoch=500,
-                    batch_size=10,
-                    shuffle=True,
-                    validation_data=(x_test, x_test))
 
-    # 根据上面我们训练的自编码器，截取其中编码部分定义为编码模型
-    encoder = Model(input=input_, output=encoded)
-    # 对特征进行编码降维
-    feat_dim_120 = encoder.predict(feat_all)
+# feat_dim_120 = auto_encoder()
+feat_dim_120 = PCA()
 
-    with open(osp.join(get_model_save_base(), 'feat_dim_120.pkl'), 'wb') as f:
-        pickle.dump(feat_dim_120, f)
-else:
-    print("Find {}".format(osp.join(get_model_save_base(), 'feat_dim_120.pkl')))
-    with open(osp.join(get_model_save_base(), 'feat_dim_120.pkl'), 'rb') as f:
-        feat_dim_120 = pickle.load(f)
 
 est_configs = [
     CompletelyRandomForest(),
@@ -117,7 +135,7 @@ result = agc.test_results
 ret = pd.DataFrame()
 ret["ID"] = testA["ID"]
 ret["Y"] = result
-ret.to_csv(osp.join(data_save_dir, "result0111.csv"), index=False, header=False)
+ret.to_csv(osp.join(data_save_dir, "result0112_PCA.csv"), index=False, header=False)
 
 
 print("Application end!")

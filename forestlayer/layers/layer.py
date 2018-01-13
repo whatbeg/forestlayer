@@ -1098,6 +1098,10 @@ class AutoGrowingCascadeLayer(Layer):
         self.group_dims = group_dims
         if self.look_index_cycle is None:
             self.look_index_cycle = [[i, ] for i in range(n_groups_train)]
+        else:
+            for look_index in self.look_index_cycle:
+                if np.max(look_index) >= n_groups_train or np.min(look_index) < 0 or len(look_index) == 0:
+                    raise ValueError("look_index invalid! look_index={}".format(look_index))
         x_cur_train = None
         x_proba_train = np.zeros((n_trains, 0), dtype=np.float32)
         layer_id = 0
@@ -1109,7 +1113,7 @@ class AutoGrowingCascadeLayer(Layer):
                     break
                 # clear x_cur_train
                 x_cur_train = np.zeros((n_trains, 0), dtype=np.float32)
-                train_ids = self.look_index_cycle[layer_id % n_groups_train]
+                train_ids = self.look_index_cycle[layer_id % len(self.look_index_cycle)]
                 for gid in train_ids:
                     x_cur_train = np.hstack((x_cur_train, x_train_group[:, group_starts[gid]:group_ends[gid]]))
                 x_cur_train = np.hstack((x_cur_train, x_proba_train))
@@ -1226,6 +1230,10 @@ class AutoGrowingCascadeLayer(Layer):
         self.group_dims = group_dims
         if self.look_index_cycle is None:
             self.look_index_cycle = [[i, ] for i in range(n_groups_train)]
+        else:
+            for look_index in self.look_index_cycle:
+                if np.max(look_index) >= n_groups_train or np.min(look_index) < 0 or len(look_index) == 0:
+                    raise ValueError("look_index invalid! look_index={}".format(look_index))
         x_cur_train, x_cur_test = None, None
         x_proba_train = np.zeros((n_trains, 0), dtype=np.float32)
         x_proba_test = np.zeros((n_tests, 0), dtype=np.float32)
@@ -1239,7 +1247,7 @@ class AutoGrowingCascadeLayer(Layer):
                     break
                 x_cur_train = np.zeros((n_trains, 0), dtype=np.float32)
                 x_cur_test = np.zeros((n_tests, 0), dtype=np.float32)
-                train_ids = self.look_index_cycle[layer_id % n_groups_train]
+                train_ids = self.look_index_cycle[layer_id % len(self.look_index_cycle)]
                 for gid in train_ids:
                     x_cur_train = np.hstack((x_cur_train, x_train_group[:, group_starts[gid]:group_ends[gid]]))
                     x_cur_test = np.hstack((x_cur_test, x_test_group[:, group_starts[gid]:group_ends[gid]]))
