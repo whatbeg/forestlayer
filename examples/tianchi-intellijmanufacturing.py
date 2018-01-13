@@ -98,7 +98,7 @@ def auto_encoder():
 
 def PCA():
     from sklearn.decomposition import PCA
-    pca = PCA(n_components=120)
+    pca = PCA(n_components=200)
     x_train, x_test, y_train, y_test = train_test_split(feat_all, feat_all, test_size=0.2, random_state=42)
     pca.fit(x_train, y_train)
     feat_dim_120 = pca.transform(feat_all)
@@ -106,8 +106,8 @@ def PCA():
     return feat_dim_120
 
 
-# feat_dim_120 = auto_encoder()
-feat_dim_120 = PCA()
+feat_dim_120 = auto_encoder()
+# feat_dim_120 = PCA()
 
 
 est_configs = [
@@ -117,8 +117,8 @@ est_configs = [
     RandomForest(n_estimators=100),
     GBDT(n_estimators=100),
     GBDT(n_estimators=100),
-    # XGBRegressor(),
-    # XGBRegressor()
+    XGBRegressor(),
+    XGBRegressor()
 ]
 
 data_save_dir = osp.join(get_data_save_base(), 'tianchi-intellijmanu')
@@ -135,7 +135,7 @@ result = agc.test_results
 ret = pd.DataFrame()
 ret["ID"] = testA["ID"]
 ret["Y"] = result
-ret.to_csv(osp.join(data_save_dir, "result0112_PCA.csv"), index=False, header=False)
+ret.to_csv(osp.join(data_save_dir, "result0113.csv"), index=False, header=False)
 
 
 print("Application end!")
