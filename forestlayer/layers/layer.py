@@ -12,11 +12,12 @@ import numpy as np
 import datetime
 import os.path as osp
 import pickle
+import ray
 from ..utils.log_utils import get_logger, list2str
 from ..utils.layer_utils import check_list_depth
 from ..utils.storage_utils import check_dir
 from ..utils.metrics import Accuracy, AUC, MSE
-from ..estimators import get_estimator_kfold, EstimatorArgument
+from ..estimators import get_estimator_kfold, get_dist_estimator_kfold, EstimatorArgument
 
 
 class Layer(object):
@@ -106,7 +107,8 @@ class MultiGrainScanLayer(Layer):
     Multi-grain Scan Layer
     """
     def __init__(self, batch_size=None, dtype=None, name=None, task='classification',
-                 windows=None, est_for_windows=None, n_class=None, keep_in_mem=False, eval_metrics=None, seed=None):
+                 windows=None, est_for_windows=None, n_class=None, keep_in_mem=False,
+                 eval_metrics=None, seed=None, distribute=False):
         """
         Initialize a multi-grain scan layer.
 
@@ -120,6 +122,7 @@ class MultiGrainScanLayer(Layer):
         :param keep_in_mem:
         :param eval_metrics:
         :param seed:
+        :param distribute: whether use distributed estimator fitting.
         """
         if not name:
             prefix = 'multi_grain_scan'
@@ -135,6 +138,7 @@ class MultiGrainScanLayer(Layer):
             assert n_class is not None
             self.n_class = n_class
         self.seed = seed
+        self.distribute = distribute
         self.keep_in_mem = keep_in_mem
         self.eval_metrics = eval_metrics
 
@@ -174,14 +178,18 @@ class MultiGrainScanLayer(Layer):
             seed = (self.seed + hash("[estimator] {}".format(est_name))) % 1000000007
         else:
             seed = None
-        return get_estimator_kfold(name=est_name,
-                                   n_folds=n_folds,
-                                   task=self.task,
-                                   est_type=est_type,
-                                   eval_metrics=self.eval_metrics,
-                                   seed=seed,
-                                   keep_in_mem=self.keep_in_mem,
-                                   est_args=est_args)
+        if self.distribute:
+            get_est_func = get_dist_estimator_kfold
+        else:
+            get_est_func = get_estimator_kfold
+        return get_est_func(name=est_name,
+                            n_folds=n_folds,
+                            task=self.task,
+                            est_type=est_type,
+                            eval_metrics=self.eval_metrics,
+                            seed=seed,
+                            keep_in_mem=self.keep_in_mem,
+                            est_args=est_args)
 
     def _check_input(self, x, y):
         if isinstance(x, (list, tuple)):
@@ -218,11 +226,17 @@ class MultiGrainScanLayer(Layer):
             for ei, est in enumerate(ests_for_win):
                 if isinstance(est, EstimatorArgument):
                     est = self._init_estimator(est, wi, ei)
-                # (60000, 121, 10)
-                y_proba_train, _ = est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0])
+                ests_for_win[ei] = est
+            if self.distribute:
+                y_proba_trains = ray.get([est.fit_transform.remote(x_wins_train[wi], y_win, y_win[:, 0])
+                                          for est in ests_for_win])
+            else:
+                y_proba_trains = [est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0]) for est in ests_for_win]
+            for y_proba_train, _ in y_proba_trains:
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
                 win_est_train.append(y_proba_train)
-                self.est_for_windows[wi][ei] = est
+            if self.keep_in_mem:
+                self.est_for_windows[wi] = ests_for_win
             x_win_est_train.append(win_est_train)
         if len(x_win_est_train) == 0:
             return x_wins_train
@@ -273,16 +287,23 @@ class MultiGrainScanLayer(Layer):
             for ei, est in enumerate(ests_for_win):
                 if isinstance(est, EstimatorArgument):
                     est = self._init_estimator(est, wi, ei)
+                ests_for_win[ei] = est
+            if self.distribute:
+                y_proba_train_tests = ray.get([est.fit_transform.remote(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
+                                               for est in ests_for_win])
+            else:
+                y_proba_train_tests = [est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
+                                       for est in ests_for_win]
+            for y_proba_train, y_probas_test in y_proba_train_tests:
                 # (60000, 121, 10)
-                y_proba_train, y_probas_test = est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
                 assert len(y_probas_test) == 1, 'assume there is only one test set!'
                 y_probas_test = y_probas_test[0]
                 y_probas_test = y_probas_test.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
                 win_est_train.append(y_proba_train)
                 win_est_test.append(y_probas_test)
-                if self.keep_in_mem:
-                    self.est_for_windows[wi][ei] = est
+            if self.keep_in_mem:
+                self.est_for_windows[wi] = ests_for_win
             x_win_est_train.append(win_est_train)
             x_win_est_test.append(win_est_test)
         if len(x_win_est_train) == 0:
