@@ -19,10 +19,10 @@ import os.path as osp
 print('x_train.shape', x_train.shape)
 print('x_test.shape', x_test.shape)
 
-x_train = x_train[:10]
-y_train = y_train[:10]
-x_test = x_test[:5]
-y_test = y_test[:5]
+# x_train = x_train[:10]
+# y_train = y_train[:10]
+# x_test = x_test[:5]
+# y_test = y_test[:5]
 
 est_configs = [
     CompletelyRandomForest(),
@@ -45,4 +45,4 @@ cascade = AutoGrowingCascadeLayer(est_configs=est_configs,
                                   data_save_dir=data_save_dir,
                                   model_save_dir=model_save_dir)
 
-cascade.fit(x_train, y_train)
+cascade.fit_transform(x_train, y_train, x_test, y_test)
