@@ -35,7 +35,7 @@ class KFoldWrapper(object):
         self.n_folds = n_folds
         self.est_class = est_class
         self.est_args = est_args if est_args is not None else {}
-        self.seed = seed if seed is not None else 123
+        self.seed = seed
         self.eval_metrics = eval_metrics if eval_metrics is not None else []
         if cache_dir is not None:
             self.cache_dir = osp.join(cache_dir, name2path(self.name))
@@ -60,6 +60,7 @@ class KFoldWrapper(object):
     def fit_transform(self, X, y, y_stratify=None, test_sets=None):
         """
         Fit and transform.
+
         :param X: (ndarray) n x k or n1 x n2 x k
                             to support windows_layer, X could have dim >2
         :param y: (ndarray) y (ndarray):
@@ -190,6 +191,7 @@ class KFoldWrapper(object):
     def _predict_proba(self, est, X):
         """
         Predict probability inner method.
+
         :param est:
         :param X:
         :return:
@@ -198,7 +200,8 @@ class KFoldWrapper(object):
 
     def copy(self):
         """
-        copy
+        copy.
+
         :return:
         """
         return KFoldWrapper(name=self.name,
