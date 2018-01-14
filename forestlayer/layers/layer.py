@@ -771,7 +771,7 @@ class CascadeLayer(Layer):
             y_proba_train = y_proba_train_tup[0]
             if len(y_proba_train_tup) == 3 and self.verbose_dis:
                 for log in y_proba_train_tup[2]:
-                    print(log + '\n')
+                    print(log)
             if y_proba_train is None:
                 raise RuntimeError("layer - {} - estimator - {} fit FAILED!,"
                                    " y_proba_train is None!".format(self.layer_id, ei))
@@ -844,7 +844,7 @@ class CascadeLayer(Layer):
             y_proba_test = y_proba_train_tup[1]
             if len(y_proba_train_tup) == 3 and self.verbose_dis:
                 for log in y_proba_train_tup[2]:
-                    print(log + '\n')
+                    print(log)
             # if only one element on test_sets, return one test result like y_proba_train
             if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
                 y_proba_test = y_proba_test[0]
@@ -868,13 +868,13 @@ class CascadeLayer(Layer):
         eval_proba_test /= self.n_estimators
         metric = self.eval_metrics[0]
         train_avg_metric = metric.calc_proba(y_train, eval_proba_train,
-                                             'layer - {} - [train] average {}'.format(self.layer_id, metric.name),
+                                             'layer - {} - [train] average'.format(self.layer_id, metric.name),
                                              logger=self.LOGGER)
         self.train_avg_metric = train_avg_metric
         # judge whether y_test is None, which means users are to predict test probas
         if y_test is not None:
             test_avg_metric = metric.calc_proba(y_test, eval_proba_test,
-                                                'layer - {} - [test] average'.format(self.layer_id), logger=self.LOGGER)
+                                                'layer - {} - [ test] average'.format(self.layer_id), logger=self.LOGGER)
             self.test_avg_metric = test_avg_metric
         # if y_test is None, we need to generate test prediction, so keep eval_proba_test
         if y_test is None:
