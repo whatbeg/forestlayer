@@ -226,3 +226,9 @@ def auc(y_true, y_proba):
     y_proba = [item[1] for item in y_proba]
     fpr, tpr, thresholds = metrics.roc_curve(y_true, y_proba, pos_label=1)
     return metrics.auc(fpr, tpr)
+
+
+def mse(y_true, y_pred):
+    mse_result = metrics.mean_squared_error(y_true, y_pred)
+    return mse_result
+
