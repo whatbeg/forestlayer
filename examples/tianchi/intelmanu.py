@@ -18,13 +18,14 @@ from forestlayer.estimators.arguments import CompletelyRandomForest, RandomFores
 from forestlayer.backend.backend import set_base_dir
 from forestlayer.datasets.dataset import get_dataset_dir
 from forestlayer.utils.storage_utils import get_data_save_base, get_model_save_base
+from forestlayer.utils.metrics import mse
 import os.path as osp
 import pickle
 
 set_base_dir(osp.expanduser(osp.join('~', 'forestlayer')))
 
-train = pd.read_excel(osp.join(get_dataset_dir(), 'tianchi-intellijmanufacturing/train.xlsx'))
-testA = pd.read_excel(osp.join(get_dataset_dir(), 'tianchi-intellijmanufacturing/test_A.xlsx'))
+train = pd.read_excel(osp.join(get_dataset_dir(), 'tianchi', 'intelmanu', 'train.xlsx'))
+testA = pd.read_excel(osp.join(get_dataset_dir(), 'tianchi', 'intelmanu', 'test_A.xlsx'))
 
 train_test = pd.concat([train, testA], axis=0, ignore_index=True)
 
@@ -98,7 +99,7 @@ def auto_encoder():
 
 def PCA():
     from sklearn.decomposition import PCA
-    pca = PCA(n_components=200)
+    pca = PCA(n_components=120)
     x_train, x_test, y_train, y_test = train_test_split(feat_all, feat_all, test_size=0.2, random_state=42)
     pca.fit(x_train, y_train)
     feat_dim_120 = pca.transform(feat_all)
@@ -117,11 +118,11 @@ est_configs = [
     RandomForest(n_estimators=100),
     GBDT(n_estimators=100),
     GBDT(n_estimators=100),
-    XGBRegressor(),
-    XGBRegressor()
+    # XGBRegressor(),
+    # XGBRegressor()
 ]
 
-data_save_dir = osp.join(get_data_save_base(), 'tianchi-intellijmanu')
+data_save_dir = osp.join(get_data_save_base(), 'tianchi', 'intelmanu')
 
 agc = AutoGrowingCascadeLayer(task='regression',
                               est_configs=est_configs,
@@ -132,14 +133,16 @@ agc = AutoGrowingCascadeLayer(task='regression',
 agc.fit_transform(feat_dim_120[:500], label, feat_dim_120[500:])
 result = agc.test_results
 
-ret = pd.DataFrame()
-ret["ID"] = testA["ID"]
-ret["Y"] = result
-ret.to_csv(osp.join(data_save_dir, "result0113.csv"), index=False, header=False)
+true_A = pd.read_csv(osp.join(get_dataset_dir(), 'tianchi', 'intelmanu', 'true_A_20180114.csv'), header=None)
 
+true = true_A.iloc[:, 1]
 
-print("Application end!")
+print("MSE Score: {}".format(mse(result, true)))
 
+# ret = pd.DataFrame()
+# ret["ID"] = testA["ID"]
+# ret["Y"] = result
+# ret.to_csv(osp.join(data_save_dir, "result0112_PCA.csv"), index=False, header=False)
 
 
 
