@@ -576,7 +576,7 @@ class ConcatLayer(Layer):
 class CascadeLayer(Layer):
     def __init__(self, batch_size=None, dtype=None, name=None, task='classification', est_configs=None,
                  layer_id='anonymous', n_classes=None, keep_in_mem=False, data_save_dir=None, model_save_dir=None,
-                 metrics=None, seed=None, distribute=False):
+                 metrics=None, seed=None, distribute=False, verbose_dis=False):
         """Cascade Layer.
         A cascade layer contains several estimators, it accepts single input, go through these estimators, produces
         predicted probability by every estimators, and stacks them together for next cascade layer.
@@ -597,8 +597,10 @@ class CascadeLayer(Layer):
         :param metrics: str, evaluation metrics used in training model and evaluating testing data.
                         Support: 'accuracy', 'auc', 'mse', default is accuracy (classification) and mse (regression).
         :param seed: random seed, also called random state in scikit-learn random forest
-        :param distribute: whether use distributed training. If use, you should `import ray`
+        :param distribute: boolean, whether use distributed training. If use, you should `import ray`
                            and write `ray.init(<redis-address>)` at the beginning of the main program.
+        :param verbose_dis: boolean, whether print logging info that generated on different worker machines.
+                            default = False.
 
         # Properties
             eval_metrics: evaluation metrics
@@ -630,9 +632,10 @@ class CascadeLayer(Layer):
         check_dir(self.model_save_dir)
         self.seed = seed
         self.distribute = distribute
+        self.verbose_dis = verbose_dis
         self.larger_better = True
         self.metrics = metrics
-        self.eval_metrics = get_eval_metrics(self.metrics, self.task)
+        self.eval_metrics = get_eval_metrics(self.metrics, self.task, self.name)
         # whether this layer the last layer of Auto-growing cascade layer
         self.complete = False
         self.fit_estimators = [None for _ in range(self.n_estimators)]
@@ -764,9 +767,11 @@ class CascadeLayer(Layer):
         else:
             y_proba_trains = [est.fit_transform(x_train, y_train, y_stratify, test_sets=None)
                               for est in estimators]
-        print("y_proba_trains GETTED!")
-        for ei, (y_proba_train, _) in enumerate(y_proba_trains):
-            # print(y_proba_train.shape, y_proba_test.shape)
+        for ei, y_proba_train_tup in enumerate(y_proba_trains):
+            y_proba_train = y_proba_train_tup[0]
+            if len(y_proba_train_tup) == 3 and self.verbose_dis:
+                for log in y_proba_train_tup[2]:
+                    print(log + '\n')
             if y_proba_train is None:
                 raise RuntimeError("layer - {} - estimator - {} fit FAILED!,"
                                    " y_proba_train is None!".format(self.layer_id, ei))
@@ -834,7 +839,12 @@ class CascadeLayer(Layer):
             y_proba_train_tests = [est.fit_transform(x_train, y_train, y_stratify,
                                                      test_sets=[('test', x_test,  y_test)])
                                    for est in estimators]
-        for ei, (y_proba_train, y_proba_test) in enumerate(y_proba_train_tests):
+        for ei, y_proba_train_tup in enumerate(y_proba_train_tests):
+            y_proba_train = y_proba_train_tup[0]
+            y_proba_test = y_proba_train_tup[1]
+            if len(y_proba_train_tup) == 3 and self.verbose_dis:
+                for log in y_proba_train_tup[2]:
+                    print(log + '\n')
             # if only one element on test_sets, return one test result like y_proba_train
             if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
                 y_proba_test = y_proba_test[0]
@@ -969,7 +979,7 @@ class AutoGrowingCascadeLayer(Layer):
     def __init__(self, batch_size=None, dtype=np.float32, name=None, task='classification', est_configs=None,
                  early_stopping_rounds=None, max_layers=0, look_index_cycle=None, data_save_rounds=0,
                  stop_by_test=True, n_classes=None, keep_in_mem=False, data_save_dir=None, model_save_dir=None,
-                 metrics=None, keep_test_result=False, seed=None, distribute=False):
+                 metrics=None, keep_test_result=False, seed=None, distribute=False, verbose_dis=False):
         """AutoGrowingCascadeLayer
         An AutoGrowingCascadeLayer is a virtual layer that consists of many single cascade layers.
         `auto-growing` means this kind of layer can decide the depth of cascade forest,
@@ -1001,11 +1011,13 @@ class AutoGrowingCascadeLayer(Layer):
         :param data_save_dir: str [default = None]
                               each data_save_rounds save the intermediate results in data_save_dir
                               if data_save_rounds = 0, then no savings for intermediate results
-        :param model_save_dir: directory to save fit estimators into
+        :param model_save_dir: directory where save fit estimators into
         :param metrics: evaluation metrics used in training model and evaluating testing data
         :param seed: random seed, also called random state in scikit-learn random forest
-        :param distribute: whether use distributed training. If use, you should `import ray`
+        :param distribute: boolean, whether use distributed training. If use, you should `import ray`
                            and write `ray.init(<redis-address>)` at the beginning of the main program.
+        :param verbose_dis: boolean, whether print logging info that generated on different worker machines.
+                            default = False.
         """
         self.est_configs = [] if est_configs is None else est_configs
         super(AutoGrowingCascadeLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
@@ -1028,6 +1040,7 @@ class AutoGrowingCascadeLayer(Layer):
         self.eval_metrics = get_eval_metrics(self.metrics, self.task)
         self.seed = seed
         self.distribute = distribute
+        self.verbose_dis = verbose_dis
         # properties
         self.layer_fit_cascades = []
         self.n_layers = 0
@@ -1048,7 +1061,7 @@ class AutoGrowingCascadeLayer(Layer):
         :param data_save_dir:
         :param model_save_dir:
         :param layer_id:
-        :param metrics:
+        :param metrics: str, 'accuracy' or 'rmse' or 'mse' or 'auc'
         :param seed:
         :return: A CascadeLayer Object.
         """
@@ -1062,7 +1075,8 @@ class AutoGrowingCascadeLayer(Layer):
                             model_save_dir=model_save_dir,
                             metrics=metrics,
                             seed=seed,
-                            distribute=self.distribute)
+                            distribute=self.distribute,
+                            verbose_dis=self.verbose_dis)
 
     def call(self, x_trains):
         pass
@@ -1098,7 +1112,7 @@ class AutoGrowingCascadeLayer(Layer):
         True if the evaluation metric larger is better.
         :return:
         """
-        if isinstance(self.eval_metrics[0], (MSE, )):
+        if isinstance(self.eval_metrics[0], (MSE, RMSE)):
             return False
         return True
 
@@ -1167,7 +1181,7 @@ class AutoGrowingCascadeLayer(Layer):
                                                      data_save_dir=data_save_dir,
                                                      model_save_dir=model_save_dir,
                                                      layer_id=layer_id,
-                                                     metrics=self.eval_metrics,
+                                                     metrics=self.metrics,
                                                      seed=self.seed)
                 x_proba_train, _ = cascade.fit_transform(x_cur_train, y_train)
                 if self.keep_in_mem:
@@ -1183,7 +1197,7 @@ class AutoGrowingCascadeLayer(Layer):
                 if layer_id - opt_layer_id >= self.early_stop_rounds > 0:
                     # log and save the final results of the optimal layer
                     self.LOGGER.info('[Result][Early Stop][Optimal Layer Detected] opt_layer={},'.format(opt_layer_id) +
-                                     ' {}_train={:.4f}{},'.format(self.eval_metrics[0].name,
+                                     ' {}_train={:.4f}{},'.format(self.metrics,
                                                                   layer_metric_list[opt_layer_id], self._percent))
                     self.n_layers = layer_id + 1
                     self._save_data(opt_layer_id, *opt_data)
@@ -1202,8 +1216,8 @@ class AutoGrowingCascadeLayer(Layer):
             self.LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.4f}{},'
                              ' optimal_layer={}, {}_optimal_train={:.4f}{}'.format(
                                 self.max_layers,
-                                self.eval_metrics[0].name, layer_metric_list[-1], self._percent, opt_layer_id,
-                                self.eval_metrics[0].name, layer_metric_list[opt_layer_id], self._percent))
+                                self.metrics, layer_metric_list[-1], self._percent, opt_layer_id,
+                                self.metrics, layer_metric_list[opt_layer_id], self._percent))
             self._save_data(layer_id, *opt_data)
             self.n_layers = layer_id + 1
             # wash the fit cascades after optimal layer id to save memory
@@ -1299,6 +1313,7 @@ class AutoGrowingCascadeLayer(Layer):
                                                      data_save_dir=data_save_dir,
                                                      model_save_dir=model_save_dir,
                                                      layer_id=layer_id,
+                                                     metrics=self.metrics,
                                                      seed=self.seed)
                 x_proba_train, x_proba_test = cascade.fit_transform(x_cur_train, y_train, x_cur_test, y_test)
                 if self.keep_in_mem:
@@ -1326,13 +1341,13 @@ class AutoGrowingCascadeLayer(Layer):
                         self.LOGGER.info('[Result][Early Stop][Optimal Layer Detected]'
                                          ' opt_layer={},'.format(opt_layer_id) +
                                          ' {}_train={:.4f}{}, {}_test={:.4f}{}'.format(
-                                          self.eval_metrics[0].name, layer_train_metrics[opt_layer_id],
-                                          self._percent, self.eval_metrics[0].name, layer_test_metrics[opt_layer_id],
+                                          self.metrics, layer_train_metrics[opt_layer_id],
+                                          self._percent, self.metrics, layer_test_metrics[opt_layer_id],
                                           self._percent))
                     else:
                         self.LOGGER.info('[Result][Early Stop][Optimal Layer Detected]'
                                          ' opt_layer={},'.format(opt_layer_id) +
-                                         ' {}_train={:.4f}{}'.format(self.eval_metrics[0].name,
+                                         ' {}_train={:.4f}{}'.format(self.metrics,
                                                                      layer_train_metrics[opt_layer_id],
                                                                      self._percent))
                     self.n_layers = layer_id + 1
@@ -1358,15 +1373,15 @@ class AutoGrowingCascadeLayer(Layer):
                                  ' optimal_layer={}, {}_optimal_train={:.4f}{},'
                                  ' {}_optimal_test={:.4f}{}'.format(
                                     self.max_layers, self.eval_metrics[0].name, layer_train_metrics[-1], self._percent,
-                                    self.eval_metrics[0].name, layer_test_metrics[-1], self._percent, opt_layer_id,
-                                    self.eval_metrics[0].name, layer_train_metrics[opt_layer_id], self._percent,
-                                    self.eval_metrics[0].name, layer_test_metrics[opt_layer_id], self._percent))
+                                    self.metrics, layer_test_metrics[-1], self._percent, opt_layer_id,
+                                    self.metrics, layer_train_metrics[opt_layer_id], self._percent,
+                                    self.metrics, layer_test_metrics[opt_layer_id], self._percent))
             else:
                 self.LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.4f}{},'
                                  ' optimal_layer={}, {}_optimal_train={:.4f}{}'.format(
                                   self.max_layers,
-                                  self.eval_metrics[0].name, layer_train_metrics[-1], self._percent, opt_layer_id,
-                                  self.eval_metrics[0].name, layer_train_metrics[opt_layer_id], self._percent))
+                                  self.metrics, layer_train_metrics[-1], self._percent, opt_layer_id,
+                                  self.metrics, layer_train_metrics[opt_layer_id], self._percent))
             self.save_data(layer_id, *opt_data)
             self.n_layers = layer_id + 1
             # if y_test is None, we predict x_test and save its predictions
@@ -1600,18 +1615,18 @@ def get_opt_layer_id(acc_list, larger_better=True):
     return opt_layer_id
 
 
-def get_eval_metrics(metrics, task):
+def get_eval_metrics(metrics, task='classification', name=''):
     if metrics == 'accuracy':
-        eval_metrics = [Accuracy('accuracy')]
+        eval_metrics = [Accuracy(name)]
     elif metrics == 'auc':
-        eval_metrics = [AUC('AUC')]
+        eval_metrics = [AUC(name)]
     elif metrics == 'mse':
-        eval_metrics = [MSE('Mean Square Error')]
+        eval_metrics = [MSE(name)]
     elif metrics == 'rmse':
-        eval_metrics = [RMSE('Root Mean Square Error')]
+        eval_metrics = [RMSE(name)]
     else:
         if task == 'regression':
-            eval_metrics = [MSE('Mean Square Error')]
+            eval_metrics = [MSE(name)]
         else:
-            eval_metrics = [Accuracy('Accuracy')]
+            eval_metrics = [Accuracy(name)]
     return eval_metrics

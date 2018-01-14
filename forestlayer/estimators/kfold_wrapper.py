@@ -187,7 +187,7 @@ class KFoldWrapper(object):
         for metric in self.eval_metrics:
             acc = metric.calc_proba(y_true, y_proba)
             self.LOGGER.info("{}({} - {}) = {:.4f}{}".format(
-                metric.name, est_name, y_name, acc, '%' if isinstance(metric, Accuracy) else ''))
+                metric.__class__.__name__, est_name, y_name, acc, '%' if isinstance(metric, Accuracy) else ''))
 
     def _predict_proba(self, est, X):
         """
@@ -231,7 +231,9 @@ class DistributedKFoldWrapper(object):
         :param keep_in_mem:
         :param est_args:
         """
-        self.LOGGER = get_logger('estimators.kfold_wrapper')
+        # log_info is used to store logging string, will be return to master node after fit/fit_transform
+        self.log_info = []
+        self.log_warn = []
         self.name = name
         self.n_folds = n_folds
         self.est_class = est_class
@@ -351,7 +353,7 @@ class DistributedKFoldWrapper(object):
         for vi, (test_name, X_test, y_test) in enumerate(test_sets):
             if y_test is not None:
                 self.log_eval_metrics(self.name, y_test, y_probas_test[vi], test_name)
-        return y_proba_train, y_probas_test
+        return y_proba_train, y_probas_test, self.log_info
 
     def transform(self, x_tests):
         """
@@ -364,7 +366,7 @@ class DistributedKFoldWrapper(object):
         if x_tests is None or x_tests == []:
             return []
         if isinstance(x_tests, (list, tuple)):
-            self.LOGGER.warn('transform(x_tests) only support single ndarray instead of list of ndarrays')
+            self.log_warn.append('transform(x_tests) only support single ndarray instead of list of ndarrays')
             x_tests = x_tests[0]
         proba_result = None
         for k, est in enumerate(self.fit_estimators):
@@ -382,15 +384,20 @@ class DistributedKFoldWrapper(object):
 
     def log_eval_metrics(self, est_name, y_true, y_proba, y_name):
         """
-        y_true (ndarray): n or n1 x n2
-        y_proba (ndarray): n x n_classes or n1 x n2 x n_classes
+        Logging evaluation metrics.
+
+        :param est_name: estimator name.
+        :param y_true: (ndarray) n or n1 x n2
+        :param y_proba: (ndarray) n x n_classes or n1 x n2 x n_classes
+        :param y_name: 'train_{no.}' or 'train' or 'test', identify a name for this info.
+        :return:
         """
         if self.eval_metrics is None:
             return
         for metric in self.eval_metrics:
             acc = metric.calc_proba(y_true, y_proba)
-            self.LOGGER.info("{}({} - {}) = {:.4f}{}".format(
-                metric.name, est_name, y_name, acc, '%' if isinstance(metric, Accuracy) else ''))
+            self.log_info.append("{}({} - {}) = {:.4f}{}".format(
+                metric.__class__.__name__, est_name, y_name, acc, '%' if isinstance(metric, Accuracy) else ''))
 
     def _predict_proba(self, est, X):
         """
