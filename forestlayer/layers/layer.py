@@ -16,7 +16,7 @@ import ray
 from ..utils.log_utils import get_logger, list2str
 from ..utils.layer_utils import check_list_depth
 from ..utils.storage_utils import check_dir
-from ..utils.metrics import Accuracy, AUC, MSE
+from ..utils.metrics import Accuracy, AUC, MSE, RMSE
 from ..estimators import get_estimator_kfold, get_dist_estimator_kfold, EstimatorArgument
 
 
@@ -122,7 +122,8 @@ class MultiGrainScanLayer(Layer):
         :param keep_in_mem:
         :param eval_metrics:
         :param seed:
-        :param distribute: whether use distributed estimator fitting.
+        :param distribute: whether use distributed training. If use, you should `import ray`
+                           and write `ray.init(<redis-address>)` at the beginning of the main program.
         """
         if not name:
             prefix = 'multi_grain_scan'
@@ -287,6 +288,7 @@ class MultiGrainScanLayer(Layer):
             for ei, est in enumerate(ests_for_win):
                 if isinstance(est, EstimatorArgument):
                     est = self._init_estimator(est, wi, ei)
+                # if self.distribute is True, then est is an ActorHandle.
                 ests_for_win[ei] = est
             if self.distribute:
                 y_proba_train_tests = ray.get([est.fit_transform.remote(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
@@ -574,7 +576,7 @@ class ConcatLayer(Layer):
 class CascadeLayer(Layer):
     def __init__(self, batch_size=None, dtype=None, name=None, task='classification', est_configs=None,
                  layer_id='anonymous', n_classes=None, keep_in_mem=False, data_save_dir=None, model_save_dir=None,
-                 metrics=None, seed=None):
+                 metrics=None, seed=None, distribute=False):
         """Cascade Layer.
         A cascade layer contains several estimators, it accepts single input, go through these estimators, produces
         predicted probability by every estimators, and stacks them together for next cascade layer.
@@ -595,6 +597,8 @@ class CascadeLayer(Layer):
         :param metrics: str, evaluation metrics used in training model and evaluating testing data.
                         Support: 'accuracy', 'auc', 'mse', default is accuracy (classification) and mse (regression).
         :param seed: random seed, also called random state in scikit-learn random forest
+        :param distribute: whether use distributed training. If use, you should `import ray`
+                           and write `ray.init(<redis-address>)` at the beginning of the main program.
 
         # Properties
             eval_metrics: evaluation metrics
@@ -625,25 +629,32 @@ class CascadeLayer(Layer):
         self.model_save_dir = model_save_dir
         check_dir(self.model_save_dir)
         self.seed = seed
+        self.distribute = distribute
         self.larger_better = True
         self.metrics = metrics
-        if self.metrics == 'accuracy':
-            self.eval_metrics = [Accuracy('accuracy')]
-        elif self.metrics == 'auc':
-            self.eval_metrics = [AUC('AUC')]
-        elif self.metrics == 'mse':
-            self.eval_metrics = [MSE('Mean Square Error')]
-        else:
-            if self.task == 'regression':
-                self.eval_metrics = [MSE('Mean Square Error')]
-            else:
-                self.eval_metrics = [Accuracy('Accuracy')]
+        self.eval_metrics = self.get_eval_metrics()
         # whether this layer the last layer of Auto-growing cascade layer
         self.complete = False
         self.fit_estimators = [None for _ in range(self.n_estimators)]
         self.train_avg_metric = None
         self.test_avg_metric = None
         self.eval_proba_test = None
+
+    def get_eval_metrics(self):
+        if self.metrics == 'accuracy':
+            eval_metrics = [Accuracy('accuracy')]
+        elif self.metrics == 'auc':
+            eval_metrics = [AUC('AUC')]
+        elif self.metrics == 'mse':
+            eval_metrics = [MSE('Mean Square Error')]
+        elif self.metrics == 'rmse':
+            eval_metrics = [RMSE('Root Mean Square Error')]
+        else:
+            if self.task == 'regression':
+                eval_metrics = [MSE('Mean Square Error')]
+            else:
+                eval_metrics = [Accuracy('Accuracy')]
+        return eval_metrics
 
     def call(self, inputs, **kwargs):
         return inputs
@@ -722,14 +733,18 @@ class CascadeLayer(Layer):
             seed = (self.seed + hash("[estimator] {}".format(est_name))) % 1000000007
         else:
             seed = None
-        return get_estimator_kfold(name=est_name,
-                                   n_folds=n_folds,
-                                   task=self.task,
-                                   est_type=est_type,
-                                   eval_metrics=self.eval_metrics,
-                                   seed=seed,
-                                   keep_in_mem=self.keep_in_mem,
-                                   est_args=est_args)
+        if self.distribute:
+            get_est_func = get_dist_estimator_kfold
+        else:
+            get_est_func = get_estimator_kfold
+        return get_est_func(name=est_name,
+                            n_folds=n_folds,
+                            task=self.task,
+                            est_type=est_type,
+                            eval_metrics=self.eval_metrics,
+                            seed=seed,
+                            keep_in_mem=self.keep_in_mem,
+                            est_args=est_args)
 
     def fit(self, x_train, y_train):
         """
@@ -753,20 +768,32 @@ class CascadeLayer(Layer):
         x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=np.float32)
         eval_proba_train = np.zeros((n_trains, n_classes))
         # fit estimators, get probas (classification) or targets (regression)
+        estimators = []
         for ei in range(self.n_estimators):
             est = self._init_estimators(self.layer_id, ei)
-            # fit and transform
-            y_stratify = y_train if self.task == 'classification' else None
-            y_proba_train, _ = est.fit_transform(x_train, y_train, y_stratify, test_sets=None)
+            estimators.append(est)
+        # fit and transform
+        y_stratify = y_train if self.task == 'classification' else None
+        if self.distribute:
+            y_proba_trains = ray.get([est.fit_transform.remote(x_train, y_train, y_stratify, test_sets=None)
+                                      for est in estimators])
+        else:
+            y_proba_trains = [est.fit_transform(x_train, y_train, y_stratify, test_sets=None)
+                              for est in estimators]
+        print("y_proba_trains GETTED!")
+        for ei, (y_proba_train, _) in enumerate(y_proba_trains):
             # print(y_proba_train.shape, y_proba_test.shape)
             if y_proba_train is None:
                 raise RuntimeError("layer - {} - estimator - {} fit FAILED!,"
                                    " y_proba_train is None!".format(self.layer_id, ei))
             self.check_shape(y_proba_train, n_trains, n_classes)
-            if self.keep_in_mem:
-                self.fit_estimators[ei] = est
             x_proba_train[:, ei * n_classes:ei * n_classes + n_classes] = y_proba_train
             eval_proba_train += y_proba_train
+        if self.keep_in_mem:
+            if self.distribute:
+                self.fit_estimators = ray.get(estimators)
+            else:
+                self.fit_estimators = estimators
         eval_proba_train /= self.n_estimators
         # now supports one eval_metrics
         metric = self.eval_metrics[0]
@@ -809,12 +836,21 @@ class CascadeLayer(Layer):
         eval_proba_train = np.zeros((n_trains, n_classes))
         eval_proba_test = np.zeros((n_tests, n_classes))
         # fit estimators, get probas
+        estimators = []
         for ei in range(self.n_estimators):
             est = self._init_estimators(self.layer_id, ei)
-            # fit and transform
-            y_stratify = y_train if self.task == 'classification' else None
-            y_proba_train, y_proba_test = est.fit_transform(x_train, y_train, y_stratify,
-                                                            test_sets=[('test', x_test, y_test)])
+            estimators.append(est)
+        # fit and transform
+        y_stratify = y_train if self.task == 'classification' else None
+        if self.distribute:
+            y_proba_train_tests = ray.get([est.fit_transform.remote(x_train, y_train, y_stratify,
+                                                                    test_sets=[('test', x_test, y_test)])
+                                           for est in estimators])
+        else:
+            y_proba_train_tests = [est.fit_transform(x_train, y_train, y_stratify,
+                                                     test_sets=[('test', x_test,  y_test)])
+                                   for est in estimators]
+        for ei, (y_proba_train, y_proba_test) in enumerate(y_proba_train_tests):
             # if only one element on test_sets, return one test result like y_proba_train
             if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
                 y_proba_test = y_proba_test[0]
@@ -825,12 +861,15 @@ class CascadeLayer(Layer):
             self.check_shape(y_proba_train, n_trains, n_classes)
             if y_proba_test is not None:
                 self.check_shape(y_proba_test, n_tests, n_classes)
-            if self.keep_in_mem:
-                self.fit_estimators[ei] = est
             x_proba_train[:, ei*n_classes:ei*n_classes + n_classes] = y_proba_train
             x_proba_test[:, ei*n_classes:ei*n_classes + n_classes] = y_proba_test
             eval_proba_train += y_proba_train
             eval_proba_test += y_proba_test
+        if self.keep_in_mem:
+            if self.distribute:
+                self.fit_estimators = ray.get(estimators)
+            else:
+                self.fit_estimators = estimators
         eval_proba_train /= self.n_estimators
         eval_proba_test /= self.n_estimators
         metric = self.eval_metrics[0]

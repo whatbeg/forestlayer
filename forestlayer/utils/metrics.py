@@ -182,6 +182,22 @@ class MSE(Metrics):
         return self.calc(y_true, y_proba, prefix, logger)
 
 
+class RMSE(MSE):
+    def __init__(self, name=''):
+        super(RMSE, self).__init__(name)
+
+    def calc(self, y_true, y_pred, prefix='', logger=None):
+        res = super(RMSE, self).calc(y_true, y_pred, prefix)
+        rmse = np.sqrt(res)
+        if logger is not None:
+            logger.info('{} RMSE({}) = {:.4f}'.format(prefix, self.name, rmse))
+        return rmse
+
+    def calc_proba(self, y_true, y_proba, prefix='', logger=None):
+        res = super(RMSE, self).calc_proba(y_true, y_proba, prefix, logger)
+        return res
+
+
 def accuracy(y_true, y_pred):
     return 1.0 * np.sum(np.asarray(y_true) == y_pred) / len(y_true)
 
