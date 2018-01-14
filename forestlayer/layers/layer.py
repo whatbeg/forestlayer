@@ -632,29 +632,13 @@ class CascadeLayer(Layer):
         self.distribute = distribute
         self.larger_better = True
         self.metrics = metrics
-        self.eval_metrics = self.get_eval_metrics()
+        self.eval_metrics = get_eval_metrics(self.metrics, self.task)
         # whether this layer the last layer of Auto-growing cascade layer
         self.complete = False
         self.fit_estimators = [None for _ in range(self.n_estimators)]
         self.train_avg_metric = None
         self.test_avg_metric = None
         self.eval_proba_test = None
-
-    def get_eval_metrics(self):
-        if self.metrics == 'accuracy':
-            eval_metrics = [Accuracy('accuracy')]
-        elif self.metrics == 'auc':
-            eval_metrics = [AUC('AUC')]
-        elif self.metrics == 'mse':
-            eval_metrics = [MSE('Mean Square Error')]
-        elif self.metrics == 'rmse':
-            eval_metrics = [RMSE('Root Mean Square Error')]
-        else:
-            if self.task == 'regression':
-                eval_metrics = [MSE('Mean Square Error')]
-            else:
-                eval_metrics = [Accuracy('Accuracy')]
-        return eval_metrics
 
     def call(self, inputs, **kwargs):
         return inputs
@@ -985,7 +969,7 @@ class AutoGrowingCascadeLayer(Layer):
     def __init__(self, batch_size=None, dtype=np.float32, name=None, task='classification', est_configs=None,
                  early_stopping_rounds=None, max_layers=0, look_index_cycle=None, data_save_rounds=0,
                  stop_by_test=True, n_classes=None, keep_in_mem=False, data_save_dir=None, model_save_dir=None,
-                 metrics=None, keep_test_result=False, seed=None):
+                 metrics=None, keep_test_result=False, seed=None, distribute=False):
         """AutoGrowingCascadeLayer
         An AutoGrowingCascadeLayer is a virtual layer that consists of many single cascade layers.
         `auto-growing` means this kind of layer can decide the depth of cascade forest,
@@ -1020,6 +1004,8 @@ class AutoGrowingCascadeLayer(Layer):
         :param model_save_dir: directory to save fit estimators into
         :param metrics: evaluation metrics used in training model and evaluating testing data
         :param seed: random seed, also called random state in scikit-learn random forest
+        :param distribute: whether use distributed training. If use, you should `import ray`
+                           and write `ray.init(<redis-address>)` at the beginning of the main program.
         """
         self.est_configs = [] if est_configs is None else est_configs
         super(AutoGrowingCascadeLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
@@ -1039,18 +1025,9 @@ class AutoGrowingCascadeLayer(Layer):
         self.keep_in_mem = keep_in_mem
         self.stop_by_test = stop_by_test
         self.metrics = metrics
-        if self.metrics == 'accuracy':
-            self.eval_metrics = [Accuracy('accuracy')]
-        elif self.metrics == 'auc':
-            self.eval_metrics = [AUC('auc')]
-        elif self.metrics == 'mse':
-            self.eval_metrics = [MSE('Mean Square Error')]
-        else:
-            if self.task == 'regression':
-                self.eval_metrics = [MSE('Mean Square Error')]
-            else:
-                self.eval_metrics = [Accuracy('accuracy')]
+        self.eval_metrics = get_eval_metrics(self.metrics, self.task)
         self.seed = seed
+        self.distribute = distribute
         # properties
         self.layer_fit_cascades = []
         self.n_layers = 0
@@ -1062,27 +1039,30 @@ class AutoGrowingCascadeLayer(Layer):
         self.test_results = None
         self.keep_test_result = keep_test_result
 
-    def _create_cascade_layer(self, task='classification', est_configs=None, n_classes=None,
-                              data_save_dir=None, model_save_dir=None, layer_id=None, keep_in_mem=False,
-                              dtype=None, metrics=None, seed=None):
+    def _create_cascade_layer(self, est_configs=None, data_save_dir=None, model_save_dir=None,
+                              layer_id=None, metrics=None, seed=None):
         """
         Create a cascade layer.
 
-        :param task:
         :param est_configs:
-        :param n_classes:
         :param data_save_dir:
         :param model_save_dir:
         :param layer_id:
-        :param keep_in_mem:
-        :param dtype:
         :param metrics:
         :param seed:
-        :return:
+        :return: A CascadeLayer Object.
         """
-        return CascadeLayer(dtype=dtype, task=task, est_configs=est_configs, layer_id=layer_id, n_classes=n_classes,
-                            keep_in_mem=keep_in_mem, data_save_dir=data_save_dir, model_save_dir=model_save_dir,
-                            metrics=metrics, seed=seed)
+        return CascadeLayer(dtype=self.dtype,
+                            task=self.task,
+                            est_configs=est_configs,
+                            layer_id=layer_id,
+                            n_classes=self.n_classes,
+                            keep_in_mem=self.keep_in_mem,
+                            data_save_dir=data_save_dir,
+                            model_save_dir=model_save_dir,
+                            metrics=metrics,
+                            seed=seed,
+                            distribute=self.distribute)
 
     def call(self, x_trains):
         pass
@@ -1183,14 +1163,10 @@ class AutoGrowingCascadeLayer(Layer):
                 model_save_dir = self.model_save_dir
                 if model_save_dir is not None:
                     model_save_dir = osp.join(model_save_dir, 'cascade_layer_{}'.format(layer_id))
-                cascade = self._create_cascade_layer(task=self.task,
-                                                     est_configs=self.est_configs,
-                                                     n_classes=self.n_classes,
+                cascade = self._create_cascade_layer(est_configs=self.est_configs,
                                                      data_save_dir=data_save_dir,
                                                      model_save_dir=model_save_dir,
                                                      layer_id=layer_id,
-                                                     keep_in_mem=self.keep_in_mem,
-                                                     dtype=self.dtype,
                                                      metrics=self.eval_metrics,
                                                      seed=self.seed)
                 x_proba_train, _ = cascade.fit_transform(x_cur_train, y_train)
@@ -1319,14 +1295,10 @@ class AutoGrowingCascadeLayer(Layer):
                 model_save_dir = self.model_save_dir
                 if model_save_dir is not None:
                     model_save_dir = osp.join(model_save_dir, 'cascade_layer_{}'.format(layer_id))
-                cascade = self._create_cascade_layer(task=self.task,
-                                                     est_configs=self.est_configs,
-                                                     n_classes=self.n_classes,
+                cascade = self._create_cascade_layer(est_configs=self.est_configs,
                                                      data_save_dir=data_save_dir,
                                                      model_save_dir=model_save_dir,
                                                      layer_id=layer_id,
-                                                     keep_in_mem=self.keep_in_mem,
-                                                     dtype=self.dtype,
                                                      seed=self.seed)
                 x_proba_train, x_proba_test = cascade.fit_transform(x_cur_train, y_train, x_cur_test, y_test)
                 if self.keep_in_mem:
@@ -1626,3 +1598,20 @@ def get_opt_layer_id(acc_list, larger_better=True):
     else:
         opt_layer_id = np.argsort(np.asarray(acc_list), kind='mergesort')[0]
     return opt_layer_id
+
+
+def get_eval_metrics(metrics, task):
+    if metrics == 'accuracy':
+        eval_metrics = [Accuracy('accuracy')]
+    elif metrics == 'auc':
+        eval_metrics = [AUC('AUC')]
+    elif metrics == 'mse':
+        eval_metrics = [MSE('Mean Square Error')]
+    elif metrics == 'rmse':
+        eval_metrics = [RMSE('Root Mean Square Error')]
+    else:
+        if task == 'regression':
+            eval_metrics = [MSE('Mean Square Error')]
+        else:
+            eval_metrics = [Accuracy('Accuracy')]
+    return eval_metrics
