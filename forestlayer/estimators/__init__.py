@@ -25,23 +25,31 @@ def est_class_from_type(task, est_type):
     """
     if task == 'classification':
         if est_type == 'CRF':
-            return CompletelyRFClassifier
+            return FLCRFClassifier
         if est_type == 'RF':
-            return RFClassifier
+            return FLRFClassifier
         if est_type == 'GBDT':
-            return GBDTClassifier
+            return FLGBDTClassifier
         if est_type == 'XGB':
             return XGBoostClassifier
+        if est_type == 'FLXGB':
+            return FLXGBoostClassifier
+        if est_type == 'FLLGBM':
+            raise NotImplementedError
         raise ValueError('Unknown Estimator: {}'.format(est_type))
     elif task == 'regression':
         if est_type == 'CRF':
-            return CompletelyRFRegressor
+            return FLCRFRegressor
         if est_type == 'RF':
-            return RFRegressor
+            return FLRFRegressor
         if est_type == 'GBDT':
-            return GBDTRegressor
+            return FLGBDTRegressor
         if est_type == 'XGB':
             return XGBoostRegressor
+        if est_type == 'FLXGB':
+            return FLXGBoostRegressor
+        if est_type == 'FLLGBM':
+            return FLLGBMRegressor
         raise ValueError('Unknown Estimator: {}'.format(est_type))
     else:
         raise ValueError('Unknown task: {}'.format(task))

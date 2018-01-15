@@ -55,7 +55,10 @@ class KFoldWrapper(object):
         """
         est_args = self.est_args.copy()
         est_name = '{}/{}'.format(self.name, k)
-        est_args['random_state'] = self.seed
+        # TODO: consider if add a random_state, actually random_state of each estimator can be set in est_configs in
+        # main program by users, so we need not to set random_state there.
+        # More importantly, if some estimators have no random_state parameter, this assignment can throw problems.
+        # est_args['random_state'] = self.seed
         return self.est_class(est_name, est_args)
 
     def fit_transform(self, X, y, y_stratify=None, test_sets=None):

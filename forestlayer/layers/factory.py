@@ -7,8 +7,8 @@ Factory methods to Layers.
 # Authors: Qiu Hu <huqiu00#163.com>
 # License: Apache-2.0
 
-from .layer import MultiGrainScanLayer, PoolingLayer, ConcatLayer
-from ..estimators.arguments import CompletelyRandomForest, RandomForest, GBDT, MultiClassXGBoost, BinClassXGBoost
+from .layer import PoolingLayer
+from ..estimators.arguments import CompletelyRandomForestArg, RandomForestArg
 from .window import Window, Pooling
 
 
@@ -86,8 +86,8 @@ def EstForWin2x2(**kwargs):
     :param kwargs:
     :return:
     """
-    rf1 = CompletelyRandomForest(**kwargs)
-    rf2 = RandomForest(**kwargs)
+    rf1 = CompletelyRandomForestArg(**kwargs)
+    rf2 = RandomForestArg(**kwargs)
     est_for_windows = [[rf1, rf2], [rf1, rf2]]
     return est_for_windows
 

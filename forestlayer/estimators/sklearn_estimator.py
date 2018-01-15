@@ -1,6 +1,15 @@
 # -*- coding:utf-8 -*-
 """
 Scikit-learn Estimators Definition.
+
+If you want to add your new sklearn-based estimators, take regression task as an example,
+you must define `__init__` function like follows:
+```
+class YOURRegressor(SKlearnBaseEstimator):
+    def __init__(self, name, kwargs):
+        from xx import TrueRegressor
+        super(YOURRegressor, self).__init__('regression', TrueRegressor, name, kwargs)
+```
 """
 
 from base_estimator import *
@@ -76,87 +85,121 @@ class SKlearnBaseEstimator(BaseEstimator):
         return SKlearnBaseEstimator(est_class=self.est_class, **self.est_args)
 
 
-class RFClassifier(SKlearnBaseEstimator):
+# ==============================================================
+# scikit-learn based Classifier definition
+# ==============================================================
+
+
+class FLRFClassifier(SKlearnBaseEstimator):
     """
     Random Forest Classifier
     """
     def __init__(self, name, kwargs):
         from sklearn.ensemble import RandomForestClassifier
-        super(RFClassifier, self).__init__('classification', RandomForestClassifier, name, kwargs)
+        super(FLRFClassifier, self).__init__('classification', RandomForestClassifier, name, kwargs)
 
     def _default_predict_batch_size(self, est, X, task='classification'):
         return forest_predict_batch_size(est, X, task)
 
 
-class CompletelyRFClassifier(SKlearnBaseEstimator):
+class FLCRFClassifier(SKlearnBaseEstimator):
     """
     Completely Random Forest Classifier
     """
     def __init__(self, name, kwargs):
         from sklearn.ensemble import ExtraTreesClassifier
-        super(CompletelyRFClassifier, self).__init__('classification', ExtraTreesClassifier, name, kwargs)
+        super(FLCRFClassifier, self).__init__('classification', ExtraTreesClassifier, name, kwargs)
 
     def _default_predict_batch_size(self, est, X, task='classification'):
         return forest_predict_batch_size(est, X,  task)
 
 
-class GBDTClassifier(SKlearnBaseEstimator):
+class FLGBDTClassifier(SKlearnBaseEstimator):
     """
     Gradient Boosting Decision Tree Classifier.
     """
     def __init__(self, name, kwargs):
         from sklearn.ensemble import GradientBoostingClassifier
-        super(GBDTClassifier, self).__init__('classification', GradientBoostingClassifier, name, kwargs)
+        super(FLGBDTClassifier, self).__init__('classification', GradientBoostingClassifier, name, kwargs)
 
 
-class SKXGBoostClassifier(SKlearnBaseEstimator):
+class FLXGBoostClassifier(SKlearnBaseEstimator):
     """
     XGBoost Classifier using Sklearn interfaces.
     """
     def __init__(self, name, kwargs):
         from xgboost import XGBClassifier
-        super(SKXGBoostClassifier, self).__init__('classification', XGBClassifier, name, kwargs)
+        super(FLXGBoostClassifier, self).__init__('classification', XGBClassifier, name, kwargs)
 
 
-class RFRegressor(SKlearnBaseEstimator):
+# ==============================================================
+# scikit-learn based Regressor definition
+# ==============================================================
+
+
+class FLRFRegressor(SKlearnBaseEstimator):
     """
     Random Forest Regressor.
     """
     def __init__(self, name, kwargs):
         from sklearn.ensemble import RandomForestRegressor
-        super(RFRegressor, self).__init__('regression', RandomForestRegressor, name, kwargs)
+        super(FLRFRegressor, self).__init__('regression', RandomForestRegressor, name, kwargs)
 
     def _default_predict_batch_size(self, est, X, task='regression'):
         return forest_predict_batch_size(est, X, task)
 
 
-class CompletelyRFRegressor(SKlearnBaseEstimator):
+class FLCRFRegressor(SKlearnBaseEstimator):
     """
     Completely Random Forest Regressor.
     """
     def __init__(self, name, kwargs):
         from sklearn.ensemble import ExtraTreesRegressor
-        super(CompletelyRFRegressor, self).__init__('regression', ExtraTreesRegressor, name, kwargs)
+        super(FLCRFRegressor, self).__init__('regression', ExtraTreesRegressor, name, kwargs)
 
     def _default_predict_batch_size(self, est, X, task='regression'):
         return forest_predict_batch_size(est, X, task)
 
 
-class GBDTRegressor(SKlearnBaseEstimator):
+class FLGBDTRegressor(SKlearnBaseEstimator):
     """
     Gradient Boosting Decision Tree Regressor.
     """
     def __init__(self, name, kwargs):
         from sklearn.ensemble import GradientBoostingRegressor
-        super(GBDTRegressor, self).__init__('regression', GradientBoostingRegressor, name, kwargs)
+        super(FLGBDTRegressor, self).__init__('regression', GradientBoostingRegressor, name, kwargs)
 
 
-class SKXGBoostRegressor(SKlearnBaseEstimator):
+class FLXGBoostRegressor(SKlearnBaseEstimator):
     """
     XGBoost Regressor using Sklearn interfaces.
     """
     def __init__(self, name, kwargs):
-        from xgboost import XGBRegressor
-        super(SKXGBoostRegressor, self).__init__('regression', XGBRegressor, name, kwargs)
+        from xgboost.sklearn import XGBRegressor
+        super(FLXGBoostRegressor, self).__init__('regression', XGBRegressor, name, kwargs)
+
+
+class FLLGBMRegressor(SKlearnBaseEstimator):
+    """
+    LightGBM Regressor using Sklearn interfaces.
+    """
+    def __init__(self, name, kwargs):
+        from lightgbm.sklearn import LGBMRegressor
+        super(FLLGBMRegressor, self).__init__('regression', LGBMRegressor, name, kwargs)
+
+    def fit(self, X, y, cache_dir=None):
+        super(FLLGBMRegressor, self).fit(X, y, cache_dir)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
