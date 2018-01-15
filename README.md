@@ -115,6 +115,14 @@ result = model.predict(x_in)
 
 For more examples and tutorials, you can refer to [examples](https://github.com/whatbeg/forestlayer/tree/master/examples) to find more details.
 
+## Benchmark
+
+|  conf                   | test acc  | layer-best | avg time of 3 tries |
+| :---:                   | :-----:   |  :----:    | :------:     |
+| gcForest v1.0           | 86.14%    | 6-1        |  646s        |
+| ForestLayer Standalone  | 86.14%    | 6-1        |  279s        |
+| ForestLayer 2 nodes     | 86.14%    | 6-1        |  190s        |
+
 ## Examples
 
 See [examples](https://github.com/whatbeg/forestlayer/tree/master/examples)
