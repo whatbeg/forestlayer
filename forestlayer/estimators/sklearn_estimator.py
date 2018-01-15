@@ -5,14 +5,14 @@ Scikit-learn Estimators Definition.
 If you want to add your new sklearn-based estimators, take regression task as an example,
 you must define `__init__` function like follows:
 ```
-class YOURRegressor(SKlearnBaseEstimator):
+class YOURRegressor(xSKLearnBaseEstimator):
     def __init__(self, name, kwargs):
         from xx import TrueRegressor
         super(YOURRegressor, self).__init__('regression', TrueRegressor, name, kwargs)
 ```
 """
 
-from base_estimator import *
+from base_estimator import BaseEstimator
 from ..utils.log_utils import get_logger
 from sklearn.externals import joblib
 
@@ -50,12 +50,12 @@ def forest_predict_batch_size(clf, X, task):
     return batch_size
 
 
-class SKlearnBaseEstimator(BaseEstimator):
+class SKLearnBaseEstimator(BaseEstimator):
     """
     SKlearn base estimators inherited from BaseEstimator.
     """
     def __init__(self, task=None, est_class=None, name=None, est_args=None):
-        super(SKlearnBaseEstimator, self).__init__(task, est_class, name, est_args)
+        super(SKLearnBaseEstimator, self).__init__(task, est_class, name, est_args)
 
     def _save_model_to_disk(self, est, cache_path):
         """
@@ -82,114 +82,7 @@ class SKlearnBaseEstimator(BaseEstimator):
 
         :return:
         """
-        return SKlearnBaseEstimator(est_class=self.est_class, **self.est_args)
-
-
-# ==============================================================
-# scikit-learn based Classifier definition
-# ==============================================================
-
-
-class FLRFClassifier(SKlearnBaseEstimator):
-    """
-    Random Forest Classifier
-    """
-    def __init__(self, name, kwargs):
-        from sklearn.ensemble import RandomForestClassifier
-        super(FLRFClassifier, self).__init__('classification', RandomForestClassifier, name, kwargs)
-
-    def _default_predict_batch_size(self, est, X, task='classification'):
-        return forest_predict_batch_size(est, X, task)
-
-
-class FLCRFClassifier(SKlearnBaseEstimator):
-    """
-    Completely Random Forest Classifier
-    """
-    def __init__(self, name, kwargs):
-        from sklearn.ensemble import ExtraTreesClassifier
-        super(FLCRFClassifier, self).__init__('classification', ExtraTreesClassifier, name, kwargs)
-
-    def _default_predict_batch_size(self, est, X, task='classification'):
-        return forest_predict_batch_size(est, X,  task)
-
-
-class FLGBDTClassifier(SKlearnBaseEstimator):
-    """
-    Gradient Boosting Decision Tree Classifier.
-    """
-    def __init__(self, name, kwargs):
-        from sklearn.ensemble import GradientBoostingClassifier
-        super(FLGBDTClassifier, self).__init__('classification', GradientBoostingClassifier, name, kwargs)
-
-
-class FLXGBoostClassifier(SKlearnBaseEstimator):
-    """
-    XGBoost Classifier using Sklearn interfaces.
-    """
-    def __init__(self, name, kwargs):
-        from xgboost import XGBClassifier
-        super(FLXGBoostClassifier, self).__init__('classification', XGBClassifier, name, kwargs)
-
-
-# ==============================================================
-# scikit-learn based Regressor definition
-# ==============================================================
-
-
-class FLRFRegressor(SKlearnBaseEstimator):
-    """
-    Random Forest Regressor.
-    """
-    def __init__(self, name, kwargs):
-        from sklearn.ensemble import RandomForestRegressor
-        super(FLRFRegressor, self).__init__('regression', RandomForestRegressor, name, kwargs)
-
-    def _default_predict_batch_size(self, est, X, task='regression'):
-        return forest_predict_batch_size(est, X, task)
-
-
-class FLCRFRegressor(SKlearnBaseEstimator):
-    """
-    Completely Random Forest Regressor.
-    """
-    def __init__(self, name, kwargs):
-        from sklearn.ensemble import ExtraTreesRegressor
-        super(FLCRFRegressor, self).__init__('regression', ExtraTreesRegressor, name, kwargs)
-
-    def _default_predict_batch_size(self, est, X, task='regression'):
-        return forest_predict_batch_size(est, X, task)
-
-
-class FLGBDTRegressor(SKlearnBaseEstimator):
-    """
-    Gradient Boosting Decision Tree Regressor.
-    """
-    def __init__(self, name, kwargs):
-        from sklearn.ensemble import GradientBoostingRegressor
-        super(FLGBDTRegressor, self).__init__('regression', GradientBoostingRegressor, name, kwargs)
-
-
-class FLXGBoostRegressor(SKlearnBaseEstimator):
-    """
-    XGBoost Regressor using Sklearn interfaces.
-    """
-    def __init__(self, name, kwargs):
-        from xgboost.sklearn import XGBRegressor
-        super(FLXGBoostRegressor, self).__init__('regression', XGBRegressor, name, kwargs)
-
-
-class FLLGBMRegressor(SKlearnBaseEstimator):
-    """
-    LightGBM Regressor using Sklearn interfaces.
-    """
-    def __init__(self, name, kwargs):
-        from lightgbm.sklearn import LGBMRegressor
-        super(FLLGBMRegressor, self).__init__('regression', LGBMRegressor, name, kwargs)
-
-    def fit(self, X, y, cache_dir=None):
-        super(FLLGBMRegressor, self).fit(X, y, cache_dir)
-
+        return SKLearnBaseEstimator(est_class=self.est_class, **self.est_args)
 
 
 

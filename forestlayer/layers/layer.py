@@ -17,7 +17,7 @@ from ..utils.log_utils import get_logger, list2str
 from ..utils.layer_utils import check_list_depth
 from ..utils.storage_utils import check_dir
 from ..utils.metrics import Metrics, Accuracy, AUC, MSE, RMSE
-from ..estimators import get_estimator_kfold, get_dist_estimator_kfold, EstimatorArgument
+from ..estimators import get_estimator_kfold, get_dist_estimator_kfold, EstimatorConfig
 
 
 class Layer(object):
@@ -225,7 +225,7 @@ class MultiGrainScanLayer(Layer):
             x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
             y_win = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
             for ei, est in enumerate(ests_for_win):
-                if isinstance(est, EstimatorArgument):
+                if isinstance(est, EstimatorConfig):
                     est = self._init_estimator(est, wi, ei)
                 ests_for_win[ei] = est
             if self.distribute:
@@ -286,7 +286,7 @@ class MultiGrainScanLayer(Layer):
             test_sets = [('testOfWin{}'.format(wi), x_wins_test[wi], y_win_test)]
             # fit estimators for this window
             for ei, est in enumerate(ests_for_win):
-                if isinstance(est, EstimatorArgument):
+                if isinstance(est, EstimatorConfig):
                     est = self._init_estimator(est, wi, ei)
                 # if self.distribute is True, then est is an ActorHandle.
                 ests_for_win[ei] = est
@@ -585,7 +585,7 @@ class CascadeLayer(Layer):
         :param dtype: data type
         :param name: name of this layer
         :param task: classification or regression, [default = classification]
-        :param est_configs: list of estimator arguments, every argument can be `dict` or `EstimatorArgument` instance
+        :param est_configs: list of estimator arguments, every argument can be `dict` or `EstimatorConfig` instance
                             identify the estimator configuration to construct at this layer
         :param layer_id: layer id, if this layer is an independent layer, layer id is anonymous [default]
         :param n_classes: number of classes to classify
@@ -617,9 +617,9 @@ class CascadeLayer(Layer):
             ValueError: if estimator.fit_transform returns wrong shape data
         """
         self.est_configs = [] if est_configs is None else est_configs
-        # transform EstimatorArgument to dict that represents estimator arguments
+        # transform EstimatorConfig to dict that represents estimator arguments
         for eci, est_config in enumerate(self.est_configs):
-            if isinstance(est_config, EstimatorArgument):
+            if isinstance(est_config, EstimatorConfig):
                 self.est_configs[eci] = est_config.get_est_args().copy()
         self.layer_id = layer_id
         if not name:
@@ -993,7 +993,7 @@ class AutoGrowingCascadeLayer(Layer):
         :param dtype: data type
         :param name: name of this layer
         :param task: classification or regression, [default = classification]
-        :param est_configs: list of estimator arguments, every argument can be `dict` or `EstimatorArgument` instance
+        :param est_configs: list of estimator arguments, every argument can be `dict` or `EstimatorConfig` instance
                             identify the estimator configuration to construct at this layer
         :param early_stopping_rounds: early stopping rounds, if there is no increase in performance (training accuracy
                                       or testing accuracy) over `early_stopping_rounds` layer, we stop the training
@@ -1100,7 +1100,7 @@ class AutoGrowingCascadeLayer(Layer):
         :param est:
         :return:
         """
-        if isinstance(est, EstimatorArgument):
+        if isinstance(est, EstimatorConfig):
             self.est_configs.append(est.get_est_args())
         elif isinstance(est, dict):
             self.est_configs.append(est)

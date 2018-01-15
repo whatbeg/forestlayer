@@ -4,7 +4,8 @@ Base Estimators Wrapper Definition.
 """
 
 import numpy as np
-from ..utils.storage_utils import *
+import os.path as osp
+from ..utils.storage_utils import is_path_exists, check_dir, name2path
 from ..utils.log_utils import get_logger, get_logging_level
 
 LOGGER = get_logger('estimators.base_estimator')

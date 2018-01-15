@@ -1,6 +1,6 @@
 # -*- coding:utf-8 -*-
 """
-Argument class definition.
+Estimator Configuration Class Definition.
 """
 
 # Copyright 2017 Authors NJU PASA BigData Laboratory.
@@ -10,12 +10,12 @@ Argument class definition.
 from ..utils.log_utils import get_logger
 
 
-class EstimatorArgument(object):
+class EstimatorConfig(object):
     """
     Estimator Argument is a class describes an estimator and its specific arguments, which is used to create concrete
     estimators in training.
     Every time we create a multi-grain scan layer or a cascade layer, we don't put concrete estimator instances into
-    initialization parameters, but put the EstimatorArgument that describes the estimator.
+    initialization parameters, but put the EstimatorConfig that describes the estimator.
     """
     def __init__(self):
         self.LOGGER = get_logger('estimator.argument')
@@ -30,7 +30,7 @@ class EstimatorArgument(object):
         return self.est_args.copy()
 
 
-class MultiClassXGBoostArg(EstimatorArgument):
+class MultiClassXGBConfig(EstimatorConfig):
     """
     Multi-class XGBoost Classifier Argument.
     """
@@ -60,10 +60,10 @@ class MultiClassXGBoostArg(EstimatorArgument):
         :param verbose_eval:
         :param learning_rates:
         """
-        super(MultiClassXGBoostArg, self).__init__()
+        super(MultiClassXGBConfig, self).__init__()
         assert num_class is not None, 'You must set number of classes!'
         self.est_args = {
-            'est_type': 'XGB',
+            'est_type': 'FLXGB',
             'n_folds': n_folds,
             'nthread': nthread,
             'booster': booster,
@@ -84,7 +84,7 @@ class MultiClassXGBoostArg(EstimatorArgument):
         }
 
 
-class BinClassXGBoostArg(EstimatorArgument):
+class BinClassXGBConfig(EstimatorConfig):
     """
     Binary Class XGBoost Classifier.
     """
@@ -114,10 +114,10 @@ class BinClassXGBoostArg(EstimatorArgument):
         :param verbose_eval:
         :param learning_rates:
         """
-        super(BinClassXGBoostArg, self).__init__()
+        super(BinClassXGBConfig, self).__init__()
         assert num_class is not None, 'You must set number of classes!'
         self.est_args = {
-            'est_type': 'XGB',
+            'est_type': 'FLXGB',
             'n_folds': n_folds,
             'nthread': nthread,
             'booster': booster,
@@ -137,7 +137,7 @@ class BinClassXGBoostArg(EstimatorArgument):
         }
 
 
-class RandomForestArg(EstimatorArgument):
+class RandomForestConfig(EstimatorConfig):
     """
     Random Forest Argument.
     """
@@ -154,9 +154,9 @@ class RandomForestArg(EstimatorArgument):
         :param min_samples_leaf:
         :param random_state:
         """
-        super(RandomForestArg, self).__init__()
+        super(RandomForestConfig, self).__init__()
         self.est_args = {
-            'est_type': 'RF',
+            'est_type': 'FLRF',
             'n_folds': n_folds,
             'n_estimators': n_estimators,
             'max_depth': max_depth,
@@ -167,14 +167,14 @@ class RandomForestArg(EstimatorArgument):
         }
 
 
-class CompletelyRandomForestArg(EstimatorArgument):
+class ExtraRandomForestConfig(EstimatorConfig):
     """
-    Completely Random Forest Argument.
+    Extremely Random Forest Argument.
     """
     def __init__(self, n_folds=3, n_estimators=500, max_depth=100, n_jobs=-1, max_features=1,
                  min_samples_leaf=1, random_state=None):
         """
-        Completely Random Forest Argument.
+        Completely Random Forest Argument, also called Extremely Random Forest.
 
         :param n_folds: number of folds for cross validation
         :param n_estimators: number of tree estimators
@@ -184,9 +184,9 @@ class CompletelyRandomForestArg(EstimatorArgument):
         :param min_samples_leaf:
         :param random_state:
         """
-        super(CompletelyRandomForestArg, self).__init__()
+        super(ExtraRandomForestConfig, self).__init__()
         self.est_args = {
-            'est_type': 'CRF',
+            'est_type': 'FLCRF',
             'n_folds': n_folds,
             'n_estimators': n_estimators,
             'max_depth': max_depth,
@@ -197,7 +197,7 @@ class CompletelyRandomForestArg(EstimatorArgument):
         }
 
 
-class GBDTArg(EstimatorArgument):
+class GBDTConfig(EstimatorConfig):
     """
     Gradient Boosting Decision Tree Argument.
     """
@@ -232,9 +232,9 @@ class GBDTArg(EstimatorArgument):
         :param warm_start:
         :param presort:
         """
-        super(GBDTArg, self).__init__()
+        super(GBDTConfig, self).__init__()
         self.est_args = {
-            'est_type': 'GBDT',
+            'est_type': 'FLGBDT',
             'n_folds': n_folds,
             'loss': loss,
             'learning_rate': learning_rate,
@@ -258,74 +258,7 @@ class GBDTArg(EstimatorArgument):
         }
 
 
-# class XGBRegressorArg(EstimatorArgument):
-#     """
-#     Xgboost regressor.
-#     """
-#     def __init__(self, n_folds=3, nthread=-1, booster='gbtree', scale_pos_weight=1, n_estimators=100,
-#                  silent=True, reg_lambda=1, reg_alpha=0, gamma=0, min_child_weight=1, base_score=0.5,
-#                  objective="reg:linear", eta=0.03, subsample=1,
-#                  early_stopping_rounds=30, colsample_bytree=1, colsample_bylevel=1, max_depth=6,
-#                  verbose_eval=False, learning_rate=0.1, random_state=0):
-#         """
-#         XGBoost Regressor Argument describes arguments of XGBoost Regressor.
-#         Parameter can refer to xgboost document: http://xgboost.readthedocs.io/en/latest/python/python_api.html.
-#
-#         :param n_folds: how many folds to execute in cross validation
-#         :param nthread: number of threads to execute
-#         :param booster: booster, default is 'gbtree'
-#         :param scale_pos_weight: used to handle class imbalance
-#         :param n_estimators:
-#         :param silent:
-#         :param reg_lambda:
-#         :param reg_alpha:
-#         :param gamma:
-#         :param min_child_weight: Defines the minimum sum of weights of all observations required in a child.
-#                                  Used to control over-fitting. Higher values prevent a model from learning relations
-#                                   which might be highly specific to the particular sample selected for a tree.
-#                                  Too high values can lead to under-fitting hence, it should be tuned using CV.
-#         :param base_score:
-#         :param objective: objective, default is 'reg:linear'
-#         :param eta:
-#         :param subsample: default=1
-#         :param early_stopping_rounds:
-#         :param colsample_bytree:
-#         :param colsample_bylevel:
-#         :param max_depth: default=3, The maximum depth of a tree, same as GBM.
-#                           Used to control over-fitting as higher depth will allow model to learn relations
-#                            very specific to a particular sample.
-#         :param verbose_eval:
-#         :param learning_rate: default=0.1
-#         :param random_state:
-#         """
-#         super(XGBRegressorArg, self).__init__()
-#         self.est_args = {
-#             'est_type': 'XGB',
-#             'n_folds': n_folds,
-#             'nthread': nthread,
-#             'booster': booster,
-#             'scale_pos_weight': scale_pos_weight,
-#             'silent': silent,
-#             'objective': objective,
-#             'eta': eta,
-#             'n_estimators': n_estimators,
-#             'reg_lambda': reg_lambda,
-#             'reg_alpha': reg_alpha,
-#             'gamma': gamma,
-#             'min_child_weight': min_child_weight,
-#             'base_score': base_score,
-#             'subsample': subsample,
-#             'early_stopping_rounds': early_stopping_rounds,
-#             'colsample_bytree': colsample_bytree,
-#             'colsample_bylevel': colsample_bylevel,
-#             'max_depth': max_depth,
-#             'verbose_eval': verbose_eval,
-#             'learning_rate': learning_rate,
-#             'seed': random_state
-#         }
-
-
-class XGBRegressorArg(EstimatorArgument):
+class XGBRegressorConfig(EstimatorConfig):
     """
     Sklearn based xgboost regressor.
     """
@@ -362,7 +295,7 @@ class XGBRegressorArg(EstimatorArgument):
         :param learning_rate: default=0.1
         :param seed:
         """
-        super(XGBRegressorArg, self).__init__()
+        super(XGBRegressorConfig, self).__init__()
         self.est_args = {
             'est_type': 'FLXGB',
             'n_folds': n_folds,
@@ -387,7 +320,7 @@ class XGBRegressorArg(EstimatorArgument):
         }
 
 
-class LGBMRegressorArg(EstimatorArgument):
+class LGBMRegressorConfig(EstimatorConfig):
     """
     Sklearn based LightGBM regressor.
     """
@@ -422,7 +355,7 @@ class LGBMRegressorArg(EstimatorArgument):
         :param n_jobs:
         :param silent:
         """
-        super(LGBMRegressorArg, self).__init__()
+        super(LGBMRegressorConfig, self).__init__()
         self.est_args = {
             'est_type': 'FLLGBM',
             'n_folds': n_folds,
@@ -449,16 +382,16 @@ class LGBMRegressorArg(EstimatorArgument):
 
 
 def Basic4x2(n_folds=3, n_estimators=500, max_depth=100, n_jobs=-1, min_samples_leaf=1):
-    crf = CompletelyRandomForestArg(n_folds=n_folds,
-                                    n_estimators=n_estimators,
-                                    max_depth=max_depth,
-                                    n_jobs=n_jobs,
-                                    min_samples_leaf=min_samples_leaf)
-    rf = RandomForestArg(n_folds=n_folds,
-                         n_estimators=n_estimators,
-                         max_depth=max_depth,
-                         n_jobs=n_jobs,
-                         min_samples_leaf=min_samples_leaf)
+    crf = ExtraRandomForestConfig(n_folds=n_folds,
+                                  n_estimators=n_estimators,
+                                  max_depth=max_depth,
+                                  n_jobs=n_jobs,
+                                  min_samples_leaf=min_samples_leaf)
+    rf = RandomForestConfig(n_folds=n_folds,
+                            n_estimators=n_estimators,
+                            max_depth=max_depth,
+                            n_jobs=n_jobs,
+                            min_samples_leaf=min_samples_leaf)
     est_configs = [
         crf, crf, crf, crf,
         rf, rf, rf, rf

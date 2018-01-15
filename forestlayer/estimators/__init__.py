@@ -7,11 +7,11 @@ Initialize estimators.
 # Authors: Qiu Hu <huqiu00#163.com>
 # License: Apache-2.0
 
-from base_estimator import *
-from sklearn_estimator import *
-from xgboost_estimator import *
+# from base_estimator import BaseEstimator
+from sklearn_classifier import *
+from sklearn_regressor import *
 from kfold_wrapper import *
-from arguments import *
+from estimator_configs import *
 from ..utils.metrics import Accuracy, MSE
 
 
@@ -24,28 +24,24 @@ def est_class_from_type(task, est_type):
     :return: a concrete estimator instance
     """
     if task == 'classification':
-        if est_type == 'CRF':
+        if est_type == 'FLCRF':
             return FLCRFClassifier
-        if est_type == 'RF':
+        if est_type == 'FLRF':
             return FLRFClassifier
-        if est_type == 'GBDT':
+        if est_type == 'FLGBDT':
             return FLGBDTClassifier
-        if est_type == 'XGB':
-            return XGBoostClassifier
         if est_type == 'FLXGB':
             return FLXGBoostClassifier
         if est_type == 'FLLGBM':
-            raise NotImplementedError
+            raise FLLGBMClassifier
         raise ValueError('Unknown Estimator: {}'.format(est_type))
     elif task == 'regression':
-        if est_type == 'CRF':
+        if est_type == 'FLCRF':
             return FLCRFRegressor
-        if est_type == 'RF':
+        if est_type == 'FLRF':
             return FLRFRegressor
-        if est_type == 'GBDT':
+        if est_type == 'FLGBDT':
             return FLGBDTRegressor
-        if est_type == 'XGB':
-            return XGBoostRegressor
         if est_type == 'FLXGB':
             return FLXGBoostRegressor
         if est_type == 'FLLGBM':

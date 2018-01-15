@@ -7,9 +7,11 @@ XGBoost Estimator, K-fold wrapper version.
 # Authors: Qiu Hu <huqiu00#163.com>
 # License: Apache-2.0
 
-from base_estimator import *
+from base_estimator import BaseEstimator
+from ..utils.storage_utils import is_path_exists, check_dir
 from ..utils.log_utils import get_logger
 import xgboost as xgb
+import numpy as np
 import joblib
 
 LOGGER = get_logger('estimators.xgboost')

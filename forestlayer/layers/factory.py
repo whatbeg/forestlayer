@@ -8,7 +8,7 @@ Factory methods to Layers.
 # License: Apache-2.0
 
 from .layer import PoolingLayer
-from ..estimators.arguments import CompletelyRandomForestArg, RandomForestArg
+from ..estimators.estimator_configs import ExtraRandomForestConfig, RandomForestConfig
 from .window import Window, Pooling
 
 
@@ -86,8 +86,8 @@ def EstForWin2x2(**kwargs):
     :param kwargs:
     :return:
     """
-    rf1 = CompletelyRandomForestArg(**kwargs)
-    rf2 = RandomForestArg(**kwargs)
+    rf1 = ExtraRandomForestConfig(**kwargs)
+    rf2 = RandomForestConfig(**kwargs)
     est_for_windows = [[rf1, rf2], [rf1, rf2]]
     return est_for_windows
 
