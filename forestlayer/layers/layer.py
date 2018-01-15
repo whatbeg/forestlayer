@@ -12,11 +12,12 @@ import numpy as np
 import datetime
 import os.path as osp
 import pickle
+import ray
 from ..utils.log_utils import get_logger, list2str
 from ..utils.layer_utils import check_list_depth
 from ..utils.storage_utils import check_dir
-from ..utils.metrics import Accuracy, AUC, MSE
-from ..estimators import get_estimator_kfold, EstimatorArgument
+from ..utils.metrics import Accuracy, AUC, MSE, RMSE
+from ..estimators import get_estimator_kfold, get_dist_estimator_kfold, EstimatorArgument
 
 
 class Layer(object):
@@ -106,7 +107,8 @@ class MultiGrainScanLayer(Layer):
     Multi-grain Scan Layer
     """
     def __init__(self, batch_size=None, dtype=None, name=None, task='classification',
-                 windows=None, est_for_windows=None, n_class=None, keep_in_mem=False, eval_metrics=None, seed=None):
+                 windows=None, est_for_windows=None, n_class=None, keep_in_mem=False,
+                 eval_metrics=None, seed=None, distribute=False):
         """
         Initialize a multi-grain scan layer.
 
@@ -120,6 +122,8 @@ class MultiGrainScanLayer(Layer):
         :param keep_in_mem:
         :param eval_metrics:
         :param seed:
+        :param distribute: whether use distributed training. If use, you should `import ray`
+                           and write `ray.init(<redis-address>)` at the beginning of the main program.
         """
         if not name:
             prefix = 'multi_grain_scan'
@@ -135,6 +139,7 @@ class MultiGrainScanLayer(Layer):
             assert n_class is not None
             self.n_class = n_class
         self.seed = seed
+        self.distribute = distribute
         self.keep_in_mem = keep_in_mem
         self.eval_metrics = eval_metrics
 
@@ -174,14 +179,18 @@ class MultiGrainScanLayer(Layer):
             seed = (self.seed + hash("[estimator] {}".format(est_name))) % 1000000007
         else:
             seed = None
-        return get_estimator_kfold(name=est_name,
-                                   n_folds=n_folds,
-                                   task=self.task,
-                                   est_type=est_type,
-                                   eval_metrics=self.eval_metrics,
-                                   seed=seed,
-                                   keep_in_mem=self.keep_in_mem,
-                                   est_args=est_args)
+        if self.distribute:
+            get_est_func = get_dist_estimator_kfold
+        else:
+            get_est_func = get_estimator_kfold
+        return get_est_func(name=est_name,
+                            n_folds=n_folds,
+                            task=self.task,
+                            est_type=est_type,
+                            eval_metrics=self.eval_metrics,
+                            seed=seed,
+                            keep_in_mem=self.keep_in_mem,
+                            est_args=est_args)
 
     def _check_input(self, x, y):
         if isinstance(x, (list, tuple)):
@@ -218,11 +227,17 @@ class MultiGrainScanLayer(Layer):
             for ei, est in enumerate(ests_for_win):
                 if isinstance(est, EstimatorArgument):
                     est = self._init_estimator(est, wi, ei)
-                # (60000, 121, 10)
-                y_proba_train, _ = est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0])
+                ests_for_win[ei] = est
+            if self.distribute:
+                y_proba_trains = ray.get([est.fit_transform.remote(x_wins_train[wi], y_win, y_win[:, 0])
+                                          for est in ests_for_win])
+            else:
+                y_proba_trains = [est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0]) for est in ests_for_win]
+            for y_proba_train, _ in y_proba_trains:
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
                 win_est_train.append(y_proba_train)
-                self.est_for_windows[wi][ei] = est
+            if self.keep_in_mem:
+                self.est_for_windows[wi] = ests_for_win
             x_win_est_train.append(win_est_train)
         if len(x_win_est_train) == 0:
             return x_wins_train
@@ -273,16 +288,24 @@ class MultiGrainScanLayer(Layer):
             for ei, est in enumerate(ests_for_win):
                 if isinstance(est, EstimatorArgument):
                     est = self._init_estimator(est, wi, ei)
+                # if self.distribute is True, then est is an ActorHandle.
+                ests_for_win[ei] = est
+            if self.distribute:
+                y_proba_train_tests = ray.get([est.fit_transform.remote(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
+                                               for est in ests_for_win])
+            else:
+                y_proba_train_tests = [est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
+                                       for est in ests_for_win]
+            for y_proba_train, y_probas_test in y_proba_train_tests:
                 # (60000, 121, 10)
-                y_proba_train, y_probas_test = est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
                 assert len(y_probas_test) == 1, 'assume there is only one test set!'
                 y_probas_test = y_probas_test[0]
                 y_probas_test = y_probas_test.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
                 win_est_train.append(y_proba_train)
                 win_est_test.append(y_probas_test)
-                if self.keep_in_mem:
-                    self.est_for_windows[wi][ei] = est
+            if self.keep_in_mem:
+                self.est_for_windows[wi] = ests_for_win
             x_win_est_train.append(win_est_train)
             x_win_est_test.append(win_est_test)
         if len(x_win_est_train) == 0:
@@ -553,7 +576,7 @@ class ConcatLayer(Layer):
 class CascadeLayer(Layer):
     def __init__(self, batch_size=None, dtype=None, name=None, task='classification', est_configs=None,
                  layer_id='anonymous', n_classes=None, keep_in_mem=False, data_save_dir=None, model_save_dir=None,
-                 metrics=None, seed=None):
+                 metrics=None, seed=None, distribute=False, verbose_dis=False):
         """Cascade Layer.
         A cascade layer contains several estimators, it accepts single input, go through these estimators, produces
         predicted probability by every estimators, and stacks them together for next cascade layer.
@@ -574,6 +597,10 @@ class CascadeLayer(Layer):
         :param metrics: str, evaluation metrics used in training model and evaluating testing data.
                         Support: 'accuracy', 'auc', 'mse', default is accuracy (classification) and mse (regression).
         :param seed: random seed, also called random state in scikit-learn random forest
+        :param distribute: boolean, whether use distributed training. If use, you should `import ray`
+                           and write `ray.init(<redis-address>)` at the beginning of the main program.
+        :param verbose_dis: boolean, whether print logging info that generated on different worker machines.
+                            default = False.
 
         # Properties
             eval_metrics: evaluation metrics
@@ -604,19 +631,11 @@ class CascadeLayer(Layer):
         self.model_save_dir = model_save_dir
         check_dir(self.model_save_dir)
         self.seed = seed
+        self.distribute = distribute
+        self.verbose_dis = verbose_dis
         self.larger_better = True
         self.metrics = metrics
-        if self.metrics == 'accuracy':
-            self.eval_metrics = [Accuracy('accuracy')]
-        elif self.metrics == 'auc':
-            self.eval_metrics = [AUC('AUC')]
-        elif self.metrics == 'mse':
-            self.eval_metrics = [MSE('Mean Square Error')]
-        else:
-            if self.task == 'regression':
-                self.eval_metrics = [MSE('Mean Square Error')]
-            else:
-                self.eval_metrics = [Accuracy('Accuracy')]
+        self.eval_metrics = get_eval_metrics(self.metrics, self.task, self.name)
         # whether this layer the last layer of Auto-growing cascade layer
         self.complete = False
         self.fit_estimators = [None for _ in range(self.n_estimators)]
@@ -701,14 +720,18 @@ class CascadeLayer(Layer):
             seed = (self.seed + hash("[estimator] {}".format(est_name))) % 1000000007
         else:
             seed = None
-        return get_estimator_kfold(name=est_name,
-                                   n_folds=n_folds,
-                                   task=self.task,
-                                   est_type=est_type,
-                                   eval_metrics=self.eval_metrics,
-                                   seed=seed,
-                                   keep_in_mem=self.keep_in_mem,
-                                   est_args=est_args)
+        if self.distribute:
+            get_est_func = get_dist_estimator_kfold
+        else:
+            get_est_func = get_estimator_kfold
+        return get_est_func(name=est_name,
+                            n_folds=n_folds,
+                            task=self.task,
+                            est_type=est_type,
+                            eval_metrics=self.eval_metrics,
+                            seed=seed,
+                            keep_in_mem=self.keep_in_mem,
+                            est_args=est_args)
 
     def fit(self, x_train, y_train):
         """
@@ -732,20 +755,34 @@ class CascadeLayer(Layer):
         x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=np.float32)
         eval_proba_train = np.zeros((n_trains, n_classes))
         # fit estimators, get probas (classification) or targets (regression)
+        estimators = []
         for ei in range(self.n_estimators):
             est = self._init_estimators(self.layer_id, ei)
-            # fit and transform
-            y_stratify = y_train if self.task == 'classification' else None
-            y_proba_train, _ = est.fit_transform(x_train, y_train, y_stratify, test_sets=None)
-            # print(y_proba_train.shape, y_proba_test.shape)
+            estimators.append(est)
+        # fit and transform
+        y_stratify = y_train if self.task == 'classification' else None
+        if self.distribute:
+            y_proba_trains = ray.get([est.fit_transform.remote(x_train, y_train, y_stratify, test_sets=None)
+                                      for est in estimators])
+        else:
+            y_proba_trains = [est.fit_transform(x_train, y_train, y_stratify, test_sets=None)
+                              for est in estimators]
+        for ei, y_proba_train_tup in enumerate(y_proba_trains):
+            y_proba_train = y_proba_train_tup[0]
+            if len(y_proba_train_tup) == 3 and self.verbose_dis:
+                for log in y_proba_train_tup[2]:
+                    print(log)
             if y_proba_train is None:
                 raise RuntimeError("layer - {} - estimator - {} fit FAILED!,"
                                    " y_proba_train is None!".format(self.layer_id, ei))
             self.check_shape(y_proba_train, n_trains, n_classes)
-            if self.keep_in_mem:
-                self.fit_estimators[ei] = est
             x_proba_train[:, ei * n_classes:ei * n_classes + n_classes] = y_proba_train
             eval_proba_train += y_proba_train
+        if self.keep_in_mem:
+            if self.distribute:
+                self.fit_estimators = ray.get(estimators)
+            else:
+                self.fit_estimators = estimators
         eval_proba_train /= self.n_estimators
         # now supports one eval_metrics
         metric = self.eval_metrics[0]
@@ -788,12 +825,26 @@ class CascadeLayer(Layer):
         eval_proba_train = np.zeros((n_trains, n_classes))
         eval_proba_test = np.zeros((n_tests, n_classes))
         # fit estimators, get probas
+        estimators = []
         for ei in range(self.n_estimators):
             est = self._init_estimators(self.layer_id, ei)
-            # fit and transform
-            y_stratify = y_train if self.task == 'classification' else None
-            y_proba_train, y_proba_test = est.fit_transform(x_train, y_train, y_stratify,
-                                                            test_sets=[('test', x_test, y_test)])
+            estimators.append(est)
+        # fit and transform
+        y_stratify = y_train if self.task == 'classification' else None
+        if self.distribute:
+            y_proba_train_tests = ray.get([est.fit_transform.remote(x_train, y_train, y_stratify,
+                                                                    test_sets=[('test', x_test, y_test)])
+                                           for est in estimators])
+        else:
+            y_proba_train_tests = [est.fit_transform(x_train, y_train, y_stratify,
+                                                     test_sets=[('test', x_test,  y_test)])
+                                   for est in estimators]
+        for ei, y_proba_train_tup in enumerate(y_proba_train_tests):
+            y_proba_train = y_proba_train_tup[0]
+            y_proba_test = y_proba_train_tup[1]
+            if len(y_proba_train_tup) == 3 and self.verbose_dis:
+                for log in y_proba_train_tup[2]:
+                    print(log)
             # if only one element on test_sets, return one test result like y_proba_train
             if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
                 y_proba_test = y_proba_test[0]
@@ -804,23 +855,26 @@ class CascadeLayer(Layer):
             self.check_shape(y_proba_train, n_trains, n_classes)
             if y_proba_test is not None:
                 self.check_shape(y_proba_test, n_tests, n_classes)
-            if self.keep_in_mem:
-                self.fit_estimators[ei] = est
             x_proba_train[:, ei*n_classes:ei*n_classes + n_classes] = y_proba_train
             x_proba_test[:, ei*n_classes:ei*n_classes + n_classes] = y_proba_test
             eval_proba_train += y_proba_train
             eval_proba_test += y_proba_test
+        if self.keep_in_mem:
+            if self.distribute:
+                self.fit_estimators = ray.get(estimators)
+            else:
+                self.fit_estimators = estimators
         eval_proba_train /= self.n_estimators
         eval_proba_test /= self.n_estimators
         metric = self.eval_metrics[0]
         train_avg_metric = metric.calc_proba(y_train, eval_proba_train,
-                                             'layer - {} - [train] average {}'.format(self.layer_id, metric.name),
+                                             'layer - {} - [train] average'.format(self.layer_id, metric.name),
                                              logger=self.LOGGER)
         self.train_avg_metric = train_avg_metric
         # judge whether y_test is None, which means users are to predict test probas
         if y_test is not None:
             test_avg_metric = metric.calc_proba(y_test, eval_proba_test,
-                                                'layer - {} - [test] average'.format(self.layer_id), logger=self.LOGGER)
+                                                'layer - {} - [ test] average'.format(self.layer_id), logger=self.LOGGER)
             self.test_avg_metric = test_avg_metric
         # if y_test is None, we need to generate test prediction, so keep eval_proba_test
         if y_test is None:
@@ -925,7 +979,7 @@ class AutoGrowingCascadeLayer(Layer):
     def __init__(self, batch_size=None, dtype=np.float32, name=None, task='classification', est_configs=None,
                  early_stopping_rounds=None, max_layers=0, look_index_cycle=None, data_save_rounds=0,
                  stop_by_test=True, n_classes=None, keep_in_mem=False, data_save_dir=None, model_save_dir=None,
-                 metrics=None, keep_test_result=False, seed=None):
+                 metrics=None, keep_test_result=False, seed=None, distribute=False, verbose_dis=False):
         """AutoGrowingCascadeLayer
         An AutoGrowingCascadeLayer is a virtual layer that consists of many single cascade layers.
         `auto-growing` means this kind of layer can decide the depth of cascade forest,
@@ -957,9 +1011,13 @@ class AutoGrowingCascadeLayer(Layer):
         :param data_save_dir: str [default = None]
                               each data_save_rounds save the intermediate results in data_save_dir
                               if data_save_rounds = 0, then no savings for intermediate results
-        :param model_save_dir: directory to save fit estimators into
+        :param model_save_dir: directory where save fit estimators into
         :param metrics: evaluation metrics used in training model and evaluating testing data
         :param seed: random seed, also called random state in scikit-learn random forest
+        :param distribute: boolean, whether use distributed training. If use, you should `import ray`
+                           and write `ray.init(<redis-address>)` at the beginning of the main program.
+        :param verbose_dis: boolean, whether print logging info that generated on different worker machines.
+                            default = False.
         """
         self.est_configs = [] if est_configs is None else est_configs
         super(AutoGrowingCascadeLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
@@ -979,18 +1037,10 @@ class AutoGrowingCascadeLayer(Layer):
         self.keep_in_mem = keep_in_mem
         self.stop_by_test = stop_by_test
         self.metrics = metrics
-        if self.metrics == 'accuracy':
-            self.eval_metrics = [Accuracy('accuracy')]
-        elif self.metrics == 'auc':
-            self.eval_metrics = [AUC('auc')]
-        elif self.metrics == 'mse':
-            self.eval_metrics = [MSE('Mean Square Error')]
-        else:
-            if self.task == 'regression':
-                self.eval_metrics = [MSE('Mean Square Error')]
-            else:
-                self.eval_metrics = [Accuracy('accuracy')]
+        self.eval_metrics = get_eval_metrics(self.metrics, self.task)
         self.seed = seed
+        self.distribute = distribute
+        self.verbose_dis = verbose_dis
         # properties
         self.layer_fit_cascades = []
         self.n_layers = 0
@@ -1002,27 +1052,31 @@ class AutoGrowingCascadeLayer(Layer):
         self.test_results = None
         self.keep_test_result = keep_test_result
 
-    def _create_cascade_layer(self, task='classification', est_configs=None, n_classes=None,
-                              data_save_dir=None, model_save_dir=None, layer_id=None, keep_in_mem=False,
-                              dtype=None, metrics=None, seed=None):
+    def _create_cascade_layer(self, est_configs=None, data_save_dir=None, model_save_dir=None,
+                              layer_id=None, metrics=None, seed=None):
         """
         Create a cascade layer.
 
-        :param task:
         :param est_configs:
-        :param n_classes:
         :param data_save_dir:
         :param model_save_dir:
         :param layer_id:
-        :param keep_in_mem:
-        :param dtype:
-        :param metrics:
+        :param metrics: str, 'accuracy' or 'rmse' or 'mse' or 'auc'
         :param seed:
-        :return:
+        :return: A CascadeLayer Object.
         """
-        return CascadeLayer(dtype=dtype, task=task, est_configs=est_configs, layer_id=layer_id, n_classes=n_classes,
-                            keep_in_mem=keep_in_mem, data_save_dir=data_save_dir, model_save_dir=model_save_dir,
-                            metrics=metrics, seed=seed)
+        return CascadeLayer(dtype=self.dtype,
+                            task=self.task,
+                            est_configs=est_configs,
+                            layer_id=layer_id,
+                            n_classes=self.n_classes,
+                            keep_in_mem=self.keep_in_mem,
+                            data_save_dir=data_save_dir,
+                            model_save_dir=model_save_dir,
+                            metrics=metrics,
+                            seed=seed,
+                            distribute=self.distribute,
+                            verbose_dis=self.verbose_dis)
 
     def call(self, x_trains):
         pass
@@ -1058,7 +1112,7 @@ class AutoGrowingCascadeLayer(Layer):
         True if the evaluation metric larger is better.
         :return:
         """
-        if isinstance(self.eval_metrics[0], (MSE, )):
+        if isinstance(self.eval_metrics[0], (MSE, RMSE)):
             return False
         return True
 
@@ -1123,15 +1177,11 @@ class AutoGrowingCascadeLayer(Layer):
                 model_save_dir = self.model_save_dir
                 if model_save_dir is not None:
                     model_save_dir = osp.join(model_save_dir, 'cascade_layer_{}'.format(layer_id))
-                cascade = self._create_cascade_layer(task=self.task,
-                                                     est_configs=self.est_configs,
-                                                     n_classes=self.n_classes,
+                cascade = self._create_cascade_layer(est_configs=self.est_configs,
                                                      data_save_dir=data_save_dir,
                                                      model_save_dir=model_save_dir,
                                                      layer_id=layer_id,
-                                                     keep_in_mem=self.keep_in_mem,
-                                                     dtype=self.dtype,
-                                                     metrics=self.eval_metrics,
+                                                     metrics=self.metrics,
                                                      seed=self.seed)
                 x_proba_train, _ = cascade.fit_transform(x_cur_train, y_train)
                 if self.keep_in_mem:
@@ -1147,7 +1197,7 @@ class AutoGrowingCascadeLayer(Layer):
                 if layer_id - opt_layer_id >= self.early_stop_rounds > 0:
                     # log and save the final results of the optimal layer
                     self.LOGGER.info('[Result][Early Stop][Optimal Layer Detected] opt_layer={},'.format(opt_layer_id) +
-                                     ' {}_train={:.4f}{},'.format(self.eval_metrics[0].name,
+                                     ' {}_train={:.4f}{},'.format(self.metrics,
                                                                   layer_metric_list[opt_layer_id], self._percent))
                     self.n_layers = layer_id + 1
                     self._save_data(opt_layer_id, *opt_data)
@@ -1166,8 +1216,8 @@ class AutoGrowingCascadeLayer(Layer):
             self.LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.4f}{},'
                              ' optimal_layer={}, {}_optimal_train={:.4f}{}'.format(
                                 self.max_layers,
-                                self.eval_metrics[0].name, layer_metric_list[-1], self._percent, opt_layer_id,
-                                self.eval_metrics[0].name, layer_metric_list[opt_layer_id], self._percent))
+                                self.metrics, layer_metric_list[-1], self._percent, opt_layer_id,
+                                self.metrics, layer_metric_list[opt_layer_id], self._percent))
             self._save_data(layer_id, *opt_data)
             self.n_layers = layer_id + 1
             # wash the fit cascades after optimal layer id to save memory
@@ -1259,14 +1309,11 @@ class AutoGrowingCascadeLayer(Layer):
                 model_save_dir = self.model_save_dir
                 if model_save_dir is not None:
                     model_save_dir = osp.join(model_save_dir, 'cascade_layer_{}'.format(layer_id))
-                cascade = self._create_cascade_layer(task=self.task,
-                                                     est_configs=self.est_configs,
-                                                     n_classes=self.n_classes,
+                cascade = self._create_cascade_layer(est_configs=self.est_configs,
                                                      data_save_dir=data_save_dir,
                                                      model_save_dir=model_save_dir,
                                                      layer_id=layer_id,
-                                                     keep_in_mem=self.keep_in_mem,
-                                                     dtype=self.dtype,
+                                                     metrics=self.metrics,
                                                      seed=self.seed)
                 x_proba_train, x_proba_test = cascade.fit_transform(x_cur_train, y_train, x_cur_test, y_test)
                 if self.keep_in_mem:
@@ -1294,13 +1341,13 @@ class AutoGrowingCascadeLayer(Layer):
                         self.LOGGER.info('[Result][Early Stop][Optimal Layer Detected]'
                                          ' opt_layer={},'.format(opt_layer_id) +
                                          ' {}_train={:.4f}{}, {}_test={:.4f}{}'.format(
-                                          self.eval_metrics[0].name, layer_train_metrics[opt_layer_id],
-                                          self._percent, self.eval_metrics[0].name, layer_test_metrics[opt_layer_id],
+                                          self.metrics, layer_train_metrics[opt_layer_id],
+                                          self._percent, self.metrics, layer_test_metrics[opt_layer_id],
                                           self._percent))
                     else:
                         self.LOGGER.info('[Result][Early Stop][Optimal Layer Detected]'
                                          ' opt_layer={},'.format(opt_layer_id) +
-                                         ' {}_train={:.4f}{}'.format(self.eval_metrics[0].name,
+                                         ' {}_train={:.4f}{}'.format(self.metrics,
                                                                      layer_train_metrics[opt_layer_id],
                                                                      self._percent))
                     self.n_layers = layer_id + 1
@@ -1326,15 +1373,15 @@ class AutoGrowingCascadeLayer(Layer):
                                  ' optimal_layer={}, {}_optimal_train={:.4f}{},'
                                  ' {}_optimal_test={:.4f}{}'.format(
                                     self.max_layers, self.eval_metrics[0].name, layer_train_metrics[-1], self._percent,
-                                    self.eval_metrics[0].name, layer_test_metrics[-1], self._percent, opt_layer_id,
-                                    self.eval_metrics[0].name, layer_train_metrics[opt_layer_id], self._percent,
-                                    self.eval_metrics[0].name, layer_test_metrics[opt_layer_id], self._percent))
+                                    self.metrics, layer_test_metrics[-1], self._percent, opt_layer_id,
+                                    self.metrics, layer_train_metrics[opt_layer_id], self._percent,
+                                    self.metrics, layer_test_metrics[opt_layer_id], self._percent))
             else:
                 self.LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.4f}{},'
                                  ' optimal_layer={}, {}_optimal_train={:.4f}{}'.format(
                                   self.max_layers,
-                                  self.eval_metrics[0].name, layer_train_metrics[-1], self._percent, opt_layer_id,
-                                  self.eval_metrics[0].name, layer_train_metrics[opt_layer_id], self._percent))
+                                  self.metrics, layer_train_metrics[-1], self._percent, opt_layer_id,
+                                  self.metrics, layer_train_metrics[opt_layer_id], self._percent))
             self.save_data(layer_id, *opt_data)
             self.n_layers = layer_id + 1
             # if y_test is None, we predict x_test and save its predictions
@@ -1566,3 +1613,20 @@ def get_opt_layer_id(acc_list, larger_better=True):
     else:
         opt_layer_id = np.argsort(np.asarray(acc_list), kind='mergesort')[0]
     return opt_layer_id
+
+
+def get_eval_metrics(metrics, task='classification', name=''):
+    if metrics == 'accuracy':
+        eval_metrics = [Accuracy(name)]
+    elif metrics == 'auc':
+        eval_metrics = [AUC(name)]
+    elif metrics == 'mse':
+        eval_metrics = [MSE(name)]
+    elif metrics == 'rmse':
+        eval_metrics = [RMSE(name)]
+    else:
+        if task == 'regression':
+            eval_metrics = [MSE(name)]
+        else:
+            eval_metrics = [Accuracy(name)]
+    return eval_metrics

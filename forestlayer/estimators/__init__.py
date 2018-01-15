@@ -91,3 +91,36 @@ def get_estimator_kfold(name, n_folds=3, task='classification', est_type='RF', e
                         cache_dir=cache_dir,
                         keep_in_mem=keep_in_mem,
                         est_args=est_args)
+
+
+def get_dist_estimator_kfold(name, n_folds=3, task='classification', est_type='RF', eval_metrics=None, seed=None,
+                             cache_dir=None, keep_in_mem=True, est_args=None):
+    """
+    A factory method to get a distributed k-fold estimator.
+
+    :param name: estimator name
+    :param n_folds: how many folds to execute in cross validation
+    :param task: what task does this estimator to execute ('classification' or 'regression')
+    :param est_type: estimator type (a string)
+    :param eval_metrics: evaluation metrics. [Default: Accuracy (classification), MSE (regression)]
+    :param seed: random seed
+    :param cache_dir: data cache dir to cache intermediate data
+    :param keep_in_mem: whether keep the model in memory
+    :param est_args: estimator arguments
+    :return: a KFoldWrapper instance of concrete estimator
+    """
+    est_class = est_class_from_type(task, est_type)
+    if eval_metrics is None:
+        if task == 'classification':
+            eval_metrics = [Accuracy('accuracy')]
+        else:
+            eval_metrics = [MSE('MSE')]
+    return DistributedKFoldWrapper.remote(name,
+                                          n_folds,
+                                          est_class,
+                                          seed=seed,
+                                          eval_metrics=eval_metrics,
+                                          cache_dir=cache_dir,
+                                          keep_in_mem=keep_in_mem,
+                                          est_args=est_args)
+
