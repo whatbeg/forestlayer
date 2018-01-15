@@ -16,7 +16,7 @@ import ray
 from ..utils.log_utils import get_logger, list2str
 from ..utils.layer_utils import check_list_depth
 from ..utils.storage_utils import check_dir
-from ..utils.metrics import Accuracy, AUC, MSE, RMSE
+from ..utils.metrics import Metrics, Accuracy, AUC, MSE, RMSE
 from ..estimators import get_estimator_kfold, get_dist_estimator_kfold, EstimatorArgument
 
 
@@ -594,8 +594,12 @@ class CascadeLayer(Layer):
                             TODO: support dump model to disk to save memory
         :param data_save_dir: directory to save intermediate data into
         :param model_save_dir: directory to save fit estimators into
-        :param metrics: str, evaluation metrics used in training model and evaluating testing data.
-                        Support: 'accuracy', 'auc', 'mse', default is accuracy (classification) and mse (regression).
+        :param metrics: str or user-defined Metrics object, evaluation metrics used in training model and evaluating
+                         testing data.
+                        Support: 'accuracy', 'auc', 'mse', 'rmse',
+                         default is accuracy (classification) and mse (regression).
+                        Note that user can define their own metrics by extending the
+                         class `forestlayer.utils.metrics.Metrics`
         :param seed: random seed, also called random state in scikit-learn random forest
         :param distribute: boolean, whether use distributed training. If use, you should `import ray`
                            and write `ray.init(<redis-address>)` at the beginning of the main program.
@@ -1012,7 +1016,12 @@ class AutoGrowingCascadeLayer(Layer):
                               each data_save_rounds save the intermediate results in data_save_dir
                               if data_save_rounds = 0, then no savings for intermediate results
         :param model_save_dir: directory where save fit estimators into
-        :param metrics: evaluation metrics used in training model and evaluating testing data
+        :param metrics: str or user-defined Metrics object, evaluation metrics used in training model and evaluating
+                         testing data.
+                        Support: 'accuracy', 'auc', 'mse', 'rmse',
+                         default is accuracy (classification) and mse (regression).
+                        Note that user can define their own metrics by extending the
+                         class `forestlayer.utils.metrics.Metrics`
         :param seed: random seed, also called random state in scikit-learn random forest
         :param distribute: boolean, whether use distributed training. If use, you should `import ray`
                            and write `ray.init(<redis-address>)` at the beginning of the main program.
@@ -1616,17 +1625,22 @@ def get_opt_layer_id(acc_list, larger_better=True):
 
 
 def get_eval_metrics(metrics, task='classification', name=''):
-    if metrics == 'accuracy':
-        eval_metrics = [Accuracy(name)]
-    elif metrics == 'auc':
-        eval_metrics = [AUC(name)]
-    elif metrics == 'mse':
-        eval_metrics = [MSE(name)]
-    elif metrics == 'rmse':
-        eval_metrics = [RMSE(name)]
-    else:
-        if task == 'regression':
-            eval_metrics = [MSE(name)]
-        else:
+    if isinstance(metrics, Metrics):
+        eval_metrics = [metrics]
+    elif isinstance(metrics, str):
+        if metrics == 'accuracy':
             eval_metrics = [Accuracy(name)]
+        elif metrics == 'auc':
+            eval_metrics = [AUC(name)]
+        elif metrics == 'mse':
+            eval_metrics = [MSE(name)]
+        elif metrics == 'rmse':
+            eval_metrics = [RMSE(name)]
+        else:
+            if task == 'regression':
+                eval_metrics = [MSE(name)]
+            else:
+                eval_metrics = [Accuracy(name)]
+    else:
+        raise ValueError('Unknown metrics: {}'.format(metrics))
     return eval_metrics

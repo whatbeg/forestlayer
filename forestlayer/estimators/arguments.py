@@ -37,7 +37,7 @@ class MultiClassXGBoost(EstimatorArgument):
     def __init__(self, n_folds=3, nthread=-1, booster='gbtree', scale_pos_weight=1, num_class=None, silent=True,
                  objective="multi:softprob", eval_metric="merror", eta=0.03, subsample=0.9, num_boost_round=60,
                  early_stopping_rounds=20, colsample_bytree=0.85, colsample_bylevel=0.9, max_depth=6,
-                 verbose_eval=10, learning_rates=None):
+                 verbose_eval=False, learning_rates=None):
         """
         Multi-class XGBoost Classifier Argument describes arguments of multi-class xgboost classifier.
         Parameters can refer to xgboost document: http://xgboost.readthedocs.io/en/latest/python/python_api.html
@@ -91,7 +91,7 @@ class BinClassXGBoost(EstimatorArgument):
     def __init__(self, n_folds=3, nthread=-1, booster='gbtree', scale_pos_weight=1, num_class=2, silent=True,
                  objective="binary:logistic", eval_metric="auc", eta=0.03, subsample=0.9, num_boost_round=160,
                  early_stopping_rounds=30, colsample_bytree=0.85, colsample_bylevel=0.9, max_depth=6,
-                 verbose_eval=20, learning_rates=None):
+                 verbose_eval=False, learning_rates=None):
         """
         Binary-class XGBoost Classifier Argument describes arguments of multi-class xgboost classifier.
         Parameter can refer to xgboost document: http://xgboost.readthedocs.io/en/latest/python/python_api.html
@@ -262,7 +262,7 @@ class XGBRegressor(EstimatorArgument):
                  silent=True, reg_lambda=1, reg_alpha=0, gamma=0, min_child_weight=1, base_score=0.5,
                  objective="reg:linear", eval_metric="rmse", eta=0.03, subsample=1,
                  early_stopping_rounds=30, colsample_bytree=1, colsample_bylevel=1, max_depth=6,
-                 verbose_eval=20, learning_rate=0.1, random_state=0):
+                 verbose_eval=False, learning_rate=0.1, random_state=0):
         """
         XGBoost Regressor Argument describes arguments of XGBoost Regressor.
         Parameter can refer to xgboost document: http://xgboost.readthedocs.io/en/latest/python/python_api.html.
