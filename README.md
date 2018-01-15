@@ -117,11 +117,26 @@ For more examples and tutorials, you can refer to [examples](https://github.com/
 
 ## Benchmark
 
+We tested some benchmarks on ForestLayer.
+Below is the result of UCI Adult example, we ran the example using gcForest v1.0 (from FengJi, original paper), ForestLayer (single machine), ForestLayer standalone and ForestLayer cluster (2 nodes) respectively.
+
+Our machine configuration mainly includes 64GB RAM, Intel Xeon CPU E5-2620 v2 @2.10GHz x86_64 which contains 24 CPU virtual cores, and 1Gbits network bandwidth.
+Note that the models of all experiments contain the same structure, which have an single auto-growing cascade layer (in gcForest v1.0, it's called cascade_classifier), and every layer contains 8 random forests (4 completely random forests and 4 random forests with default configs of ForestLayer's `EstimatorArgument`).
+
+
 |  conf                   | test acc  | layer-best | avg time of 3 tries |
 | :---:                   | :-----:   |  :----:    | :------:     |
-| gcForest v1.0           | 86.14%    | 6-1        |  646s        |
-| ForestLayer Standalone  | 86.14%    | 6-1        |  279s        |
-| ForestLayer 2 nodes     | 86.14%    | 6-1        |  190s        |
+| gcForest v1.0           | 86.143%    | 6-1        |  647s        |
+| ForestLayer             | 86.143%    | 6-1        |  646s        |
+| ForestLayer Standalone  | 86.143%    | 6-1        |  279s        |
+| ForestLayer 2 nodes     | 86.143%    | 6-1        |  190s        |
+
+From the first 2 lines of the table, we can conclude that ForestLayer has no loss of training speed of gcForest v1.0, but possess much simpler user-friendly API instead of configure the model structure in model json file.
+
+And from all of lines of the table, we can see, even in the Standalone mode, ForestLayer is **2.3x** faster than single machine implementation.
+In cluster mode with 2 nodes, we obtain **3.4x** speedup. And with more nodes the speedup will be so much better.
+
+More benchmarks and performance evaluations will be given later.
 
 ## Examples
 
