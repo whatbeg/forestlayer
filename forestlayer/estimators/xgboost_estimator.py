@@ -115,6 +115,7 @@ class XGBoostRegressor(BaseEstimator):
     """
     def __init__(self, name, est_args):
         """
+        Initialize XGBoostRegressor.
 
         :param name:
         :param est_args:
@@ -134,6 +135,7 @@ class XGBoostRegressor(BaseEstimator):
 
     def fit(self, X, y, cache_dir=None):
         """
+        Fit.
 
         :param X:
         :param y:
@@ -171,6 +173,7 @@ class XGBoostRegressor(BaseEstimator):
 
     def _predict(self, est, X):
         """
+        Predict inner method.
 
         :param est:
         :param X:
@@ -180,6 +183,7 @@ class XGBoostRegressor(BaseEstimator):
 
     def _predict_proba(self, est, X):
         """
+        Predict probability inner method.
 
         :param est:
         :param X:
@@ -194,6 +198,7 @@ class XGBoostRegressor(BaseEstimator):
 
     def _load_model_from_disk(self, cache_path):
         """
+        Load model from disk inner method.
 
         :param cache_path:
         :return:
@@ -202,6 +207,7 @@ class XGBoostRegressor(BaseEstimator):
 
     def _save_model_to_disk(self, est, cache_path):
         """
+        Save model to disk inner method.
 
         :param est:
         :param cache_path:

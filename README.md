@@ -61,12 +61,9 @@ rf2 = RandomForest(min_samples_leaf=10)
 windows = [Window(win_x=7, win_y=7, stride_x=2, stride_y=2, pad_x=0, pad_y=0),
            Window(11, 11, 2, 2)]
 
-est_for_windows = [[rf1, rf2],
-                   [rf1, rf2]]
+est_for_windows = [[rf1, rf2], [rf1, rf2]]
 
-mgs = MultiGrainScanLayer(windows=windows,
-                          est_for_windows=est_for_windows,
-                          n_class=10)
+mgs = MultiGrainScanLayer(windows=windows, est_for_windows=est_for_windows, n_class=10)
 ```
 
 After multi-grain scan, we consider that building a pooling layer to reduce the dimension of generated feature vectors, so that reduce the computation and storage complexity and risk of overfiting.
@@ -74,8 +71,7 @@ After multi-grain scan, we consider that building a pooling layer to reduce the 
 from forestlayer.layers.layer import PoolingLayer
 from forestlayer.layers.factory import MaxPooling
 
-pools = [[MaxPooling(2, 2), MaxPooling(2, 2)],
-         [MaxPooling(2, 2), MaxPooling(2, 2)]]
+pools = [[MaxPooling(2, 2), MaxPooling(2, 2)], [MaxPooling(2, 2), MaxPooling(2, 2)]]
 
 pool = PoolingLayer(pools=pools)
 ```
@@ -95,15 +91,8 @@ est_configs = [
     RandomForest()
 ]
 
-data_save_dir = osp.join(get_data_save_base(), 'mnist')
-model_save_dir = osp.join(get_model_save_base(), 'mnist')
-
-auto_cascade = AutoGrowingCascadeLayer(est_configs=est_configs,
-                                       early_stopping_rounds=4,
-                                       stop_by_test=True,
-                                       n_classes=10,
-                                       data_save_dir=data_save_dir,
-                                       model_save_dir=model_save_dir)
+auto_cascade = AutoGrowingCascadeLayer(est_configs=est_configs, early_stopping_rounds=4,
+                                       stop_by_test=True, n_classes=10)
 ```
 
 Last, we construct a graph to stack these layers to make them as a complete model.
