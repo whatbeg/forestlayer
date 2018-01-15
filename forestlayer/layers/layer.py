@@ -282,7 +282,7 @@ class MultiGrainScanLayer(Layer):
             x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
             y_win = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
             x_wins_test[wi] = x_wins_test[wi].reshape((x_wins_test[wi].shape[0], -1, x_wins_test[wi].shape[-1]))
-            y_win_test = y_test[:, np.newaxis].repeat(x_wins_test[wi].shape[1], axis=1)
+            y_win_test = None if y_test is None else y_test[:, np.newaxis].repeat(x_wins_test[wi].shape[1], axis=1)
             test_sets = [('testOfWin{}'.format(wi), x_wins_test[wi], y_win_test)]
             # fit estimators for this window
             for ei, est in enumerate(ests_for_win):
@@ -1625,7 +1625,12 @@ def get_opt_layer_id(acc_list, larger_better=True):
 
 
 def get_eval_metrics(metrics, task='classification', name=''):
-    if isinstance(metrics, Metrics):
+    if metrics is None:
+        if task == 'regression':
+            eval_metrics = [MSE(name)]
+        else:
+            eval_metrics = [Accuracy(name)]
+    elif isinstance(metrics, Metrics):
         eval_metrics = [metrics]
     elif isinstance(metrics, str):
         if metrics == 'accuracy':
@@ -1637,10 +1642,7 @@ def get_eval_metrics(metrics, task='classification', name=''):
         elif metrics == 'rmse':
             eval_metrics = [RMSE(name)]
         else:
-            if task == 'regression':
-                eval_metrics = [MSE(name)]
-            else:
-                eval_metrics = [Accuracy(name)]
+            raise ValueError('Unknown metrics : {}'.format(metrics))
     else:
-        raise ValueError('Unknown metrics: {}'.format(metrics))
+        raise ValueError('Unknown metrics {} of type {}'.format(metrics, type(metrics)))
     return eval_metrics

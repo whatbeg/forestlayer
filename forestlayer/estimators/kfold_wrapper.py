@@ -127,7 +127,7 @@ class KFoldWrapper(object):
                 self.fit_estimators[k] = est
 
             # test
-            for vi, (prefix, X_test, y_test) in enumerate(test_sets):
+            for vi, (prefix, X_test, _) in enumerate(test_sets):
                 y_proba = est.predict_proba(X_test.reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
                 if not est.is_classification:
                     y_proba = y_proba[:, np.newaxis]
