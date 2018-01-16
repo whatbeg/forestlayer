@@ -11,7 +11,7 @@ from __future__ import print_function
 from forestlayer.datasets import uci_adult
 from forestlayer.layers import Graph, AutoGrowingCascadeLayer
 from forestlayer.utils.storage_utils import get_data_save_base
-from forestlayer.estimators.arguments import BinClassXGBoost
+from forestlayer.estimators.estimator_configs import BinClassXGBConfig
 import time
 import numpy as np
 import os.path as osp
@@ -24,8 +24,8 @@ print(x_test.shape[0], 'test samples')
 print(x_train.shape[1], 'features')
 
 est_configs = [
-    BinClassXGBoost(),
-    BinClassXGBoost()
+    BinClassXGBConfig(),
+    BinClassXGBConfig()
 ]
 
 agc = AutoGrowingCascadeLayer(est_configs=est_configs,
@@ -41,17 +41,6 @@ agc = AutoGrowingCascadeLayer(est_configs=est_configs,
 model = Graph()
 model.add(agc)
 model.fit_transform(x_train, y_train, x_test, y_test)
-
-# import xgboost as xgb
-#
-# xg_train = xgb.DMatrix(x_train, label=y_train)
-# est = xgb.train(est_configs[0].get_est_args(), xg_train)
-#
-# xg_test = xgb.DMatrix(x_test, label=y_test)
-#
-# a = est.predict_proba(xg_test)
-#
-# print(a.shape)
 
 end_time = time.time()
 print('time cost: {}'.format(end_time - start_time))

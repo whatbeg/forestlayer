@@ -9,7 +9,7 @@ MNIST Example.
 
 from __future__ import print_function
 from forestlayer.layers import Graph, MultiGrainScanLayer, PoolingLayer, ConcatLayer, AutoGrowingCascadeLayer
-from forestlayer.estimators.arguments import CompletelyRandomForest, RandomForest
+from forestlayer.estimators.estimator_configs import ExtraRandomForestConfig, RandomForestConfig
 from forestlayer.layers.window import Window
 from forestlayer.layers.factory import MeanPooling
 from forestlayer.utils.storage_utils import get_data_save_base, get_model_save_base
@@ -33,8 +33,8 @@ y_test = y_test[:100]
 print(x_train.shape, 'train')
 print(x_test.shape, 'test')
 
-rf1 = CompletelyRandomForest(min_samples_leaf=10)
-rf2 = RandomForest(min_samples_leaf=10)
+rf1 = ExtraRandomForestConfig(min_samples_leaf=10)
+rf2 = RandomForestConfig(min_samples_leaf=10)
 
 windows = [Window(win_x=7, win_y=7, stride_x=2, stride_y=2, pad_x=0, pad_y=0),
            Window(10, 10, 2, 2),
@@ -55,14 +55,14 @@ pool = PoolingLayer(pools=pools)
 concatlayer = ConcatLayer()
 
 est_configs = [
-    CompletelyRandomForest(),
-    CompletelyRandomForest(),
-    CompletelyRandomForest(),
-    CompletelyRandomForest(),
-    RandomForest(),
-    RandomForest(),
-    RandomForest(),
-    RandomForest()
+    ExtraRandomForestConfig(),
+    ExtraRandomForestConfig(),
+    ExtraRandomForestConfig(),
+    ExtraRandomForestConfig(),
+    RandomForestConfig(),
+    RandomForestConfig(),
+    RandomForestConfig(),
+    RandomForestConfig()
 ]
 
 data_save_dir = osp.join(get_data_save_base(), 'mnist')

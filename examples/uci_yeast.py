@@ -9,7 +9,7 @@ UCI_YEAST Example.
 
 from __future__ import print_function
 from forestlayer.datasets import uci_yeast
-from forestlayer.estimators.arguments import CompletelyRandomForest, RandomForest
+from forestlayer.estimators.estimator_configs import ExtraRandomForestConfig, RandomForestConfig
 from forestlayer.layers.layer import AutoGrowingCascadeLayer
 from forestlayer.layers.graph import Graph
 
@@ -19,14 +19,14 @@ print('x_train shape: {}'.format(x_train.shape))
 print('x_test.shape: {}'.format(x_test.shape))
 
 est_configs = [
-    CompletelyRandomForest(),
-    CompletelyRandomForest(),
-    CompletelyRandomForest(),
-    CompletelyRandomForest(),
-    RandomForest(),
-    RandomForest(),
-    RandomForest(),
-    RandomForest()
+    ExtraRandomForestConfig(),
+    ExtraRandomForestConfig(),
+    ExtraRandomForestConfig(),
+    ExtraRandomForestConfig(),
+    RandomForestConfig(),
+    RandomForestConfig(),
+    RandomForestConfig(),
+    RandomForestConfig()
 ]
 
 auto_cascade = AutoGrowingCascadeLayer(est_configs=est_configs,

@@ -1059,6 +1059,8 @@ class AutoGrowingCascadeLayer(Layer):
         self.group_ends = []
         self.group_dims = []
         self.test_results = None
+        self.opt_test_metric = 0
+        self.opt_train_metric = 0
         self.keep_test_result = keep_test_result
 
     def _create_cascade_layer(self, est_configs=None, data_save_dir=None, model_save_dir=None,
@@ -1199,6 +1201,7 @@ class AutoGrowingCascadeLayer(Layer):
                 # detect best layer id
                 opt_layer_id = get_opt_layer_id(layer_metric_list, self.larger_better)
                 self.opt_layer_id = opt_layer_id
+                self.opt_train_metric = layer_metric_list[opt_layer_id]
                 # if this layer is the best layer, set the opt_data
                 if opt_layer_id == layer_id:
                     opt_data = [x_cur_train, y_train]
@@ -1222,6 +1225,7 @@ class AutoGrowingCascadeLayer(Layer):
             opt_data = [x_cur_train, y_train]
             opt_layer_id = get_opt_layer_id(layer_metric_list, larger_better=self.larger_better)
             self.opt_layer_id = opt_layer_id
+            self.opt_train_metric = layer_metric_list[opt_layer_id]
             self.LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.4f}{},'
                              ' optimal_layer={}, {}_optimal_train={:.4f}{}'.format(
                                 self.max_layers,
@@ -1332,8 +1336,10 @@ class AutoGrowingCascadeLayer(Layer):
                 # detect best layer id
                 if self.stop_by_test:
                     opt_layer_id = get_opt_layer_id(layer_test_metrics, self.larger_better)
+                    self.opt_test_metric = layer_test_metrics[opt_layer_id]
                 else:
                     opt_layer_id = get_opt_layer_id(layer_train_metrics, self.larger_better)
+                    self.opt_train_metric = layer_train_metrics[opt_layer_id]
                 self.opt_layer_id = opt_layer_id
                 # if this layer is the best layer, set the opt_data
                 if opt_layer_id == layer_id:
@@ -1374,8 +1380,10 @@ class AutoGrowingCascadeLayer(Layer):
             # detect best layer id
             if self.stop_by_test:
                 opt_layer_id = get_opt_layer_id(layer_test_metrics, larger_better=self.larger_better)
+                self.opt_test_metric = layer_test_metrics[opt_layer_id]
             else:
                 opt_layer_id = get_opt_layer_id(layer_train_metrics, self.larger_better)
+                self.opt_train_metric = layer_train_metrics[opt_layer_id]
             self.opt_layer_id = opt_layer_id
             if y_test is not None:
                 self.LOGGER.info('[Result][Max Layer Reach] max_layer={}, {}_train={:.4f}{}, {}_test={:.4f}{}'

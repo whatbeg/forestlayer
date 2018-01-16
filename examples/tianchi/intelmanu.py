@@ -14,7 +14,7 @@ from sklearn.preprocessing import MinMaxScaler
 from keras.layers import Dense, Input
 from keras.models import Model
 from forestlayer.layers.layer import AutoGrowingCascadeLayer
-from forestlayer.estimators.arguments import CompletelyRandomForest, RandomForest, XGBRegressor, GBDT
+from forestlayer.estimators.estimator_configs import ExtraRandomForestConfig, RandomForestConfig, XGBRegressorConfig, GBDTConfig
 from forestlayer.backend.backend import set_base_dir
 from forestlayer.datasets.dataset import get_dataset_dir
 from forestlayer.utils.storage_utils import get_data_save_base, get_model_save_base
@@ -112,14 +112,14 @@ feat_dim_120 = auto_encoder()
 
 
 est_configs = [
-    CompletelyRandomForest(),
-    CompletelyRandomForest(),
-    RandomForest(n_estimators=100),
-    RandomForest(n_estimators=100),
-    GBDT(n_estimators=100),
-    GBDT(n_estimators=100),
-    # XGBRegressor(),
-    # XGBRegressor()
+    ExtraRandomForestConfig(),
+    ExtraRandomForestConfig(),
+    RandomForestConfig(n_estimators=100),
+    RandomForestConfig(n_estimators=100),
+    GBDTConfig(n_estimators=100),
+    GBDTConfig(n_estimators=100),
+    # XGBRegressorConfig(),
+    # XGBRegressorConfig()
 ]
 
 data_save_dir = osp.join(get_data_save_base(), 'tianchi', 'intelmanu')

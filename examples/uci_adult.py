@@ -11,7 +11,7 @@ from __future__ import print_function
 from forestlayer.datasets import uci_adult
 from forestlayer.layers import Graph, AutoGrowingCascadeLayer
 from forestlayer.utils.storage_utils import get_data_save_base
-from forestlayer.estimators.arguments import CompletelyRandomForest, RandomForest
+from forestlayer.estimators.estimator_configs import ExtraRandomForestConfig, RandomForestConfig
 import time
 import numpy as np
 import os.path as osp
@@ -24,10 +24,10 @@ print(x_test.shape[0], 'test samples')
 print(x_train.shape[1], 'features')
 
 est_configs = [
-    RandomForest(),
-    RandomForest(),
-    CompletelyRandomForest(),
-    CompletelyRandomForest()
+    RandomForestConfig(),
+    RandomForestConfig(),
+    ExtraRandomForestConfig(),
+    ExtraRandomForestConfig()
 ]
 
 agc = AutoGrowingCascadeLayer(est_configs=est_configs,

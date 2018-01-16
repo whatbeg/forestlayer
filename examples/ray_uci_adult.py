@@ -10,7 +10,7 @@ UCI_ADULT Example.
 from __future__ import print_function
 from forestlayer.datasets import uci_adult
 from forestlayer.estimators import get_estimator_kfold
-from forestlayer.estimators.arguments import RandomForest, CompletelyRandomForest
+from forestlayer.estimators.estimator_configs import RandomForestConfig, ExtraRandomForestConfig
 import ray
 import time
 
@@ -26,8 +26,8 @@ def fit(est, X, y):
     return est.fit(X, y)
 
 
-rf_args = RandomForest().get_est_args()
-crf_args = CompletelyRandomForest().get_est_args()
+rf_args = RandomForestConfig().get_est_args()
+crf_args = ExtraRandomForestConfig().get_est_args()
 
 est_configs = [
     get_estimator_kfold(name='1', est_type='RF', keep_in_mem=False, est_args=rf_args.copy()),

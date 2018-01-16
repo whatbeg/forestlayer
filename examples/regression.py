@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import AdaBoostRegressor
-from forestlayer.estimators.arguments import RandomForest, CompletelyRandomForest
+from forestlayer.estimators.estimator_configs import RandomForestConfig, ExtraRandomForestConfig
 from forestlayer.layers.layer import AutoGrowingCascadeLayer
 
 rng = np.random.RandomState(1)
@@ -19,8 +19,8 @@ X = np.linspace(0, 6, 100)[:, np.newaxis]
 y = np.sin(X).ravel() + np.sin(6 * X).ravel() + rng.normal(0, 0.1, X.shape[0])
 
 est_configs = [
-    RandomForest(),
-    CompletelyRandomForest()
+    RandomForestConfig(),
+    ExtraRandomForestConfig()
 ]
 
 cascade = AutoGrowingCascadeLayer(task='regression', est_configs=est_configs, early_stopping_rounds=3, keep_in_mem=True)

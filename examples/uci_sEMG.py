@@ -12,7 +12,7 @@ from forestlayer.datasets import uci_sEMG
 from forestlayer.layers.factory import MGSWindow, MeanPooling
 from forestlayer.layers.layer import MultiGrainScanLayer, AutoGrowingCascadeLayer, PoolingLayer, ConcatLayer
 from forestlayer.layers.graph import Graph
-from forestlayer.estimators.arguments import CompletelyRandomForest, RandomForest, Basic4x2
+from forestlayer.estimators.estimator_configs import ExtraRandomForestConfig, RandomForestConfig, Basic4x2
 
 x_train, y_train, x_test, y_test = uci_sEMG.load_data()
 # x_train = x_train[:18]
@@ -27,8 +27,8 @@ windows = [MGSWindow((1, 157)),
            MGSWindow((1, 375)),
            MGSWindow((1, 750))]
 
-rf1 = CompletelyRandomForest(n_folds=1, min_samples_leaf=10)
-rf2 = RandomForest(n_folds=1, min_samples_leaf=10)
+rf1 = ExtraRandomForestConfig(n_folds=1, min_samples_leaf=10)
+rf2 = RandomForestConfig(n_folds=1, min_samples_leaf=10)
 
 est_for_windows = [[rf1, rf2],
                    [rf1, rf2],

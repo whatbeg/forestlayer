@@ -11,6 +11,7 @@ from __future__ import print_function
 from forestlayer.datasets import uci_letter
 from forestlayer.layers import Graph, AutoGrowingCascadeLayer
 from forestlayer.utils.storage_utils import get_data_save_base
+from forestlayer.estimators.estimator_configs import ExtraRandomForestConfig, RandomForestConfig
 import time
 import os.path as osp
 
@@ -19,22 +20,11 @@ start_time = time.time()
 (X_train, y_train, X_test, y_test) = uci_letter.load_data()
 
 
-def get_est_args(est_type):
-    est_args = {
-        'est_type': est_type,
-        'n_folds': 3,
-        'n_estimators': 500,
-        'max_depth': 100,
-        'n_jobs': -1
-    }
-    return est_args
-
-
 est_configs = [
-    get_est_args('CRF'),
-    get_est_args('CRF'),
-    get_est_args('RF'),
-    get_est_args('RF')
+    ExtraRandomForestConfig(),
+    ExtraRandomForestConfig(),
+    RandomForestConfig(),
+    RandomForestConfig()
 ]
 
 agc = AutoGrowingCascadeLayer(est_configs=est_configs,

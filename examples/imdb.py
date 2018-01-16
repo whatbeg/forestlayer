@@ -10,7 +10,7 @@ IMDB Example.
 from __future__ import print_function
 from forestlayer.datasets import imdb
 from forestlayer.layers.layer import AutoGrowingCascadeLayer
-from forestlayer.estimators.arguments import CompletelyRandomForest, RandomForest
+from forestlayer.estimators.estimator_configs import ExtraRandomForestConfig, RandomForestConfig
 from forestlayer.utils.storage_utils import get_data_save_base, get_model_save_base
 import os.path as osp
 
@@ -25,14 +25,14 @@ print('x_test.shape', x_test.shape)
 # y_test = y_test[:5]
 
 est_configs = [
-    CompletelyRandomForest(),
-    CompletelyRandomForest(),
-    CompletelyRandomForest(),
-    CompletelyRandomForest(),
-    RandomForest(),
-    RandomForest(),
-    RandomForest(),
-    RandomForest()
+    ExtraRandomForestConfig(),
+    ExtraRandomForestConfig(),
+    ExtraRandomForestConfig(),
+    ExtraRandomForestConfig(),
+    RandomForestConfig(),
+    RandomForestConfig(),
+    RandomForestConfig(),
+    RandomForestConfig()
 ]
 
 data_save_dir = osp.join(get_data_save_base(), 'fashion_mnist')

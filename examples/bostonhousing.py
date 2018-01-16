@@ -9,7 +9,7 @@ Boston Housing Example.
 
 from __future__ import print_function
 from keras.datasets import boston_housing
-from forestlayer.estimators.arguments import CompletelyRandomForest, RandomForest, GBDT
+from forestlayer.estimators.estimator_configs import ExtraRandomForestConfig, RandomForestConfig, GBDTConfig
 from forestlayer.layers.layer import AutoGrowingCascadeLayer
 
 (x_train, y_train), (x_test, y_test) = boston_housing.load_data(test_split=0.25)
@@ -18,9 +18,9 @@ print("x_train: {}".format(x_train.shape))
 print("x_test: {}".format(x_test.shape))
 
 est_configs = [
-    RandomForest(),
-    CompletelyRandomForest(),
-    GBDT()
+    RandomForestConfig(),
+    ExtraRandomForestConfig(),
+    GBDTConfig()
 ]
 
 cascade = AutoGrowingCascadeLayer(task='regression',

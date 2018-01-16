@@ -11,7 +11,7 @@ from __future__ import print_function
 from forestlayer.datasets import uci_letter
 from forestlayer.layers import Graph, AutoGrowingCascadeLayer
 from forestlayer.utils.storage_utils import get_data_save_base
-from forestlayer.estimators.arguments import MultiClassXGBoost
+from forestlayer.estimators.estimator_configs import MultiClassXGBConfig
 import time
 import os.path as osp
 
@@ -21,10 +21,10 @@ start_time = time.time()
 
 
 est_configs = [
-    MultiClassXGBoost(num_class=26),
-    MultiClassXGBoost(num_class=26),
-    MultiClassXGBoost(num_class=26),
-    MultiClassXGBoost(num_class=26)
+    MultiClassXGBConfig(num_class=26),
+    MultiClassXGBConfig(num_class=26),
+    MultiClassXGBConfig(num_class=26),
+    MultiClassXGBConfig(num_class=26)
 ]
 
 agc = AutoGrowingCascadeLayer(est_configs=est_configs,
