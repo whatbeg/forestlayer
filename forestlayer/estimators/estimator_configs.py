@@ -336,7 +336,8 @@ class LGBMRegressorConfig(EstimatorConfig):
 
         :param n_folds:
         :param boosting_type:
-        :param num_leaves:
+        :param num_leaves: LightGBM use num_leaves to limit tree complexity.
+                           Approximately, there are `num_leaves = 2^(max_depth)`.
         :param max_depth:
         :param learning_rate:
         :param n_estimators:

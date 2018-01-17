@@ -84,11 +84,18 @@ def load_data(feature_type='tfidf'):
     else:
         raise ValueError('Unknown feature type: {}'.format(feature_type))
 
-    x_train = x_train[:, np.newaxis, :, np.newaxis]
-    x_test = x_test[:, np.newaxis, :, np.newaxis]
-    return x_train, y_train, x_test, y_test
+    x_train = x_train[:, np.newaxis, :, np.newaxis].astype('float32')
+    x_test = x_test[:, np.newaxis, :, np.newaxis].astype('float32')
+    return x_train, y_train.astype('int8'), x_test, y_test.astype('int8')
 
 
+if __name__ == '__main__':
+    X_train, Y_train, X_test, Y_test = load_data()
+    print(X_train.dtype)
+    print(X_test.dtype)
+    print(Y_train.dtype)
+    print(Y_train.max())
+    print(np.unique(Y_train))
 
 
 
