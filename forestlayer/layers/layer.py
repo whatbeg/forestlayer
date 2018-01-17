@@ -297,11 +297,96 @@ class MultiGrainScanLayer(Layer):
                 win_est_train.append(y_proba_train)
             if self.keep_in_mem:
                 self.est_for_windows[wi] = ests_for_win
+            else:
+                self.est_for_windows[wi] = None
             x_win_est_train.append(win_est_train)
         if len(x_win_est_train) == 0:
             return x_wins_train
         self.LOGGER.info('x_win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
         return x_win_est_train
+
+    def _distribute_fit_transform(self,  x_train, y_train, x_test=None, y_test=None):
+        """
+        Fit and transform.
+
+        :param x_train:
+        :param y_train:
+        :param x_test:
+        :param y_test:
+        :return:
+        """
+        x_train, y_train = self._check_input(x_train, y_train)
+        x_test, y_test = self._check_input(x_test, y_test)
+        # Construct test sets
+        x_wins_train = []
+        x_wins_test = []
+        for win in self.windows:
+            x_wins_train.append(self.scan(win, x_train))
+        for win in self.windows:
+            x_wins_test.append(self.scan(win, x_test))
+        self.LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
+        self.LOGGER.info('X_wins of  test: {}'.format([win.shape for win in x_wins_test]))
+        x_win_est_train = []
+        x_win_est_test = []
+        ests = []
+        est_offsets = [0, ]
+        ei2wi = dict()
+        nhs, nws = [None for _ in range(len(self.windows))], [None for _ in range(len(self.windows))]
+        y_win = [None for _ in range(len(self.windows))]
+        y_win_test = [None for _ in range(len(self.windows))]
+        test_sets = [None for _ in range(len(self.windows))]
+        for wi, ests_for_win in enumerate(self.est_for_windows):
+            if not isinstance(ests_for_win, (list, tuple)):
+                self.est_for_windows[wi] = [ests_for_win]
+            for ei, est in enumerate(ests_for_win):
+                if isinstance(est, EstimatorConfig):
+                    est = self._init_estimator(est, wi, ei)
+                self.est_for_windows[wi][ei] = est
+                ests.append(est)
+                ei2wi[est_offsets[wi] + ei] = wi
+            est_offsets.append(len(ests_for_win))
+            _, nhs[wi], nws[wi], _ = x_wins_train[wi].shape
+            x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
+            x_wins_test[wi] = x_wins_test[wi].reshape((x_wins_test[wi].shape[0], -1, x_wins_test[wi].shape[-1]))
+            y_win[wi] = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
+            y_win_test[wi] = None if y_test is None else y_test[:, np.newaxis].repeat(x_wins_test[wi].shape[1], axis=1)
+            test_sets[wi] = [('testOfWin{}'.format(wi), x_wins_test[wi], y_win_test[wi])]
+        if self.distribute:
+            ests_output = ray.get([est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]],
+                                                            y_win[ei2wi[ei]][:, 0], test_sets[ei2wi[ei]])
+                                   for ei, est in enumerate(ests)])
+        else:
+            ests_output = [est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]],
+                                                    y_win[ei2wi[ei]][:, 0], test_sets[ei2wi[ei]])
+                           for ei, est in enumerate(ests)]
+        est_offsets = np.cumsum(est_offsets)
+        for wi, ests_for_win in enumerate(self.est_for_windows):
+            win_est_train = []
+            win_est_test = []
+            # X_wins[wi] = (60000, 11, 11, 49)
+            nh, nw = nhs[wi], nws[wi]
+            # (60000, 121, 49)
+            y_proba_train_tests = ests_output[est_offsets[wi]:est_offsets[wi + 1]]
+            for y_proba_tup in y_proba_train_tests:
+                y_proba_train = y_proba_tup[0]
+                y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                y_probas_test = y_proba_tup[1]
+                assert len(y_probas_test) == 1, 'assume there is only one test set!'
+                y_probas_test = y_probas_test[0]
+                y_probas_test = y_probas_test.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                win_est_train.append(y_proba_train)
+                win_est_test.append(y_probas_test)
+            if self.keep_in_mem:
+                self.est_for_windows[wi] = ests_for_win
+            else:
+                self.est_for_windows[wi] = None
+            x_win_est_train.append(win_est_train)
+            x_win_est_test.append(win_est_test)
+        if len(x_win_est_train) == 0:
+            return x_wins_train, x_wins_test
+        self.LOGGER.info('x_win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
+        self.LOGGER.info(' x_win_est_test.shape: {}'.format(list2str(x_win_est_test, 2)))
+        return x_win_est_train, x_win_est_test
 
     def fit_transform(self, x_train, y_train, x_test=None, y_test=None):
         """
@@ -315,6 +400,8 @@ class MultiGrainScanLayer(Layer):
         """
         if x_test is None:
             return self.fit(x_train, y_train), None
+        if self.distribute:
+            return self._distribute_fit_transform(x_train, y_train, x_test, y_test)
         x_train, y_train = self._check_input(x_train, y_train)
         x_test, y_test = self._check_input(x_test, y_test)
         # Construct test sets

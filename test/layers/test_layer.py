@@ -143,6 +143,25 @@ class TestLayerForMNIST(unittest.TestCase):
         self.test_non_dis_mgs_fit()
         print('Non-distributed mgs fit cost {} s'.format(time.time() - start))
 
+    def test_distribute_mgs_fit_transform(self):
+        import ray
+        ray.init()
+        mgs, _, _, _, _ = self._init(distribute=True)
+        res_trains = mgs.fit_transform(self.x_train, self.y_train, self.x_test, self.y_test)
+
+    def test_non_dis_mgs_fit_transform(self):
+        mgs, _, _, _, _ = self._init(distribute=False)
+        res_trains = mgs.fit_transform(self.x_train, self.y_train, self.x_test, self.y_test)
+
+    def test_speed_of_distribution_of_mgs_fit_transform(self):
+        import time
+        start = time.time()
+        self.test_distribute_mgs_fit()
+        print('distributed mgs fit cost {} s'.format(time.time() - start))
+        start = time.time()
+        self.test_non_dis_mgs_fit()
+        print('Non-distributed mgs fit cost {} s'.format(time.time() - start))
+
 
 class TestLayerForUCIADULT(unittest.TestCase):
     def setUp(self):
