@@ -209,6 +209,8 @@ class MultiGrainScanLayer(Layer):
         :param y_train:
         :return:
         """
+        if self.distribute:
+            return self._distributed_fit(x_train, y_train)
         x_train, y_train = self._check_input(x_train, y_train)
         x_wins_train = []
         for win in self.windows:
@@ -234,6 +236,63 @@ class MultiGrainScanLayer(Layer):
             else:
                 y_proba_trains = [est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0]) for est in ests_for_win]
             for y_proba_train, _ in y_proba_trains:
+                y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                win_est_train.append(y_proba_train)
+            if self.keep_in_mem:
+                self.est_for_windows[wi] = ests_for_win
+            x_win_est_train.append(win_est_train)
+        if len(x_win_est_train) == 0:
+            return x_wins_train
+        self.LOGGER.info('x_win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
+        return x_win_est_train
+
+    def _distributed_fit(self, x_train, y_train):
+        """
+        Fit.
+
+        :param x_train: training data
+        :param y_train: training labels
+        :return:
+        """
+        x_train, y_train = self._check_input(x_train, y_train)
+        x_wins_train = []
+        for win in self.windows:
+            x_wins_train.append(self.scan(win, x_train))
+        self.LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
+        x_win_est_train = []
+        ests = []
+        est_offsets = [0, ]
+        ei2wi = dict()
+        nhs, nws = [None for _ in range(len(self.windows))], [None for _ in range(len(self.windows))]
+        y_win = [None for _ in range(len(self.windows))]
+        for wi, ests_for_win in enumerate(self.est_for_windows):
+            if not isinstance(ests_for_win, (list, tuple)):
+                self.est_for_windows[wi] = [ests_for_win]
+            for ei, est in enumerate(ests_for_win):
+                if isinstance(est, EstimatorConfig):
+                    est = self._init_estimator(est, wi, ei)
+                self.est_for_windows[wi][ei] = est
+                ests.append(est)
+                ei2wi[est_offsets[wi] + ei] = wi
+            est_offsets.append(len(ests_for_win))
+            _, nhs[wi], nws[wi], _ = x_wins_train[wi].shape
+            x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
+            y_win[wi] = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
+        if self.distribute:
+            ests_output = ray.get([est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]],
+                                   y_win[ei2wi[ei]][:, 0]) for ei, est in enumerate(ests)])
+        else:
+            ests_output = [est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]], y_win[ei2wi[ei]][:, 0])
+                           for ei, est in enumerate(ests)]
+        est_offsets = np.cumsum(est_offsets)
+        for wi, ests_for_win in enumerate(self.est_for_windows):
+            win_est_train = []
+            # X_wins[wi] = (60000, 11, 11, 49)
+            nh, nw = nhs[wi], nws[wi]
+            # (60000, 121, 49)
+            y_proba_trains = ests_output[est_offsets[wi]:est_offsets[wi+1]]
+            for y_proba_train_tup in y_proba_trains:
+                y_proba_train = y_proba_train_tup[0]
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
                 win_est_train.append(y_proba_train)
             if self.keep_in_mem:

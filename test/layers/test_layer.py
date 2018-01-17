@@ -27,9 +27,10 @@ class TestLayerForMNIST(unittest.TestCase):
         # the data, shuffled and split between train and test sets
         (x_train, y_train), (x_test, y_test) = mnist.load_data()
         x_train = np.reshape(x_train, (60000, -1, 28, 28))
+        x_test = np.reshape(x_test, (10000, -1, 28, 28))
         self.x_train = x_train[:200, :, :, :]
         self.y_train = y_train[:200]
-        self.x_test = np.reshape(x_test[:100], (100, -1, 28, 28))
+        self.x_test = x_test[:100, :, :, :]
         self.y_test = y_test[:100]
         print("================ MNIST ===================")
         print('X_train: ', self.x_train.shape, 'y: ', self.y_train.shape)
@@ -122,6 +123,25 @@ class TestLayerForMNIST(unittest.TestCase):
         auto_cascade.keep_in_mem = True
         res_train = auto_cascade.fit(res_train, self.y_train)
         auto_cascade.evaluate(predicted, self.y_test)
+
+    def test_distribute_mgs_fit(self):
+        import ray
+        ray.init()
+        mgs, _, _, _, _ = self._init(distribute=True)
+        res_trains = mgs.fit(self.x_train, self.y_train)
+
+    def test_non_dis_mgs_fit(self):
+        mgs, _, _, _, _ = self._init(distribute=False)
+        res_trains = mgs.fit(self.x_train, self.y_train)
+
+    def test_speed_of_distribution_of_mgs_fit(self):
+        import time
+        start = time.time()
+        self.test_distribute_mgs_fit()
+        print('distributed mgs fit cost {} s'.format(time.time() - start))
+        start = time.time()
+        self.test_non_dis_mgs_fit()
+        print('Non-distributed mgs fit cost {} s'.format(time.time() - start))
 
 
 class TestLayerForUCIADULT(unittest.TestCase):
