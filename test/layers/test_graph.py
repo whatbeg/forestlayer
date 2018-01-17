@@ -14,7 +14,7 @@ import unittest
 from forestlayer.layers.window import Window, Pooling
 from forestlayer.layers.layer import MultiGrainScanLayer, PoolingLayer, ConcatLayer, AutoGrowingCascadeLayer
 from forestlayer.layers.graph import Graph
-from forestlayer.estimators.arguments import RandomForest, CompletelyRandomForest, GBDT
+from forestlayer.estimators.estimator_configs import RandomForestConfig, ExtraRandomForestConfig
 from forestlayer.utils.storage_utils import get_data_save_base
 from keras.datasets import mnist
 
@@ -37,17 +37,17 @@ class TestGraph(unittest.TestCase):
 
     def _init(self):
         self.est_configs = [
-            CompletelyRandomForest(n_estimators=40),
-            CompletelyRandomForest(n_estimators=40),
-            RandomForest(n_estimators=40),
-            RandomForest(n_estimators=40)
+            ExtraRandomForestConfig(n_estimators=40),
+            ExtraRandomForestConfig(n_estimators=40),
+            RandomForestConfig(n_estimators=40),
+            RandomForestConfig(n_estimators=40)
         ]
 
         windows = [Window(7, 7, 2, 2, 0, 0),
                    Window(11, 11, 2, 2, 0, 0)]
 
-        rf1 = CompletelyRandomForest(min_samples_leaf=10)
-        rf2 = RandomForest(min_samples_leaf=10)
+        rf1 = ExtraRandomForestConfig(min_samples_leaf=10)
+        rf2 = RandomForestConfig(min_samples_leaf=10)
 
         est_for_windows = [[rf1, rf2],
                            [rf1, rf2]]

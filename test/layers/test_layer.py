@@ -10,62 +10,66 @@ Test Suites of layers.layer.
 from __future__ import print_function
 import numpy as np
 import os.path as osp
-import time
-import copy
-from forestlayer.layers.window import Window, Pooling
-from forestlayer.layers.layer import MultiGrainScanLayer, PoolingLayer, ConcatLayer, CascadeLayer, AutoGrowingCascadeLayer
-from forestlayer.estimators.arguments import RandomForest, CompletelyRandomForest, GBDT
+import unittest
+from forestlayer.layers.window import Window
+from forestlayer.layers.factory import MaxPooling
+from forestlayer.layers.layer import (MultiGrainScanLayer, PoolingLayer,
+                                      ConcatLayer, CascadeLayer, AutoGrowingCascadeLayer)
+from forestlayer.estimators.estimator_configs import RandomForestConfig, ExtraRandomForestConfig
 from forestlayer.layers.graph import Graph
 from forestlayer.utils.storage_utils import get_data_save_base
 from keras.datasets import mnist
 from forestlayer.datasets import uci_adult
 
 
-def MNIST_based_test():
-    # the data, shuffled and split between train and test sets
-    (x_train, y_train), (x_test, y_test) = mnist.load_data()
-    X = np.reshape(x_train, (60000, -1, 28, 28))
-    X = X[:200, :, :, :]
-    y_train = y_train[:200]
-    X_test = np.reshape(x_test[:100], (100, -1, 28, 28))
-    y_test = y_test[:100]
+class TestLayerForMNIST(unittest.TestCase):
+    def setUp(self):
+        # the data, shuffled and split between train and test sets
+        (x_train, y_train), (x_test, y_test) = mnist.load_data()
+        x_train = np.reshape(x_train, (60000, -1, 28, 28))
+        self.x_train = x_train[:200, :, :, :]
+        self.y_train = y_train[:200]
+        self.x_test = np.reshape(x_test[:100], (100, -1, 28, 28))
+        self.y_test = y_test[:100]
+        print("================ MNIST ===================")
+        print('X_train: ', self.x_train.shape, 'y: ', self.y_train.shape)
+        print(' X_test: ', self.x_test.shape, 'y: ', self.y_test.shape)
 
-    print('X: ', X.shape, 'y: ', y_train.shape)
-    print('X_test: ', X_test.shape, 'y: ', y_test.shape)
+    def _init(self, distribute=False):
+        windows = [Window(7, 7, 2, 2, 0, 0),
+                   Window(11, 11, 2, 2, 0, 0)]
 
-    def _init():
-        windows = [Window(7, 7, 2, 2, 0, 0), Window(11, 11, 2, 2, 0, 0)]
+        rf1 = ExtraRandomForestConfig(n_estimators=40, min_samples_leaf=10)
+        rf2 = RandomForestConfig(n_estimators=40, min_samples_leaf=10)
 
-        rf1 = CompletelyRandomForest(min_samples_leaf=10)
-        rf2 = RandomForest(min_samples_leaf=10)
+        est_for_windows = [[rf1, rf2],
+                           [rf1, rf2]]
 
-        est_for_windows = [[rf1, rf2], [rf1, rf2]]
-
-        mgs = MultiGrainScanLayer(batch_size=None,
-                                  dtype=np.float32,
-                                  windows=windows,
+        mgs = MultiGrainScanLayer(windows=windows,
                                   est_for_windows=est_for_windows,
-                                  n_class=10)
+                                  n_class=10,
+                                  distribute=distribute)
 
-        pools = [[Pooling(2, 2, "max"), Pooling(2, 2, "max")], [Pooling(2, 2, "max"), Pooling(2, 2, "max")]]
+        pools = [[MaxPooling(), MaxPooling()],
+                 [MaxPooling(), MaxPooling()]]
 
         poolayer = PoolingLayer(pools=pools)
 
         concat_layer = ConcatLayer()
 
-        est_configs = [
-            CompletelyRandomForest(n_estimators=40),
-            CompletelyRandomForest(n_estimators=40),
-            RandomForest(n_estimators=40),
-            RandomForest(n_estimators=40)
+        self.est_configs = [
+            ExtraRandomForestConfig(n_estimators=40),
+            ExtraRandomForestConfig(n_estimators=40),
+            RandomForestConfig(n_estimators=40),
+            RandomForestConfig(n_estimators=40)
         ]
 
-        cascade = CascadeLayer(est_configs=est_configs,
+        cascade = CascadeLayer(est_configs=self.est_configs,
                                n_classes=10,
                                keep_in_mem=True,
                                data_save_dir=osp.join(get_data_save_base(), 'test_layer', 'cascade'))
 
-        auto_cascade = AutoGrowingCascadeLayer(est_configs=est_configs,
+        auto_cascade = AutoGrowingCascadeLayer(est_configs=self.est_configs,
                                                early_stopping_rounds=3,
                                                data_save_rounds=4,
                                                stop_by_test=True,
@@ -75,129 +79,116 @@ def MNIST_based_test():
 
         return mgs, poolayer, concat_layer, cascade, auto_cascade
 
-    def test_fit_transform():
+    def test_fit_transform(self):
         print('test fit_transform')
 
-        mgs, poolayer, concat_layer, cascade, auto_cascade = _init()
+        mgs, poolayer, concat_layer, cascade, auto_cascade = self._init()
 
-        res_train, res_test = mgs.fit_transform(X, y_train, X_test, y_test)
+        res_train, res_test = mgs.fit_transform(self.x_train, self.y_train, self.x_test, self.y_test)
 
         res_train, res_test = poolayer.fit_transform(res_train, None, res_test, None)
 
         res_train, res_test = concat_layer.fit_transform(res_train, None, res_test)
-        print(res_train[:20])
 
-        res_train, res_test = auto_cascade.fit_transform(res_train, y_train, res_test)
+        res_train, res_test = auto_cascade.fit_transform(res_train, self.y_train, res_test)
 
-        print(res_train.shape, res_test.shape)
+        print('res train / test shape: ', res_train.shape, res_test.shape)
 
-    def test_fit():
+    def test_fit(self):
         print('test fit')
 
-        mgs, poolayer, concat_layer, cascade, auto_cascade = _init()
-        res_train = mgs.fit(X, y_train)
+        mgs, poolayer, concat_layer, cascade, auto_cascade = self._init()
+        res_train = mgs.fit(self.x_train, self.y_train)
 
-        res_train = poolayer.fit(res_train, y_train)
+        res_train = poolayer.fit(res_train, self.y_train)
 
         res_train = concat_layer.fit(res_train, None)
 
-        res_train = auto_cascade.fit(res_train, y_train)
+        res_train = auto_cascade.fit(res_train, self.y_train)
 
-    def test_predict():
+    def test_predict(self):
         print('test predict')
 
-        mgs, poolayer, concat_layer, cascade, auto_cascade = _init()
+        mgs, poolayer, concat_layer, cascade, auto_cascade = self._init()
         mgs.keep_in_mem = True
-        res_train = mgs.fit(X, y_train)
-        predicted = mgs.predict(X_test)
+        res_train = mgs.fit(self.x_train, self.y_train)
+        predicted = mgs.predict(self.x_test)
 
-        res_train = poolayer.fit(res_train, y_train)
+        res_train = poolayer.fit(res_train, self.y_train)
         predicted = poolayer.predict(predicted)
 
         res_train = concat_layer.fit(res_train, None)
         predicted = concat_layer.predict(predicted)
         auto_cascade.keep_in_mem = True
-        res_train = auto_cascade.fit(res_train, y_train)
-        auto_cascade.evaluate(predicted, y_test)
-
-    test_fit_transform()
-
-    test_fit()
-
-    test_predict()
+        res_train = auto_cascade.fit(res_train, self.y_train)
+        auto_cascade.evaluate(predicted, self.y_test)
 
 
-def UCI_ADULT_based_test():
-    start_time = time.time()
-    (x_train, y_train, x_test, y_test) = uci_adult.load_data()
+class TestLayerForUCIADULT(unittest.TestCase):
+    def setUp(self):
+        (self.x_train, self.y_train, self.x_test, self.y_test) = uci_adult.load_data()
+        print("=============== UCI ADULT ===============")
+        print(self.x_train.shape[0], 'train samples')
+        print(self.x_test.shape[0], 'test samples')
+        print(self.x_train.shape[1], 'features')
 
-    print(x_train.shape[0], 'train samples')
-    print(x_test.shape[0], 'test samples')
-    print(x_train.shape[1], 'features')
-
-    end_time = time.time()
-    print('time cost: {}'.format(end_time - start_time))
-
-    def _init():
-        est_configs = [
-            CompletelyRandomForest(n_estimators=40),
-            CompletelyRandomForest(n_estimators=40),
-            RandomForest(n_estimators=40),
-            RandomForest(n_estimators=40)
+    def _init(self, distribute=False):
+        self.est_configs = [
+            ExtraRandomForestConfig(n_estimators=40),
+            ExtraRandomForestConfig(n_estimators=40),
+            RandomForestConfig(n_estimators=40),
+            RandomForestConfig(n_estimators=40)
         ]
 
-        gc = CascadeLayer(est_configs=est_configs,
+        gc = CascadeLayer(est_configs=self.est_configs,
                           n_classes=2,
-                          data_save_dir=osp.join(get_data_save_base(), 'test_layer', 'cascade'))
+                          data_save_dir=osp.join(get_data_save_base(), 'test_layer', 'cascade'),
+                          distribute=distribute)
 
-        agc = AutoGrowingCascadeLayer(est_configs=est_configs,
+        agc = AutoGrowingCascadeLayer(est_configs=self.est_configs,
                                       early_stopping_rounds=2,
                                       stop_by_test=False,
                                       data_save_rounds=4,
                                       n_classes=2,
                                       data_save_dir=osp.join(get_data_save_base(),
-                                                             'test_layer', 'auto_cascade'))
+                                                             'test_layer', 'auto_cascade'),
+                                      distribute=distribute)
         return gc, agc
 
-    def test_uci_graph():
+    def test_uci_graph(self):
         print('test uci_graph')
-        gc, agc = _init()
+        gc, agc = self._init()
         model = Graph()
         model.add(agc)
-        model.fit_transform(x_train, y_train, x_test, y_test)
+        model.fit_transform(self.x_train, self.y_train, self.x_test, self.y_test)
 
-    def test_fit_predict():
+    def test_fit_predict(self):
         print('test fit and predict')
-        gc, agc = _init()
+        gc, agc = self._init()
         agc.keep_in_mem = True
-        agc.fit(x_train, y_train)
-        agc.evaluate(x_test, y_test)
+        agc.fit(self.x_train, self.y_train)
+        agc.evaluate(self.x_test, self.y_test)
 
-    def test_graph_fit_evaluate():
+    def test_graph_fit_evaluate(self):
         print('test fit and evaluate')
-        gc, agc = _init()
+        gc, agc = self._init()
         agc.keep_in_mem = True
         model = Graph()
         model.add(agc)
-        model.fit(x_train, y_train)
-        model.evaluate(x_test, y_test)
+        model.fit(self.x_train, self.y_train)
+        model.evaluate(self.x_test, self.y_test)
 
-    def test_graph_transform():
+    def test_graph_transform(self):
         print('test graph transform')
-        gc, agc = _init()
+        gc, agc = self._init()
         agc.keep_in_mem = True
         model = Graph()
         model.add(agc)
-        model.fit(x_train, y_train)
-        model.transform(x_test)
-
-    test_uci_graph()
-    test_fit_predict()
-    test_graph_fit_evaluate()
-    test_graph_transform()
+        model.fit(self.x_train, self.y_train)
+        model.transform(self.x_test)
 
 
-MNIST_based_test()
-UCI_ADULT_based_test()
+if __name__ == '__main__':
+    unittest.main()
 
 
