@@ -130,22 +130,25 @@ Note that the models of all experiments contain the same structures, and have a 
 | ForestLayer             | 86.143%    | 6-1        |  646s        |
 | ForestLayer Standalone  | 86.143%    | 6-1        |  279s        |
 | ForestLayer 2 nodes     | 86.143%    | 6-1        |  190s        |
+| ForestLayer 4 nodes     | 86.143%    | 6-1        |  149s        |
 
 <a href="https://github.com/whatbeg/forestflow">
 <div align="center">
 	<img src="http://7xsl28.com1.z0.glb.clouddn.com/adult_perf.jpg" width="60%" height="36%"/>
 </div>
+<div align="center">
+	<p>Fig. 1 UCI Adult performance. (4.3x)</p>
+</div>
 </a>
-
-Fig. 1 UCI Adult performance.
 
 <a href="https://github.com/whatbeg/forestflow">
 <div align="center">
 	<img src="http://7xsl28.com1.z0.glb.clouddn.com/imdb_perf.jpg" width="60%" height="36%"/>
 </div>
+<div align="center">
+	<p>Fig. 2 IMDB performance. (1.86x)</p>
+</div>
 </a>
-
-Fig. 2 IMDB performance.
 
 From the first 2 lines of the table, we can conclude that ForestLayer has no loss of training speed of gcForest v1.0, but possess much simpler user-friendly API instead of configuring the model structure in the model json file.
 
