@@ -209,8 +209,8 @@ class MultiGrainScanLayer(Layer):
         :param y_train:
         :return:
         """
-        if self.distribute:
-            return self._distributed_fit(x_train, y_train)
+        # if self.distribute:
+        #     return self._distributed_fit(x_train, y_train)
         x_train, y_train = self._check_input(x_train, y_train)
         x_wins_train = []
         for win in self.windows:
@@ -399,8 +399,8 @@ class MultiGrainScanLayer(Layer):
         """
         if x_test is None:
             return self.fit(x_train, y_train), None
-        if self.distribute:
-            return self._distribute_fit_transform(x_train, y_train, x_test, y_test)
+        # if self.distribute:
+        #     return self._distribute_fit_transform(x_train, y_train, x_test, y_test)
         x_train, y_train = self._check_input(x_train, y_train)
         x_test, y_test = self._check_input(x_test, y_test)
         # Construct test sets

@@ -7,7 +7,7 @@ import os.path as osp
 import numpy as np
 import ray
 from sklearn.model_selection import KFold, StratifiedKFold
-from xgboost import XGBClassifier, XGBRegressor
+from xgboost.sklearn import XGBClassifier, XGBRegressor
 from ..utils.metrics import Accuracy
 from ..utils.log_utils import get_logger
 from ..utils.storage_utils import name2path
@@ -361,7 +361,7 @@ class DistributedKFoldWrapper(object):
         for vi, (test_name, X_test, y_test) in enumerate(test_sets):
             if y_test is not None:
                 self.log_eval_metrics(self.name, y_test, y_probas_test[vi], test_name)
-        return y_proba_train, y_probas_test, self.log_info
+        return y_proba_train, y_probas_test
 
     def transform(self, x_tests):
         """
