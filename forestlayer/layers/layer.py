@@ -13,7 +13,7 @@ import datetime
 import os.path as osp
 import pickle
 import ray
-from ..utils.log_utils import get_logger, list2str
+from ..utils.log_utils import get_logger, list2str, list_type2str
 from ..utils.layer_utils import check_list_depth
 from ..utils.storage_utils import check_dir
 from ..utils.metrics import Metrics, Accuracy, AUC, MSE, RMSE
@@ -267,14 +267,14 @@ class MultiGrainScanLayer(Layer):
         y_win = [None for _ in range(len(self.windows))]
         for wi, ests_for_win in enumerate(self.est_for_windows):
             if not isinstance(ests_for_win, (list, tuple)):
-                self.est_for_windows[wi] = [ests_for_win]
+                ests_for_win = [ests_for_win]
             for ei, est in enumerate(ests_for_win):
                 if isinstance(est, EstimatorConfig):
                     est = self._init_estimator(est, wi, ei)
-                self.est_for_windows[wi][ei] = est
+                ests_for_win[ei] = est
                 ests.append(est)
                 ei2wi[est_offsets[wi] + ei] = wi
-            est_offsets.append(len(ests_for_win))
+            est_offsets.append(est_offsets[-1] + len(ests_for_win))
             _, nhs[wi], nws[wi], _ = x_wins_train[wi].shape
             x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
             y_win[wi] = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
@@ -284,7 +284,6 @@ class MultiGrainScanLayer(Layer):
         else:
             ests_output = [est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]], y_win[ei2wi[ei]][:, 0])
                            for ei, est in enumerate(ests)]
-        est_offsets = np.cumsum(est_offsets)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             win_est_train = []
             # X_wins[wi] = (60000, 11, 11, 49)
@@ -337,14 +336,14 @@ class MultiGrainScanLayer(Layer):
         test_sets = [None for _ in range(len(self.windows))]
         for wi, ests_for_win in enumerate(self.est_for_windows):
             if not isinstance(ests_for_win, (list, tuple)):
-                self.est_for_windows[wi] = [ests_for_win]
+                ests_for_win = [ests_for_win]
             for ei, est in enumerate(ests_for_win):
                 if isinstance(est, EstimatorConfig):
                     est = self._init_estimator(est, wi, ei)
-                self.est_for_windows[wi][ei] = est
+                ests_for_win[ei] = est
                 ests.append(est)
                 ei2wi[est_offsets[wi] + ei] = wi
-            est_offsets.append(len(ests_for_win))
+            est_offsets.append(est_offsets[-1] + len(ests_for_win))
             _, nhs[wi], nws[wi], _ = x_wins_train[wi].shape
             x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
             x_wins_test[wi] = x_wins_test[wi].reshape((x_wins_test[wi].shape[0], -1, x_wins_test[wi].shape[-1]))
@@ -359,7 +358,7 @@ class MultiGrainScanLayer(Layer):
             ests_output = [est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]],
                                                     y_win[ei2wi[ei]][:, 0], test_sets[ei2wi[ei]])
                            for ei, est in enumerate(ests)]
-        est_offsets = np.cumsum(est_offsets)
+        # print(list_type2str(self.est_for_windows, 2))
         for wi, ests_for_win in enumerate(self.est_for_windows):
             win_est_train = []
             win_est_test = []

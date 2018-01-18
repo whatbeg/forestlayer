@@ -165,3 +165,35 @@ def list2str(lis, dim):
             raise NotImplementedError
     result += ']'
     return result
+
+
+def list_type2str(lis, dim):
+    """
+    List to String.
+
+    :param lis:
+    :param dim:
+    :return:
+    """
+    result = "["
+    for l in lis:
+        if dim == 1:
+            result += '{},'.format(l)
+        elif dim == 2:
+            result += '['
+            for j in l:
+                result += '{} '.format(j)
+            result += '], '
+        elif dim == 3:
+            result += '['
+            for j in l:
+                result += '['
+                for k in j:
+                    result += '{} '.format(k)
+                result += '], '
+            result += '], '
+        else:
+            raise NotImplementedError
+    result += ']'
+    return result
+
