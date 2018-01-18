@@ -7,6 +7,7 @@ import os.path as osp
 import numpy as np
 import ray
 from sklearn.model_selection import KFold, StratifiedKFold
+from xgboost import XGBClassifier, XGBRegressor
 from ..utils.metrics import Accuracy
 from ..utils.log_utils import get_logger
 from ..utils.storage_utils import name2path
@@ -54,7 +55,11 @@ class KFoldWrapper(object):
         # TODO: consider if add a random_state, actually random_state of each estimator can be set in est_configs in
         # main program by users, so we need not to set random_state there.
         # More importantly, if some estimators have no random_state parameter, this assignment can throw problems.
-        # est_args['random_state'] = self.seed
+        if isinstance(self.est_class, (XGBClassifier, XGBRegressor)):
+            if est_args.get('seed', None) is None:
+                est_args['seed'] = self.seed
+        elif est_args.get('random_state', None):
+            est_args['random_state'] = self.seed
         return self.est_class(est_name, est_args)
 
     def fit_transform(self, X, y, y_stratify=None, test_sets=None):
@@ -259,7 +264,11 @@ class DistributedKFoldWrapper(object):
         """
         est_args = self.est_args.copy()
         est_name = '{}/{}'.format(self.name, k)
-        est_args['random_state'] = self.seed
+        if isinstance(self.est_class, (XGBClassifier, XGBRegressor)):
+            if est_args.get('seed', None) is None:
+                est_args['seed'] = self.seed
+        elif est_args.get('random_state', None):
+            est_args['random_state'] = self.seed
         return self.est_class(est_name, est_args)
 
     def fit_transform(self, X, y, y_stratify=None, test_sets=None):

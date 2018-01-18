@@ -50,7 +50,7 @@ class FLXGBoostClassifier(SKLearnBaseEstimator):
     XGBoost Classifier using Sklearn interfaces.
     """
     def __init__(self, name, kwargs):
-        from xgboost import XGBClassifier
+        from xgboost.sklearn import XGBClassifier
         super(FLXGBoostClassifier, self).__init__('classification', XGBClassifier, name, kwargs)
 
 
