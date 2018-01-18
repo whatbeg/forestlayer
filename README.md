@@ -131,6 +131,12 @@ Note that the models of all experiments contain the same structures, and have a 
 | ForestLayer Standalone  | 86.143%    | 6-1        |  279s        |
 | ForestLayer 2 nodes     | 86.143%    | 6-1        |  190s        |
 
+<a href="https://github.com/whatbeg/forestflow">
+<div align="center">
+	<img src="docs/imgs/perf.jpg" width="30%" height="18%"/>
+</div>
+</a>
+
 From the first 2 lines of the table, we can conclude that ForestLayer has no loss of training speed of gcForest v1.0, but possess much simpler user-friendly API instead of configuring the model structure in the model json file.
 
 And from all of the lines of the table, we can see, even in the Standalone mode, ForestLayer is **2.3x** faster than single machine implementation.
