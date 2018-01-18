@@ -133,7 +133,7 @@ Note that the models of all experiments contain the same structures, and have a 
 
 <a href="https://github.com/whatbeg/forestflow">
 <div align="center">
-	<img src="docs/imgs/perf.jpg" width="30%" height="18%"/>
+	<img src="docs/imgs/perf.jpg" width="60%" height="36%"/>
 </div>
 </a>
 
