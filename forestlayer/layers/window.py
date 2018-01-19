@@ -1,6 +1,6 @@
 # -*- coding:utf-8 -*-
 """
-multi-grain scan windows.
+Multi-grain scan windows.
 """
 
 # Copyright 2017 Authors NJU PASA BigData Laboratory.
@@ -19,6 +19,7 @@ def get_windows_channel(X, X_win, des_id, nw, nh, win_x, win_y, stride_x, stride
     X: N x C x H x W
     X_win: N x nc x nh x nw
     (k, di, dj) in range(X.channel, win_y, win_x)
+    Note: This code is borrowed from Ji. Feng.
     """
     # des_id = (k * win_y + di) * win_x + dj
     dj = des_id % win_x
@@ -58,7 +59,7 @@ def get_windows(X, win_x, win_y, stride_x=1, stride_y=1, pad_x=0, pad_y=0):
     nc = win_y * win_x * c
     nh = (h - win_y) / stride_y + 1
     nw = (w - win_x) / stride_x + 1
-    X_win = np.empty((nc, n * nh * nw), dtype=np.float32)
+    X_win = np.empty((nc, n * nh * nw), dtype=X.dtype)
     LOGGER.info("get_windows_start: X.shape={}, X_win.shape={}, nw={}, nh={}, channel={},"
                 " win = ({} x {}), stride = ({} x {})".format(
         X.shape, X_win.shape, nw, nh, c, win_x, win_y, stride_x, stride_y))

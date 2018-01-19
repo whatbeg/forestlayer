@@ -9,7 +9,9 @@ Storage Utilities, include cache utilities.
 
 import os.path as osp
 import os
+import numpy as np
 from ..backend.backend import get_base_dir
+import sys
 
 
 _DATA_SAVE_BASE = osp.join(get_base_dir(), 'run_data')
@@ -89,4 +91,17 @@ def set_model_save_base(dir_path):
     global _MODEL_SAVE_BASE
     _MODEL_SAVE_BASE = dir_path
     check_dir(_MODEL_SAVE_BASE)
+
+
+def getmbof(x):
+    if isinstance(x, np.ndarray):
+        return "{:.2f}MB".format(x.itemsize * x.size / 1048576.0)
+    return "{:.2f}MB".format(sys.getsizeof(x) / 1048576.0)
+
+
+def getkbof(x):
+    if isinstance(x, np.ndarray):
+        return "{:.2f}KB".format(x.itemsize * x.size / 1024.0)
+    return "{:.2f}KB".format(sys.getsizeof(x) / 1024.0)
+
 
