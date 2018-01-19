@@ -133,7 +133,7 @@ Note that the models of all experiments contain the same structures, and have a 
 | ForestLayer 4 nodes     | 86.143%    | 6-1        |  149s        |
 
 <div align="center">
-	<img src="http://7xsl28.com1.z0.glb.clouddn.com/adult_perf.jpg" width="48%" height="31%"/><img src="http://7xsl28.com1.z0.glb.clouddn.com/imdb_perf.jpg" width="48%" height="31%"/>
+	<img src="http://7xsl28.com1.z0.glb.clouddn.com/adult_perf2.jpg" width="40%" height="27%"/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://7xsl28.com1.z0.glb.clouddn.com/imdb_perf2.jpg" width="40%" height="27%"/>
 	<p>Fig. 1 UCI Adult performance. (4.3x)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Fig. 2 IMDB performance. (1.86x)</p>
 </div>
 

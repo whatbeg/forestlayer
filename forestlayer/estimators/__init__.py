@@ -7,9 +7,10 @@ Initialize estimators.
 # Authors: Qiu Hu <huqiu00#163.com>
 # License: Apache-2.0
 
-# from base_estimator import BaseEstimator
-from .sklearn_classifier import *
-from .sklearn_regressor import *
+from base_estimator import *
+from sklearn_estimator import *
+# from .sklearn_classifier import *
+# from .sklearn_regressor import *
 from .kfold_wrapper import *
 from .estimator_configs import *
 from ..utils.metrics import Accuracy, MSE
