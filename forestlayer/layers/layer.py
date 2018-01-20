@@ -15,7 +15,7 @@ import pickle
 import ray
 from ..utils.log_utils import get_logger, list2str, list_type2str
 from ..utils.layer_utils import check_list_depth
-from ..utils.storage_utils import check_dir
+from ..utils.storage_utils import check_dir, getmbof
 from ..utils.metrics import Metrics, Accuracy, AUC, MSE, RMSE
 from ..estimators import get_estimator_kfold, get_dist_estimator_kfold, EstimatorConfig
 
@@ -403,6 +403,8 @@ class MultiGrainScanLayer(Layer):
         #     return self._distribute_fit_transform(x_train, y_train, x_test, y_test)
         x_train, y_train = self._check_input(x_train, y_train)
         x_test, y_test = self._check_input(x_test, y_test)
+        self.LOGGER.debug('x_train size = {}, x_test size = {}'.format(getmbof(x_train[:]), getmbof(x_test[:])))
+        self.LOGGER.debug('x_train dtype = {}, x_test dtype = {}'.format(x_train.dtype, x_test.dtype))
         # Construct test sets
         x_wins_train = []
         x_wins_test = []
@@ -413,6 +415,7 @@ class MultiGrainScanLayer(Layer):
         # Deprecated: [[win, win], [win, win], ...], len = len(test_sets)
         # Deprecated: test_sets = [('testOfWin{}'.format(i), x, y) for i, x, y in enumerate(zip(x_wins_test, y_tests))]
         self.LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
+        self.LOGGER.debug('X_wins of train size: {}'.format([(type(win), win.dtype, getmbof(win[:])) for win in x_wins_train]))
         self.LOGGER.info('X_wins of  test: {}'.format([win.shape for win in x_wins_test]))
         x_win_est_train = []
         x_win_est_test = []
@@ -435,12 +438,15 @@ class MultiGrainScanLayer(Layer):
                     est = self._init_estimator(est, wi, ei)
                 # if self.distribute is True, then est is an ActorHandle.
                 ests_for_win[ei] = est
+            self.LOGGER.debug('x_wins_train[{}].size = {}'.format(wi, getmbof(x_wins_train[wi])))
+            self.LOGGER.debug('y_win.size = {}'.format(getmbof(y_win)))
             if self.distribute:
                 y_proba_train_tests = ray.get([est.fit_transform.remote(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
                                                for est in ests_for_win])
             else:
                 y_proba_train_tests = [est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
                                        for est in ests_for_win]
+            self.LOGGER.debug('got y_proba_train_tests size = {}'.format(getmbof(y_proba_train_tests)))
             for y_proba_train, y_probas_test in y_proba_train_tests:
                 # (60000, 121, 10)
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
@@ -902,7 +908,7 @@ class CascadeLayer(Layer):
         if self.task == 'regression' and n_classes is None:
             n_classes = 1
         x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=np.float32)
-        eval_proba_train = np.zeros((n_trains, n_classes))
+        eval_proba_train = np.zeros((n_trains, n_classes), dtype=np.float32)
         # fit estimators, get probas (classification) or targets (regression)
         estimators = []
         for ei in range(self.n_estimators):
@@ -971,8 +977,8 @@ class CascadeLayer(Layer):
             n_classes = 1
         x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=np.float32)
         x_proba_test = np.zeros((n_tests, n_classes * self.n_estimators), dtype=np.float32)
-        eval_proba_train = np.zeros((n_trains, n_classes))
-        eval_proba_test = np.zeros((n_tests, n_classes))
+        eval_proba_train = np.zeros((n_trains, n_classes), dtype=np.float32)
+        eval_proba_test = np.zeros((n_tests, n_classes), dtype=np.float32)
         # fit estimators, get probas
         estimators = []
         for ei in range(self.n_estimators):
@@ -1728,7 +1734,7 @@ class AutoGrowingCascadeLayer(Layer):
             if phase == 'train':
                 data = {"X": x_train, "y": y_train}
             else:
-                data = {"X": x_test, "y": y_test if y_test is not None else np.zeros((0,))}
+                data = {"X": x_test, "y": y_test if y_test is not None else np.zeros((0,), dtype=np.float32)}
             self.LOGGER.info("Saving {} Data in {} ... X.shape={}, y.shape={}".format(
                 phase, data_path, data["X"].shape, data["y"].shape))
             with open(data_path, "wb") as f:
