@@ -33,20 +33,21 @@ def forest_predict_batch_size(clf, X, task):
     LOGGER.debug('free_memory: {}'.format(free_memory))
     if free_memory < 2e9:
         free_memory = int(2e9)
-    # max_mem_size = max(half of free memory, 10GB)
-    max_mem_size = max(int(free_memory * 0.5), int(8e10))
+    # max_mem_size = max(half of free memory, 20GB)
+    max_mem_size = max(int(free_memory * 0.5), int(2e10))
     LOGGER.debug('max_mem_size: {}'.format(max_mem_size))
     if task == 'regression':
         mem_size_1 = clf.n_estimators * 16
     else:
-        LOGGER.debug('mem_size_1 = {} * {} * 16'.format(clf.n_classes_, clf.n_estimators))
+        # internally, estimator's predict_proba will convert probas to float64, thus 8 bytes, see forest.py: 584
+        # set to 10, in order to not overflow free memory
         mem_size_1 = clf.n_classes_ * clf.n_estimators * 16
     batch_size = (max_mem_size - 1) / mem_size_1 + 1
-    LOGGER.debug('batch_size = {} / {} = {}'.format(max_mem_size - 1, mem_size_1, batch_size))
     if batch_size < 10:
         batch_size = 10
     if batch_size >= X.shape[0]:
         return 0
+    LOGGER.info('batch_size = {} / {} = {}'.format(max_mem_size - 1, mem_size_1, batch_size))
     return batch_size
 
 
