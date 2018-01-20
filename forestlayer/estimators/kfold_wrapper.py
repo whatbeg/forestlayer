@@ -58,7 +58,7 @@ class KFoldWrapper(object):
         if isinstance(self.est_class, (XGBClassifier, XGBRegressor)):
             if est_args.get('seed', None) is None:
                 est_args['seed'] = self.seed
-        elif est_args.get('random_state', None):
+        elif est_args.get('random_state', None) is None:
             est_args['random_state'] = self.seed
         return self.est_class(est_name, est_args)
 
@@ -267,7 +267,7 @@ class DistributedKFoldWrapper(object):
         if isinstance(self.est_class, (XGBClassifier, XGBRegressor)):
             if est_args.get('seed', None) is None:
                 est_args['seed'] = self.seed
-        elif est_args.get('random_state', None):
+        elif est_args.get('random_state', None) is None:
             est_args['random_state'] = self.seed
         return self.est_class(est_name, est_args)
 
