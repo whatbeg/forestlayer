@@ -11,7 +11,10 @@ from __future__ import print_function
 import numpy as np
 import datetime
 import os.path as osp
-import cPickle as pickle
+try:
+    import cPickle as pickle
+except:
+    import pickle
 import ray
 from ..utils.log_utils import get_logger, list2str
 from ..utils.layer_utils import check_list_depth

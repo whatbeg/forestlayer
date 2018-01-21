@@ -12,7 +12,10 @@ import os
 import numpy as np
 from ..backend.backend import get_base_dir
 import sys
-import cPickle as pickle
+try:
+    import cPickle as pickle
+except:
+    import pickle
 
 
 _DATA_SAVE_BASE = osp.join(get_base_dir(), 'run_data')
