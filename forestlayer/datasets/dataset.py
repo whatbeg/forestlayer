@@ -22,7 +22,7 @@ def get_dataset_dir():
     :return: data_base_dir
     """
     global _DATASET_DIR
-    _DATASET_DIR = osp.join(get_base_dir(), 'data')
+    # _DATASET_DIR = osp.join(get_base_dir(), 'data')
     if not osp.exists(_DATASET_DIR):
         os.makedirs(_DATASET_DIR)
     return _DATASET_DIR
