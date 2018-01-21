@@ -12,6 +12,7 @@ import os
 import numpy as np
 from ..backend.backend import get_base_dir
 import sys
+import cPickle as pickle
 
 
 _DATA_SAVE_BASE = osp.join(get_base_dir(), 'run_data')
@@ -48,6 +49,27 @@ def check_dir(path):
     d = osp.abspath(osp.join(path, osp.pardir))
     if not osp.exists(d):
         os.makedirs(d)
+
+
+def numpy_to_disk_path(cache_dir, phase, data_name):
+    data_path = osp.join(cache_dir, phase, name2path(data_name) + '.npy')
+    return data_path
+
+
+def output_disk_path(cache_dir, layer, phase, data_name):
+    data_path = osp.join(cache_dir, layer, phase, name2path(data_name) + '.pkl')
+    return data_path
+
+
+def load_disk_cache(data_path):
+    with open(data_path, 'rb') as f:
+        res = pickle.load(f)
+    return res
+
+
+def save_disk_cache(save_path, x2save):
+    with open(save_path, "wb") as f:
+        pickle.dump(x2save, f, pickle.HIGHEST_PROTOCOL)
 
 
 def get_data_save_base():
