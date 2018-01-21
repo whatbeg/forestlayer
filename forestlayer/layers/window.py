@@ -114,6 +114,9 @@ class Window(object):
         LOGGER.info("Multi-grain Scan window [{}] is fitting...".format(self.name))
         return get_windows(X, self.win_x, self.win_y, self.stride_x, self.stride_y, self.pad_x, self.pad_y)
 
+    def __str__(self):
+        return "win/{}x{}".format(self.win_x, self.win_y)
+
 
 class Pooling(object):
     """
@@ -188,5 +191,6 @@ class Pooling(object):
             return X
         return self._transform(X)
 
-
+    def __str__(self):
+        return "pool/{}x{}".format(self.win_x, self.win_y)
 
