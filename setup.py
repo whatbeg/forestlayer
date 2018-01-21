@@ -31,6 +31,8 @@ setup(
     license="apache",
     packages=find_packages(),
     install_requires=install_requires,
+    extra_requires=['lightgbm',
+                    'tqdm'],
     description="A scalable and fast deep forest learning library.",
     keywords="deep learning, deep forest, machine learning, random forest, ray, keras, xgboost",
     platforms=['any'],
