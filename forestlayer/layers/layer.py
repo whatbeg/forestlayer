@@ -11,11 +11,11 @@ from __future__ import print_function
 import numpy as np
 import datetime
 import os.path as osp
-import pickle
+import cPickle as pickle
 import ray
-from ..utils.log_utils import get_logger, list2str, list_type2str
+from ..utils.log_utils import get_logger, list2str
 from ..utils.layer_utils import check_list_depth
-from ..utils.storage_utils import check_dir, getmbof
+from ..utils.storage_utils import check_dir, getmbof, output_disk_path, load_disk_cache, save_disk_cache
 from ..utils.metrics import Metrics, Accuracy, AUC, MSE, RMSE
 from ..estimators import get_estimator_kfold, get_dist_estimator_kfold, EstimatorConfig
 
@@ -108,6 +108,7 @@ class MultiGrainScanLayer(Layer):
     """
     def __init__(self, batch_size=None, dtype=None, name=None, task='classification',
                  windows=None, est_for_windows=None, n_class=None, keep_in_mem=False,
+                 cache_in_disk=False, data_save_dir=None,
                  eval_metrics=None, seed=None, distribute=False):
         """
         Initialize a multi-grain scan layer.
@@ -141,6 +142,8 @@ class MultiGrainScanLayer(Layer):
         self.seed = seed
         self.distribute = distribute
         self.keep_in_mem = keep_in_mem
+        self.cache_in_disk = cache_in_disk
+        self.data_save_dir = data_save_dir
         self.eval_metrics = eval_metrics
 
     def call(self, x_train, **kwargs):
@@ -201,6 +204,20 @@ class MultiGrainScanLayer(Layer):
             y = y[0]
         return x, y
 
+    def _check_disk_cache(self, x, phase):
+        if not self.cache_in_disk or not self.data_save_dir:
+            return False
+        data_path = self._get_disk_path(x, phase)
+        if osp.exists(data_path):
+            return data_path
+        return False
+
+    def _get_disk_path(self, x, phase):
+        assert isinstance(x, np.ndarray), 'x_train should be numpy.ndarray, but {}'.format(type(x))
+        data_name = "x".join(map(str, x.shape))
+        data_path = output_disk_path(self.data_save_dir, 'mgs', phase, data_name)
+        return data_path
+
     def fit(self, x_train, y_train):
         """
         Fit.
@@ -212,6 +229,11 @@ class MultiGrainScanLayer(Layer):
         # if self.distribute:
         #     return self._distributed_fit(x_train, y_train)
         x_train, y_train = self._check_input(x_train, y_train)
+        # check if output of fit is exists in disk, if yes, we do not to re-train the model, just load the cached data.
+        train_path = self._check_disk_cache(x_train, 'train')
+        if train_path is not False:
+            self.LOGGER.info("Cache hit! Loading data from {}, skip fit!".format(train_path))
+            return load_disk_cache(data_path=train_path)
         x_wins_train = []
         for win in self.windows:
             x_wins_train.append(self.scan(win, x_train))
@@ -244,6 +266,11 @@ class MultiGrainScanLayer(Layer):
         if len(x_win_est_train) == 0:
             return x_wins_train
         self.LOGGER.info('x_win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
+        if self.cache_in_disk and self.data_save_dir:
+            data_path = self._get_disk_path(x_train, 'train')
+            check_dir(data_path)
+            save_disk_cache(data_path, x_win_est_train)
+            self.LOGGER.info("Saving data x_win_est_train to {}".format(data_path))
         return x_win_est_train
 
     def _distributed_fit(self, x_train, y_train):
@@ -405,6 +432,12 @@ class MultiGrainScanLayer(Layer):
         x_test, y_test = self._check_input(x_test, y_test)
         self.LOGGER.debug('x_train size = {}, x_test size = {}'.format(getmbof(x_train[:]), getmbof(x_test[:])))
         self.LOGGER.debug('x_train dtype = {}, x_test dtype = {}'.format(x_train.dtype, x_test.dtype))
+        train_path = self._check_disk_cache(x_train, 'train')
+        test_path = self._check_disk_cache(x_test, 'test')
+        if train_path is not False and test_path is not False:
+            self.LOGGER.info("Cache hit! Loading train from {}, skip fit!".format(train_path))
+            self.LOGGER.info("Cache hit! Loading test from {}, skip fit!".format(test_path))
+            return load_disk_cache(train_path), load_disk_cache(test_path)
         # Construct test sets
         x_wins_train = []
         x_wins_test = []
@@ -415,7 +448,8 @@ class MultiGrainScanLayer(Layer):
         # Deprecated: [[win, win], [win, win], ...], len = len(test_sets)
         # Deprecated: test_sets = [('testOfWin{}'.format(i), x, y) for i, x, y in enumerate(zip(x_wins_test, y_tests))]
         self.LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
-        self.LOGGER.debug('X_wins of train size: {}'.format([(type(win), win.dtype, getmbof(win[:])) for win in x_wins_train]))
+        self.LOGGER.debug('X_wins of train size: {}'.format([(type(win), win.dtype, getmbof(win[:]))
+                                                             for win in x_wins_train]))
         self.LOGGER.info('X_wins of  test: {}'.format([win.shape for win in x_wins_test]))
         x_win_est_train = []
         x_win_est_test = []
@@ -463,6 +497,15 @@ class MultiGrainScanLayer(Layer):
             return x_wins_train, x_wins_test
         self.LOGGER.info('x_win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
         self.LOGGER.info(' x_win_est_test.shape: {}'.format(list2str(x_win_est_test, 2)))
+        if self.cache_in_disk and self.data_save_dir:
+            train_path = self._get_disk_path(x_train, 'train')
+            test_path = self._get_disk_path(x_test, 'test')
+            check_dir(train_path)
+            check_dir(test_path)
+            save_disk_cache(train_path, x_win_est_train)
+            save_disk_cache(test_path, x_win_est_test)
+            self.LOGGER.info("Saving data x_win_est_train to {}".format(train_path))
+            self.LOGGER.info("Saving data x_win_est_test to {}".format(test_path))
         return x_win_est_train, x_win_est_test
 
     def transform(self, x_train):
@@ -1197,6 +1240,11 @@ class AutoGrowingCascadeLayer(Layer):
         self.keep_in_mem = keep_in_mem
         self.stop_by_test = stop_by_test
         self.metrics = metrics
+        if self.metrics is None:
+            if task == 'regression':
+                self.metrics = 'mse'
+            else:
+                self.metrics = 'accuracy'
         self.eval_metrics = get_eval_metrics(self.metrics, self.task)
         self.seed = seed
         self.distribute = distribute
