@@ -49,6 +49,11 @@ DEFAULT_LEVEL = logging.INFO
 OLD_LOGGING_DIR = osp.join(get_logging_base(), "forestlayer")
 DEFAULT_LOGGING_DIR = osp.join(get_logging_base(), "forestlayer")
 fh = None
+str2level = {'DEBUG': logging.DEBUG,
+             'WARN': logging.WARN,
+             'INFO': logging.INFO,
+             'ERROR': logging.ERROR
+             }
 
 
 def strftime(t=None):
@@ -77,11 +82,15 @@ def init_fh():
 def set_logging_level(default_level):
     """
     Set logging level.
+    Accept parameter: logging.WARN, logging.DEBUG, logging.ERROR, logging.INFO(default)
+     or their string representation. 'WARN', 'DEBUG', 'ERROR', 'INFO'.
 
     :param default_level:
     :return:
     """
     global DEFAULT_LEVEL
+    if isinstance(default_level, str):
+        default_level = str2level[default_level]
     DEFAULT_LEVEL = default_level
 
 
