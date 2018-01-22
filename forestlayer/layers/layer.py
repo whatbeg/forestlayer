@@ -111,8 +111,8 @@ class MultiGrainScanLayer(Layer):
     """
     def __init__(self, batch_size=None, dtype=None, name=None, task='classification',
                  windows=None, est_for_windows=None, n_class=None, keep_in_mem=False,
-                 cache_in_disk=False, data_save_dir=None,
-                 eval_metrics=None, seed=None, distribute=False):
+                 cache_in_disk=False, data_save_dir=None, eval_metrics=None, seed=None,
+                 distribute=False, dis_level=0):
         """
         Initialize a multi-grain scan layer.
 
@@ -128,6 +128,11 @@ class MultiGrainScanLayer(Layer):
         :param seed:
         :param distribute: whether use distributed training. If use, you should `import ray`
                            and write `ray.init(<redis-address>)` at the beginning of the main program.
+        :param dis_level: temporary variable. Only take effect when distribute is True.
+                          When distribute is True, dis_level = 0 means using a low level parallelization
+                           for multi-grain scan layer. dis_level = 1 means using a higher level parallelization
+                           for multi-grain scan layer. [default is 0]
+
         """
         if not name:
             prefix = 'multi_grain_scan'
@@ -143,7 +148,10 @@ class MultiGrainScanLayer(Layer):
             assert n_class is not None
             self.n_class = n_class
         self.seed = seed
+        assert isinstance(distribute, bool), 'distribute variable should be Boolean, but {}'.format(type(distribute))
         self.distribute = distribute
+        assert dis_level in [0, 1], 'dis_level should be 0 or 1, but {}'.format(dis_level)
+        self.dis_level = dis_level
         self.keep_in_mem = keep_in_mem
         self.cache_in_disk = cache_in_disk
         self.data_save_dir = data_save_dir
@@ -229,8 +237,8 @@ class MultiGrainScanLayer(Layer):
         :param y_train:
         :return:
         """
-        # if self.distribute:
-        #     return self._distributed_fit(x_train, y_train)
+        if self.distribute and self.dis_level == 1:
+            return self._distributed_fit(x_train, y_train)
         x_train, y_train = self._check_input(x_train, y_train)
         # check if output of fit is exists in disk, if yes, we do not to re-train the model, just load the cached data.
         train_path = self._check_disk_cache(x_train, 'train')
@@ -266,6 +274,8 @@ class MultiGrainScanLayer(Layer):
             if self.keep_in_mem:
                 self.est_for_windows[wi] = ests_for_win
             x_win_est_train.append(win_est_train)
+        # if there are no est_for_windows, x_win_est_train is empty.
+        # we let it to be scan result.
         if len(x_win_est_train) == 0:
             return x_wins_train
         self.LOGGER.info('x_win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
@@ -329,9 +339,16 @@ class MultiGrainScanLayer(Layer):
             else:
                 self.est_for_windows[wi] = None
             x_win_est_train.append(win_est_train)
+        # if there are no est_for_windows, x_win_est_train is empty.
+        # we let it to be scan result.
         if len(x_win_est_train) == 0:
-            return x_wins_train
+            x_win_est_train = x_wins_train
         self.LOGGER.info('x_win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
+        if self.cache_in_disk and self.data_save_dir:
+            data_path = self._get_disk_path(x_train, 'train')
+            check_dir(data_path)
+            save_disk_cache(data_path, x_win_est_train)
+            self.LOGGER.info("Saving data x_win_est_train to {}".format(data_path))
         return x_win_est_train
 
     def _distribute_fit_transform(self,  x_train, y_train, x_test=None, y_test=None):
@@ -415,6 +432,15 @@ class MultiGrainScanLayer(Layer):
             return x_wins_train, x_wins_test
         self.LOGGER.info('x_win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
         self.LOGGER.info(' x_win_est_test.shape: {}'.format(list2str(x_win_est_test, 2)))
+        if self.cache_in_disk and self.data_save_dir:
+            train_path = self._get_disk_path(x_train, 'train')
+            test_path = self._get_disk_path(x_test, 'test')
+            check_dir(train_path)
+            check_dir(test_path)
+            save_disk_cache(train_path, x_win_est_train)
+            save_disk_cache(test_path, x_win_est_test)
+            self.LOGGER.info("[dis] Saving data x_win_est_train to {}".format(train_path))
+            self.LOGGER.info("[dis] Saving data x_win_est_test to {}".format(test_path))
         return x_win_est_train, x_win_est_test
 
     def fit_transform(self, x_train, y_train, x_test=None, y_test=None):
@@ -429,8 +455,8 @@ class MultiGrainScanLayer(Layer):
         """
         if x_test is None:
             return self.fit(x_train, y_train), None
-        # if self.distribute:
-        #     return self._distribute_fit_transform(x_train, y_train, x_test, y_test)
+        if self.distribute and self.dis_level == 1:
+            return self._distribute_fit_transform(x_train, y_train, x_test, y_test)
         x_train, y_train = self._check_input(x_train, y_train)
         x_test, y_test = self._check_input(x_test, y_test)
         self.LOGGER.debug('x_train size = {}, x_test size = {}'.format(getmbof(x_train[:]), getmbof(x_test[:])))
