@@ -5,7 +5,8 @@ Base Estimators Wrapper Definition.
 
 import numpy as np
 import os.path as osp
-from ..utils.storage_utils import is_path_exists, check_dir, name2path
+import sys
+from ..utils.storage_utils import is_path_exists, check_dir, name2path, getmbof
 from ..utils.log_utils import get_logger, get_logging_level
 
 LOGGER = get_logger('estimators.base_estimator')
@@ -51,6 +52,7 @@ class BaseEstimator(object):
         :param cache_dir:
         :return:
         """
+        LOGGER.debug("X_train.shape={}, y_train.shape={}".format(X.shape, y.shape))
         cache_path = self._cache_path(cache_dir=cache_dir)
         # cache it
         if is_path_exists(cache_path):
@@ -109,7 +111,7 @@ class BaseEstimator(object):
         """
         if self.task == 'regression':
             return self.predict(X, cache_dir=cache_dir, batch_size=batch_size)
-        LOGGER.debug("X.shape={}".format(X.shape))
+        LOGGER.debug("X.shape={}, size = {}".format(X.shape, getmbof(X)))
         cache_path = self._cache_path(cache_dir)
         # cache
         if cache_path is not None:
@@ -123,7 +125,7 @@ class BaseEstimator(object):
             y_proba = self._batch_predict_proba(est, X, batch_size)
         else:
             y_proba = self._predict_proba(est, X)
-        LOGGER.debug("y_proba.shape={}".format(y_proba.shape))
+        LOGGER.debug("y_proba.shape={}, size = {}, dtype = {}".format(y_proba.shape, getmbof(y_proba), y_proba.dtype))
         return y_proba
 
     def _batch_predict_proba(self, est, X, batch_size):
@@ -145,11 +147,16 @@ class BaseEstimator(object):
         y_pred_proba = None
         for j in range(0, n_datas, batch_size):
             LOGGER.info("[batch_predict_proba][batch_size={}] ({}/{})".format(batch_size, j, n_datas))
-            y_cur = self._predict_proba(est, X[j:j+batch_size])
+            cur_x = X[j:j+batch_size]
+            y_cur = self._predict_proba(est, cur_x)
+            LOGGER.debug('[cur_x.dtype = {}][y_cur.dtype = {}]'.format(cur_x.dtype, y_cur.dtype))
+            LOGGER.debug('[cur_x.shape = {}][y_cur.shape = {}]'.format(cur_x.shape, y_cur.shape))
+            LOGGER.debug("[cur_x.size = {}][y_cur.size = {}]".format(getmbof(cur_x), getmbof(y_cur)))
             if j == 0:
                 n_classes = y_cur.shape[1]
                 y_pred_proba = np.empty((n_datas, n_classes), dtype=np.float32)
             y_pred_proba[j:j+batch_size, :] = y_cur
+        LOGGER.debug('[y_pred_proba size = {}, dtype = {}]'.format(getmbof(y_pred_proba), y_pred_proba.dtype))
         # restore verbose
         if hasattr(est, "verbose"):
             est.verbose = verbose_backup
