@@ -18,6 +18,7 @@ from forestlayer.layers.layer import (MultiGrainScanLayer, PoolingLayer,
 from forestlayer.estimators.estimator_configs import RandomForestConfig, ExtraRandomForestConfig
 from forestlayer.layers.graph import Graph
 from forestlayer.utils.storage_utils import get_data_save_base
+from forestlayer.utils.log_utils import list2str
 from keras.datasets import mnist
 from forestlayer.datasets import uci_adult
 
@@ -161,6 +162,18 @@ class TestLayerForMNIST(unittest.TestCase):
         start = time.time()
         self.test_non_dis_mgs_fit()
         print('Non-distributed mgs fit cost {} s'.format(time.time() - start))
+
+    def test_pool_layer_idempotency(self):
+        pass
+
+    def test_concat_layer_idempotency(self):
+        mgs, poolayer, concat_layer, cascade, auto_cascade = self._init()
+        x_train, y_train = self.x_train, self.y_train
+        res_train = mgs.fit(x_train, y_train)
+        before_str = list2str(res_train, 2)
+        concat_layer.fit(res_train, None)
+        after_str = list2str(res_train, 2)
+        assert before_str == after_str, '{} is not equal to {}'.format(before_str, after_str)
 
 
 class TestLayerForUCIADULT(unittest.TestCase):
