@@ -140,7 +140,7 @@ class Pooling(object):
         if name:
             self.name = name
         else:
-            self.name = "pool/" + "{}x{}".format(win_x, win_y)
+            self.name = "{}pool/" + "{}x{}".format(pool_strategy, win_x, win_y)
 
     def fit_transform(self, X):
         """
@@ -192,5 +192,5 @@ class Pooling(object):
         return self._transform(X)
 
     def __str__(self):
-        return "pool/{}x{}".format(self.win_x, self.win_y)
+        return "{}pool/{}x{}".format(self.pool_strategy, self.win_x, self.win_y)
 

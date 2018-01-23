@@ -18,7 +18,6 @@ from forestlayer.layers.layer import (MultiGrainScanLayer, PoolingLayer,
 from forestlayer.estimators.estimator_configs import RandomForestConfig, ExtraRandomForestConfig
 from forestlayer.layers.graph import Graph
 from forestlayer.utils.storage_utils import get_data_save_base
-from forestlayer.utils.log_utils import list2str
 import ray
 from keras.datasets import mnist
 from forestlayer.datasets import uci_adult

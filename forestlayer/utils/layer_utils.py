@@ -37,12 +37,12 @@ def print_summary(graph, line_length=None, positions=None, print_fn=print):
     :param print_fn:
     :return:
     """
-    line_length = line_length or 65
-    positions = positions or [.45, .75, 1.]
+    line_length = line_length or 100
+    positions = positions or [.25, .92, 1.]
     if positions[-1] <= 1:
         positions = [int(line_length * p) for p in positions]
     # header names for the different log elements
-    to_display = ['Layer', 'Output Shape', 'Param #']
+    to_display = ['Layer', 'Description', 'Param #']
 
     def print_row(fields, position):
         line = ''
@@ -59,10 +59,15 @@ def print_summary(graph, line_length=None, positions=None, print_fn=print):
     print_fn('=' * line_length)
 
     def print_layer_summary(layer):
-        output_shape = 'output_shape'
         name = layer.__class__.__name__
-        fields = [name, output_shape, 'layer.count_params']
-        print_row(fields, positions)
+        summary_info = layer.summary_info
+        summary_info_lis = summary_info.split('\n')
+        for i, sum_info in enumerate(summary_info_lis):
+            if i == 0:
+                fields = [name, sum_info, 'params']
+            else:
+                fields = ['', sum_info, '']
+            print_row(fields, positions)
 
     layers = graph.layers
     for i, layer in enumerate(layers):

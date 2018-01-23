@@ -25,8 +25,6 @@ x_train = x_train.reshape(60000, -1, 28, 28)
 x_test = x_test.reshape(10000, -1, 28, 28)
 # x_train = x_train[:200, :, :, :]
 # x_test = x_test[:100, :, :, :]
-x_train = x_train / 255.0
-x_test = x_test / 255.0
 # y_train = y_train[:200]
 # y_test = y_test[:100]
 

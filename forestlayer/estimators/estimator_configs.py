@@ -29,6 +29,9 @@ class EstimatorConfig(object):
         """
         return self.est_args.copy()
 
+    def __str__(self):
+        return "{}".format(self.est_args['est_type'])
+
 
 class MultiClassXGBConfig(EstimatorConfig):
     """

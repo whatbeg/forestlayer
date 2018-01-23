@@ -33,6 +33,7 @@ class Layer(object):
         input, output: Input / output tensors.
         num_estimators: Number of estimators in this layer.
         estimators: Estimators in this layer.
+        summary_info: Summary information of this layer.
 
     # Methods
         call(x): Where the layer logic lives.
@@ -112,6 +113,10 @@ class Layer(object):
     def __str__(self):
         return self.__class__.__name__
 
+    @property
+    def summary_info(self):
+        return self.__str__()
+
 
 class DataCachingMixin(object):
     """
@@ -167,6 +172,7 @@ class MultiGrainScanLayer(Layer):
         super(MultiGrainScanLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
         self.windows = windows  # [Win, Win, Win, ...]
         self.est_for_windows = est_for_windows  # [[est1, est2], [est1, est2], [est1, est2], ...]
+        # TODO: check windows and est_for_windows
         assert task in ['regression', 'classification'], 'task unknown! task = {}'.format(task)
         self.task = task
         if self.task == 'regression':
@@ -615,6 +621,17 @@ class MultiGrainScanLayer(Layer):
     def __str__(self):
         return self.__class__.__name__
 
+    @property
+    def summary_info(self):
+        info_str = '[' + ', '.join(map(str, self.windows)) + ']'
+        info_str += '\n['
+        for ests in self.est_for_windows:
+            info_str += '['
+            info_str += ', '.join(map(str, ests))
+            info_str += ']'
+        info_str += ']'
+        return info_str
+
 
 class PoolingLayer(Layer):
     """
@@ -781,6 +798,14 @@ class PoolingLayer(Layer):
     def save(self):
         pass
 
+    @property
+    def summary_info(self):
+        info_str = '['
+        for pool in self.pools:
+            info_str += '[' + ', '.join(map(str, pool)) + ']'
+        info_str += ']'
+        return info_str
+
 
 class ConcatLayer(Layer):
     """
@@ -938,6 +963,10 @@ class ConcatLayer(Layer):
     def save(self):
         raise NotImplementedError('ConcatLayer actually has not model. axis is the model')
 
+    @property
+    def summary_info(self):
+        return 'ConcatLayer(axis={})'.format(self.axis)
+
 
 class CascadeLayer(Layer):
     def __init__(self, batch_size=None, dtype=None, name=None, task='classification', est_configs=None,
@@ -983,10 +1012,11 @@ class CascadeLayer(Layer):
             ValueError: if estimator.fit_transform returns wrong shape data
         """
         self.est_configs = [] if est_configs is None else est_configs
-        # transform EstimatorConfig to dict that represents estimator arguments
+        self.est_args = [dict() for _ in range(self.n_estimators)]
+        # transform EstimatorConfig to dict that represents estimator arguments.
         for eci, est_config in enumerate(self.est_configs):
             if isinstance(est_config, EstimatorConfig):
-                self.est_configs[eci] = est_config.get_est_args().copy()
+                self.est_args[eci] = est_config.get_est_args().copy()
         self.layer_id = layer_id
         if not name:
             name = 'layer-{}'.format(self.layer_id)
@@ -1079,7 +1109,7 @@ class CascadeLayer(Layer):
         :param est_id:
         :return:
         """
-        est_args = self.est_configs[est_id].copy()
+        est_args = self.est_args[est_id].copy()
         est_name = 'layer - {} - estimator - {} - {}folds'.format(layer_id, est_id, est_args['n_folds'])
         n_folds = int(est_args['n_folds'])
         est_args.pop('n_folds')
@@ -1346,6 +1376,13 @@ class CascadeLayer(Layer):
 
     def save(self):
         pass
+
+    @property
+    def summary_info(self):
+        info_str = '['
+        info_str += ', '.join(map(str, self.est_configs))
+        info_str += ']'
+        return info_str
 
 
 class AutoGrowingCascadeLayer(Layer):
@@ -1987,6 +2024,15 @@ class AutoGrowingCascadeLayer(Layer):
 
     def save(self):
         pass
+
+    @property
+    def summary_info(self):
+        info_str = "maxlayer={}, esrounds={}".format(self.max_layers, self.early_stop_rounds)
+        info_str += '\nEach Level:\n'
+        info_str += '['
+        info_str += ', '.join(map(str, self.est_configs))
+        info_str += ']'
+        return info_str
 
 
 def _to_snake_case(name):

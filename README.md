@@ -46,17 +46,13 @@ Take MNIST classification task as an example.
 First, we use the Keras API to load mnist data and do some pre-processing.
 ``` python
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
-# preprocessing
+# TODO: preprocessing...
 ```
 
 Next, we construct multi-grain scan windows and estimators every window and then initialize a `MultiGrainScanLayer`. The Window class is lies in `forestlayer.layers.window` package and the estimators are represented as `EstimatorArgument`s, which will be used later in layers to create actual estimator object.
 ``` python
-from forestlayer.layers.layer import MultiGrainScanLayer
-from forestlayer.estimators.arguments import CompletelyRandomForest, RandomForest
-from forestlayer.layers.window import Window
-
-rf1 = CompletelyRandomForest(min_samples_leaf=10)
-rf2 = RandomForest(min_samples_leaf=10)
+rf1 = ExtraRandomForestConfig(min_samples_leaf=10, max_features='sqrt')
+rf2 = RandomForestConfig(min_samples_leaf=10)
 
 windows = [Window(win_x=7, win_y=7, stride_x=2, stride_y=2, pad_x=0, pad_y=0),
            Window(11, 11, 2, 2)]
@@ -68,17 +64,14 @@ mgs = MultiGrainScanLayer(windows=windows, est_for_windows=est_for_windows, n_cl
 
 After multi-grain scan, we consider that building a pooling layer to reduce the dimension of generated feature vectors, so that reduce the computation and storage complexity and risk of overfiting.
 ``` python
-from forestlayer.layers.layer import PoolingLayer
-from forestlayer.layers.factory import MaxPooling
-
-pools = [[MaxPooling(2, 2), MaxPooling(2, 2)], [MaxPooling(2, 2), MaxPooling(2, 2)]]
+pools = [[MaxPooling(2, 2), MaxPooling(2, 2)],
+         [MaxPooling(2, 2), MaxPooling(2, 2)]]
 
 pool = PoolingLayer(pools=pools)
 ```
 
 And then we add a concat layer to concatenate the output of estimators of the same window.
 ``` python
-from forestlayer.layers.layer import ConcatLayer
 concatlayer = ConcatLayer()
 ```
 
@@ -104,13 +97,35 @@ model.add(concatlayer)
 model.add(auto_cascade)
 ```
 
-You also can call `model.summary()` like Keras to see the appearance of the model.
+You also can call `model.summary()` like Keras to see the appearance of the model. Summary info could be like follows table,
+```
+____________________________________________________________________________________________________
+Layer                    Description                                                        Param #
+====================================================================================================
+MultiGrainScanLayer      [win/7x7, win/11x11]                                               params
+                         [[FLCRF, FLRF][FLCRF, FLRF]]
+____________________________________________________________________________________________________
+PoolingLayer             [[maxpool/2x2, maxpool/2x2][maxpool/2x2, maxpool/2x2]]             params
+____________________________________________________________________________________________________
+ConcatLayer              ConcatLayer(axis=-1)                                               params
+____________________________________________________________________________________________________
+AutoGrowingCascadeLayer  maxlayer=0, esrounds=3                                             params
+                         Each Level:
+                         [FLCRF, FLCRF, FLRF, FLRF]
+====================================================================================================
+```
 
-After building the model, you can fit the model, and then evaluate or predict using the fit model.
+After building the model, you can `fit` the model, and then `evaluate` or `predict` using the fit model.
+Note that we recommend to use `fit_transform` to train and test data, thus we can make `keep_in_mem=False` to avoid the cost of caching model in memory or disk.
+
 ``` python
+# 1
 model.fit(x_train, y_train)
 model.evaluate(x_test, y_test)
 result = model.predict(x_in)
+
+# 2 (recommend)
+model.fit_transform(x_train, y_train, x_test, y_test)
 ```
 
 For more examples and tutorials, you can refer to [examples](https://github.com/whatbeg/forestlayer/tree/master/examples) to find more details.
@@ -191,8 +206,9 @@ ForestLayer is released under the Apache 2.0 license.
 
 ## TODO
 
-* [ ] model.summary() (experiment)
+* [ ] More layers, including lambda layer.
 * [ ] Add model save and load mechanism
+* [x] model.summary()
 * [x] Distributed training
 * [x] Add data save and load mechanism
 * [x] Benchmarks (Part of it)
