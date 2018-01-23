@@ -135,9 +135,9 @@ Note that the models of all experiments contain the same structures, and have a 
 
 <div align="center">
     <img src="http://image-whatbegblog.oss-cn-shanghai.aliyuncs.com/images/mnist_perf.jpg" width="36%" height="24%"/>
-    <p>Figure 1. MNIST performance. </p>
+    <p><i>Figure 1. MNIST performance. </i></p>
 	<img src="http://7xsl28.com1.z0.glb.clouddn.com/adult_perf2.jpg" width="36%" height="24%"/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://7xsl28.com1.z0.glb.clouddn.com/imdb_perf2.jpg" width="36%" height="24%"/>
-	<p>Fig. 2 UCI Adult performance. (4.3x)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Fig. 3 IMDB performance. (1.86x)</p>
+	<p><i>Fig. 2 UCI Adult performance. (4.3x)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Fig. 3 IMDB performance. (1.86x)</i></p>
 </div>
 
 From the first 2 lines of the table, we can conclude that ForestLayer has no loss of training speed of gcForest v1.0, but possess much simpler user-friendly API instead of configuring the model structure in the model json file.
@@ -149,7 +149,16 @@ More benchmarks and performance evaluations will be given later.
 
 ## Examples
 
-See [examples](https://github.com/whatbeg/forestlayer/tree/master/examples)
+See [examples](https://github.com/whatbeg/forestlayer/tree/master/examples).
+
+* [UCI Adult](https://github.com/whatbeg/forestlayer/blob/master/examples/uci_adult.py)
+* [MNIST](https://github.com/whatbeg/forestlayer/blob/master/examples/mnist.py)
+* [Distributed UCI Adult](https://github.com/whatbeg/forestlayer/blob/master/examples/dist_uci_adult.py)
+* [Distributed MNIST](https://github.com/whatbeg/forestlayer/blob/master/examples/dist_mnist.py)
+* [IMDB](https://github.com/whatbeg/forestlayer/blob/master/examples/imdb.py)
+* [Regression - Boston Housing](https://github.com/whatbeg/forestlayer/blob/master/examples/bostonhousing.py)
+
+etc.
 
 ## Design Principles
 
