@@ -19,8 +19,11 @@ from forestlayer.estimators.estimator_configs import RandomForestConfig, ExtraRa
 from forestlayer.layers.graph import Graph
 from forestlayer.utils.storage_utils import get_data_save_base
 from forestlayer.utils.log_utils import list2str
+import ray
 from keras.datasets import mnist
 from forestlayer.datasets import uci_adult
+
+ray.init()
 
 
 class TestLayerForMNIST(unittest.TestCase):
@@ -29,10 +32,10 @@ class TestLayerForMNIST(unittest.TestCase):
         (x_train, y_train), (x_test, y_test) = mnist.load_data()
         x_train = np.reshape(x_train, (60000, -1, 28, 28))
         x_test = np.reshape(x_test, (10000, -1, 28, 28))
-        self.x_train = x_train[:200, :, :, :]
-        self.y_train = y_train[:200]
-        self.x_test = x_test[:100, :, :, :]
-        self.y_test = y_test[:100]
+        self.x_train = x_train[:160, :, :, :]
+        self.y_train = y_train[:160]
+        self.x_test = x_test[:80, :, :, :]
+        self.y_test = y_test[:80]
         print("================ MNIST ===================")
         print('X_train: ', self.x_train.shape, 'y: ', self.y_train.shape)
         print(' X_test: ', self.x_test.shape, 'y: ', self.y_test.shape)
@@ -126,8 +129,6 @@ class TestLayerForMNIST(unittest.TestCase):
         auto_cascade.evaluate(predicted, self.y_test)
 
     def test_distribute_mgs_fit(self):
-        import ray
-        ray.init()
         mgs, _, _, _, _ = self._init(distribute=True)
         res_trains = mgs.fit(self.x_train, self.y_train)
 
@@ -145,8 +146,6 @@ class TestLayerForMNIST(unittest.TestCase):
         print('Non-distributed mgs fit cost {} s'.format(time.time() - start))
 
     def test_distribute_mgs_fit_transform(self):
-        import ray
-        ray.init()
         mgs, _, _, _, _ = self._init(distribute=True)
         res_trains = mgs.fit_transform(self.x_train, self.y_train, self.x_test, self.y_test)
 
@@ -192,10 +191,10 @@ class TestLayerForUCIADULT(unittest.TestCase):
 
     def _init(self, distribute=False):
         self.est_configs = [
-            ExtraRandomForestConfig(n_estimators=40),
-            ExtraRandomForestConfig(n_estimators=40),
-            RandomForestConfig(n_estimators=40),
-            RandomForestConfig(n_estimators=40)
+            ExtraRandomForestConfig(n_estimators=20),
+            ExtraRandomForestConfig(n_estimators=20),
+            RandomForestConfig(n_estimators=20),
+            RandomForestConfig(n_estimators=20)
         ]
 
         gc = CascadeLayer(est_configs=self.est_configs,

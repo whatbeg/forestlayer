@@ -24,10 +24,10 @@ class TestGraph(unittest.TestCase):
         # the data, shuffled and split between train and test sets
         (x_train, y_train), (x_test, y_test) = mnist.load_data()
         X = np.reshape(x_train, (60000, -1, 28, 28))
-        x_train = X[:160, :, :, :]
-        y_train = y_train[:160]
-        x_test = np.reshape(x_test[:80], (100, -1, 28, 28))
-        y_test = y_test[:80]
+        x_train = X[:120, :, :, :]
+        y_train = y_train[:120]
+        x_test = np.reshape(x_test[:60], (60, -1, 28, 28))
+        y_test = y_test[:60]
         self.x_train = x_train
         self.x_test = x_test
         self.y_train = y_train
