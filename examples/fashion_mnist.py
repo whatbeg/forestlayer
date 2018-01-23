@@ -14,10 +14,10 @@ from forestlayer.layers.window import Window
 from forestlayer.layers.factory import MeanPooling
 from forestlayer.utils.storage_utils import get_data_save_base, get_model_save_base
 from keras.datasets import fashion_mnist
-from forestlayer.utils.log_utils import set_logging_dir
 import os.path as osp
+import time
 
-set_logging_dir(osp.abspath('./../log/examples/fashion_mnist'))
+start_time = time.time()
 
 (x_train, y_train), (x_test, y_test) = fashion_mnist.load_data()
 
@@ -81,3 +81,5 @@ model.add(pool)
 model.add(concatlayer)
 model.add(auto_cascade)
 model.fit_transform(x_train, y_train, x_test, y_test)
+
+print('time cost: {}'.format(time.time() - start_time))
