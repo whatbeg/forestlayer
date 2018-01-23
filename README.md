@@ -134,7 +134,7 @@ Note that the models of all experiments contain the same structures, and have a 
 | ForestLayer 4 nodes     | 86.143%    | 6-1        |  149s        |
 
 <div align="center">
-    <img src="docs/imgs/mnist_perf.jpg" width="36%" height="24%"/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://7xsl28.com1.z0.glb.clouddn.com/imdb_perf2.jpg" width="36%" height="24%"/>
+    <img src="http://image-whatbegblog.oss-cn-shanghai.aliyuncs.com/images/mnist_perf.jpg" width="36%" height="24%"/>
     <p>Figure 1. MNIST performance. </p>
 	<img src="http://7xsl28.com1.z0.glb.clouddn.com/adult_perf2.jpg" width="36%" height="24%"/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://7xsl28.com1.z0.glb.clouddn.com/imdb_perf2.jpg" width="36%" height="24%"/>
 	<p>Fig. 2 UCI Adult performance. (4.3x)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Fig. 3 IMDB performance. (1.86x)</p>
@@ -182,10 +182,10 @@ ForestLayer is released under the Apache 2.0 license.
 
 ## TODO
 
-* [ ] Add data save and load mechanism
+* [ ] model.summary() (experiment)
 * [ ] Add model save and load mechanism
 * [x] Distributed training
-* [ ] model.summary() (experiment)
+* [x] Add data save and load mechanism
 * [x] Benchmarks (Part of it)
 * [x] Documents
 * [x] Different input data load and management
