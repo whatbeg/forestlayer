@@ -123,6 +123,7 @@ Below is the result of UCI Adult example, we ran the example using gcForest v1.0
 Our machine configuration mainly includes 64GB RAM, Intel Xeon CPU E5-2620 v2 @2.10GHz x86_64 which contains 24 CPU virtual cores, and 1Gbits network bandwidth.
 Note that the models of all experiments contain the same structures, and have a single auto-growing cascade layer (in gcForest v1.0, it's called cascade_classifier), and every layer contains 8 random forests (4 completely random forests and 4 random forests with default configs of ForestLayer's `EstimatorArgument`).
 
+*Table. 1: Performance on UCI Adult dataset.*
 
 |  conf                   | test acc  | layer-best | avg time of 3 tries |
 | :---:                   | :-----:   |  :----:    | :------:     |
@@ -133,8 +134,10 @@ Note that the models of all experiments contain the same structures, and have a 
 | ForestLayer 4 nodes     | 86.143%    | 6-1        |  149s        |
 
 <div align="center">
-	<img src="http://7xsl28.com1.z0.glb.clouddn.com/adult_perf2.jpg" width="40%" height="27%"/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://7xsl28.com1.z0.glb.clouddn.com/imdb_perf2.jpg" width="40%" height="27%"/>
-	<p>Fig. 1 UCI Adult performance. (4.3x)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Fig. 2 IMDB performance. (1.86x)</p>
+    <img src="docs/imgs/mnist_perf.jpg" width="36%" height="24%"/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://7xsl28.com1.z0.glb.clouddn.com/imdb_perf2.jpg" width="36%" height="24%"/>
+    <p>Figure 1. MNIST performance. </p>
+	<img src="http://7xsl28.com1.z0.glb.clouddn.com/adult_perf2.jpg" width="36%" height="24%"/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://7xsl28.com1.z0.glb.clouddn.com/imdb_perf2.jpg" width="36%" height="24%"/>
+	<p>Fig. 2 UCI Adult performance. (4.3x)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Fig. 3 IMDB performance. (1.86x)</p>
 </div>
 
 From the first 2 lines of the table, we can conclude that ForestLayer has no loss of training speed of gcForest v1.0, but possess much simpler user-friendly API instead of configuring the model structure in the model json file.
@@ -151,8 +154,8 @@ See [examples](https://github.com/whatbeg/forestlayer/tree/master/examples)
 ## Design Principles
 
 ForestLayer has some design principles to guide our design and implementation.
-* **Fast Deployment.** ForestLayer is composed of layers and forest estimators. The layers include multi-grain scan layer, pooling layer and auto-growing cascade layer, etc. Forest estimators include random forest, extremely(completely) random forest, gradient-boosting tree and xgboost, we consider adding LightGBM later. With these simple layer and estimators, you can feel free to build your model, then deploy it to the production environment, make it for data science competitions, or for other purposes rapidly.
-* **Fast Running.** ForestLayer uses Ray, an emerging flexible and high-performance distributed execution framework based on dynamic computation graph, which supports fast scheduling and simple task-level parallelism. So with the high degree of parallelism, you can get the result several times faster than before.
+* **Easy Deployment.** ForestLayer is composed of layers and forest estimators. The layers include multi-grain scan layer, pooling layer and auto-growing cascade layer, etc. Forest estimators include random forest, extremely(completely) random forest, gradient-boosting tree and xgboost, we consider adding LightGBM later. With these simple layer and estimators, you can feel free to build your model, then deploy it to the production environment, make it for data science competitions, or for other purposes rapidly.
+* **High-speed.** ForestLayer uses Ray, an emerging flexible and high-performance distributed execution framework based on dynamic computation graph, which supports fast scheduling and simple task-level parallelism. So with the high degree of parallelism, you can get the result several times faster than before.
 * **Scalability.** ForestLayer achieves high scalability with Ray, you can add more machines(nodes) or use better equipment to gain higher efficiency.
 * **Modularity.** In ForestLayer, a model, or a graph is composed of a sequence of standalone, fully-configurable modules, which is called layers, that can be combined together with as little restrictions as possible. Since we told above, multi-grain scan layers, pooling layers, concat layers and two kinds of cascade layers are all standalone modules that you can plug together to build a custom-made model.
 * **User Friendliness.** Last but not least, ForestLayer follows the Keras' interfaces, Keras is a high-level neural networks API that is very simple to use and user-friendly and has a large number of users all over the world. With the Keras-like API, you can easily build the deep forest model according to your knowledge, with minimum learning cost.
