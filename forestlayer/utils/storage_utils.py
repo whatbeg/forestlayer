@@ -130,3 +130,6 @@ def getkbof(x):
     return "{:.2f}KB".format(sys.getsizeof(x) / 1024.0)
 
 
+def save_model(model, file_path, overrite=True):
+    pass
+

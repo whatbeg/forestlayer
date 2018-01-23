@@ -18,7 +18,7 @@ except:
 import ray
 from ..utils.log_utils import get_logger, list2str
 from ..utils.layer_utils import check_list_depth
-from ..utils.storage_utils import check_dir, getmbof, output_disk_path, load_disk_cache, save_disk_cache
+from ..utils.storage_utils import check_dir, getmbof, output_disk_path, load_disk_cache, save_disk_cache, save_model
 from ..utils.metrics import Metrics, Accuracy, AUC, MSE, RMSE
 from ..estimators import get_estimator_kfold, get_dist_estimator_kfold, EstimatorConfig
 
@@ -69,7 +69,15 @@ class Layer(object):
     def fit(self, x_trains, y_trains):
         """
         Fit datasets, return a list or single ndarray: train_outputs.
-        NOTE: may change x_trains, y_trains
+        NOTE: may change x_trains, y_trains. For efficiency, we do not keep the idempotency of a single layer, but
+         we keep the idempotency when you use `Graph` to fit. That's to say, if you create a `Layer` instance called
+         `layer`, and do `layer.fit(x_trains, y_trains)`, the input x_trains might be changed! But if you use a
+         Graph() to wrapper it, the input will never be changed! So we recommend to use
+         ```
+         >>> graph = Graph()
+         >>> graph.add(layer)
+         >>> graph.fit(x_trains, y_trains)
+         ```
 
         :param x_trains: train data
         :param y_trains: train labels
@@ -105,6 +113,26 @@ class Layer(object):
         return self.__class__.__name__
 
 
+class DataCachingMixin(object):
+    """
+    WIP DataCachingMixin.
+    """
+    def __init__(self, cache_in_disk=False, data_save_dir=None):
+        self.cache_in_disk = cache_in_disk
+        self.data_save_dir = data_save_dir
+
+    def _check_disk_cache(self, x, phase):
+        if not self.cache_in_disk or not self.data_save_dir:
+            return False
+        data_path = self._get_disk_path(x, phase)
+        if osp.exists(data_path):
+            return data_path
+        return False
+
+    def _get_disk_path(self, x, phase):
+        raise NotImplementedError
+
+
 class MultiGrainScanLayer(Layer):
     """
     Multi-grain Scan Layer
@@ -132,7 +160,6 @@ class MultiGrainScanLayer(Layer):
                           When distribute is True, dis_level = 0 means using a low level parallelization
                            for multi-grain scan layer. dis_level = 1 means using a higher level parallelization
                            for multi-grain scan layer. [default is 0]
-
         """
         if not name:
             prefix = 'multi_grain_scan'
@@ -582,6 +609,9 @@ class MultiGrainScanLayer(Layer):
     def evaluate(self, inputs, labels):
         raise NotImplementedError
 
+    def save(self):
+        pass
+
     def __str__(self):
         return self.__class__.__name__
 
@@ -590,7 +620,8 @@ class PoolingLayer(Layer):
     """
     Pooling layer.
     """
-    def __init__(self, batch_size=None, dtype=None, name=None, pools=None):
+    def __init__(self, batch_size=None, dtype=None, name=None, pools=None,
+                 cache_in_disk=False, data_save_dir=None):
         """
         Initialize a pooling layer.
 
@@ -598,16 +629,35 @@ class PoolingLayer(Layer):
         :param dtype:
         :param name:
         :param pools:
+        :param cache_in_disk: whether cache pooled data in disk (data_save_dir)
+        :param data_save_dir: directory caching into
         """
         super(PoolingLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
         # [[pool/7x7/est1, pool/7x7/est2], [pool/11x11/est1, pool/11x11/est1], [pool/13x13/est1, pool/13x13/est1], ...]
         self.pools = pools
+        self.cache_in_disk = cache_in_disk
+        self.data_save_dir = data_save_dir
 
     def call(self, x_trains, **kwargs):
         pass
 
     def __call__(self, x_trains):
         pass
+
+    def _check_disk_cache(self, x_shape, phase):
+        if not self.cache_in_disk or not self.data_save_dir:
+            return False
+        data_path = self._get_disk_path(x_shape, phase)
+        print(data_path)
+        if osp.exists(data_path):
+            return data_path
+        return False
+
+    def _get_disk_path(self, x_shape, phase):
+        assert isinstance(x_shape, tuple), 'x_train should be tuple, but {}'.format(type(x_shape))
+        data_name = "x".join(map(str, x_shape))
+        data_path = output_disk_path(self.data_save_dir, 'pool', phase, data_name)
+        return data_path
 
     def fit(self, x_trains, y_trains=None):
         """
@@ -620,6 +670,12 @@ class PoolingLayer(Layer):
         # inputs shape: [[(60000, 10, 11, 11), (60000, 10, 11, 11)], [.., ..], ...]
         if len(self.pools) != len(x_trains):
             raise ValueError('len(pools) does not equal to len(inputs), you must set right pools!')
+        x_shape = x_trains[0][0].shape
+        # Try to load data from disk.
+        train_path = self._check_disk_cache(x_shape, 'train')
+        if train_path is not False:
+            self.LOGGER.info("Cache hit! Loading data from {}, skip fit!".format(train_path))
+            return load_disk_cache(data_path=train_path)
         for pi, pool in enumerate(self.pools):
             if not isinstance(pool, (list, tuple)):
                 pool = [pool]
@@ -629,6 +685,11 @@ class PoolingLayer(Layer):
             for pj, pl in enumerate(pool):
                 x_trains[pi][pj] = pl.fit_transform(x_trains[pi][pj])
         self.LOGGER.info('x_trains pooled: {}'.format(list2str(x_trains, 2)))
+        if self.cache_in_disk and self.data_save_dir:
+            data_path = self._get_disk_path(x_shape, 'train')
+            check_dir(data_path)
+            save_disk_cache(data_path, x_trains)
+            self.LOGGER.info("Saving data x_win_est_train to {}".format(data_path))
         return x_trains
 
     def fit_transform(self, x_trains, y_trains=None, x_tests=None, y_tests=None):
@@ -648,6 +709,16 @@ class PoolingLayer(Layer):
             raise ValueError('len(pools) does not equal to len(x_trains), you must set right pools!')
         if len(self.pools) != len(x_tests):
             raise ValueError('len(pools) does not equal to len(x_tests), you must set right pools!')
+        x_train_shape = x_trains[0][0].shape
+        x_test_shape = x_tests[0][0].shape
+        # Try to load data from disk.
+        # TODO: boundary condition judge if x_trains is not 2d list.
+        train_path = self._check_disk_cache(x_train_shape, 'train')
+        test_path = self._check_disk_cache(x_test_shape, 'test')
+        if train_path is not False and test_path is not False:
+            self.LOGGER.info("Cache hit! Loading trains from {}, skip fit!".format(train_path))
+            self.LOGGER.info("Cache hit! Loading  tests from {}, skip fit!".format(test_path))
+            return load_disk_cache(train_path), load_disk_cache(test_path)
         for pi, pool in enumerate(self.pools):
             if not isinstance(pool, (list, tuple)):
                 pool = [pool]
@@ -662,6 +733,16 @@ class PoolingLayer(Layer):
                 x_tests[pi][pj] = pl.fit_transform(x_tests[pi][pj])
         self.LOGGER.info('x_trains pooled: {}'.format(list2str(x_trains, 2)))
         self.LOGGER.info('x_tests  pooled: {}'.format(list2str(x_tests, 2)))
+        # save data into disk.
+        if self.cache_in_disk and self.data_save_dir:
+            train_path = self._get_disk_path(x_train_shape, 'train')
+            test_path = self._get_disk_path(x_test_shape, 'test')
+            check_dir(train_path)
+            check_dir(test_path)
+            save_disk_cache(train_path, x_trains)
+            save_disk_cache(test_path, x_tests)
+            self.LOGGER.info("Saving data x_trains to {}".format(train_path))
+            self.LOGGER.info("Saving data  x_tests to {}".format(test_path))
         return x_trains, x_tests
 
     def transform(self, xs):
@@ -697,12 +778,16 @@ class PoolingLayer(Layer):
     def predict_proba(self, X):
         return self.transform(X)
 
+    def save(self):
+        pass
+
 
 class ConcatLayer(Layer):
     """
     Concatenate layer.
     """
-    def __init__(self, batch_size=None, dtype=None, name=None, axis=-1):
+    def __init__(self, batch_size=None, dtype=None, name=None, axis=-1,
+                 cache_in_disk=False, data_save_dir=None):
         """
         Initialize a concat layer.
 
@@ -716,12 +801,33 @@ class ConcatLayer(Layer):
         # to
         # [Concat(axis=axis), Concat(axis=axis), Concat(axis=axis), ...]
         self.axis = axis
+        self.cache_in_disk = cache_in_disk
+        self.data_save_dir = data_save_dir
 
     def call(self, X, **kwargs):
         pass
 
     def __call__(self, *args, **kwargs):
         pass
+
+    def _check_disk_cache(self, x_shape, phase):
+        if not self.cache_in_disk or not self.data_save_dir:
+            return False
+        data_path = self._get_disk_path(x_shape, phase)
+        if osp.exists(data_path):
+            return data_path
+        return False
+
+    def _get_disk_path(self, x_shape, phase):
+        assert isinstance(x_shape, tuple), 'x_train should be tuple, but {}'.format(type(x_shape))
+        data_name = "x".join(map(str, x_shape))
+        data_path = output_disk_path(self.data_save_dir, 'concat', phase, data_name)
+        return data_path
+
+    def _check_input(self, xs):
+        if not isinstance(xs, (list, tuple)):
+            xs = [xs]
+        return xs
 
     def _fit(self, xs):
         """
@@ -730,8 +836,7 @@ class ConcatLayer(Layer):
         :param xs:
         :return:
         """
-        if not isinstance(xs, (list, tuple)):
-            xs = [xs]
+        xs = self._check_input(xs)
         # inputs shape: [[(60000, 10, 6, 6), (60000, 10, 6, 6)], [.., ..], ...]
         concat_results = []
         for bottoms in xs:
@@ -751,6 +856,7 @@ class ConcatLayer(Layer):
         :param xs:
         :return:
         """
+        xs = self._check_input(xs)
         concat = self._fit(xs)
         self.LOGGER.info("[transform] concatenated shape: {}".format(list2str(concat, 1)))
         return concat
@@ -766,8 +872,20 @@ class ConcatLayer(Layer):
         :param y_trains:
         :return:
         """
+        x_trains = self._check_input(x_trains)
+        x_train_shape = x_trains[0][0].shape
+        # Try to load data from disk.
+        train_path = self._check_disk_cache(x_train_shape, 'train')
+        if train_path is not False:
+            self.LOGGER.info("Cache hit! Loading data from {}, skip fit!".format(train_path))
+            return load_disk_cache(data_path=train_path)
         concat_train = self._fit(x_trains)
         self.LOGGER.info("concat train shape: {}".format(list2str(concat_train, 1)))
+        if self.cache_in_disk and self.data_save_dir:
+            data_path = self._get_disk_path(x_train_shape, 'train')
+            check_dir(data_path)
+            save_disk_cache(data_path, concat_train)
+            self.LOGGER.info("Saving data x_win_est_train to {}".format(data_path))
         return concat_train
 
     def fit_transform(self, x_trains, y_trains, x_tests=None, y_tests=None):
@@ -782,11 +900,33 @@ class ConcatLayer(Layer):
         """
         if x_tests is None:
             return self.fit(x_trains, y_trains), None
+        x_trains = self._check_input(x_trains)
+        x_tests = self._check_input(x_tests)
+        x_train_shape = x_trains[0][0].shape
+        x_test_shape = x_tests[0][0].shape
+        # Try to load data from disk.
+        # TODO: boundary condition judge if x_trains is not 2d list.
+        train_path = self._check_disk_cache(x_train_shape, 'train')
+        test_path = self._check_disk_cache(x_test_shape, 'test')
+        if train_path is not False and test_path is not False:
+            self.LOGGER.info("Cache hit! Loading concat trains from {}, skip fit!".format(train_path))
+            self.LOGGER.info("Cache hit! Loading concat tests from {}, skip fit!".format(test_path))
+            return load_disk_cache(train_path), load_disk_cache(test_path)
         # inputs shape: [[(60000, 10, 6, 6), (60000, 10, 6, 6)], [.., ..], ...]
         concat_train = self._fit(x_trains)
         self.LOGGER.info("concat train shape: {}".format(list2str(concat_train, 1)))
         concat_test = self._fit(x_tests)
         self.LOGGER.info(" concat test shape: {}".format(list2str(concat_test, 1)))
+        # save data into disk.
+        if self.cache_in_disk and self.data_save_dir:
+            train_path = self._get_disk_path(x_train_shape, 'train')
+            test_path = self._get_disk_path(x_test_shape, 'test')
+            check_dir(train_path)
+            check_dir(test_path)
+            save_disk_cache(train_path, concat_train)
+            save_disk_cache(test_path, concat_test)
+            self.LOGGER.info("Saving data concat_train to {}".format(train_path))
+            self.LOGGER.info("Saving data  concat_test to {}".format(test_path))
         return concat_train, concat_test
 
     def predict(self, X):
@@ -794,6 +934,9 @@ class ConcatLayer(Layer):
 
     def predict_proba(self, X):
         return self.transform(X)
+
+    def save(self):
+        raise NotImplementedError('ConcatLayer actually has not model. axis is the model')
 
 
 class CascadeLayer(Layer):
@@ -1200,6 +1343,9 @@ class CascadeLayer(Layer):
         pred = self.predict(X)
         for metric in eval_metrics:
             metric.calc(y, pred, logger=self.LOGGER)
+
+    def save(self):
+        pass
 
 
 class AutoGrowingCascadeLayer(Layer):
@@ -1838,6 +1984,9 @@ class AutoGrowingCascadeLayer(Layer):
             np.savetxt(file_name, np.argmax(x_proba_test, axis=1), fmt="%d", delimiter=',')
         else:
             np.savetxt(file_name, x_proba_test, fmt="%f", delimiter=',')
+
+    def save(self):
+        pass
 
 
 def _to_snake_case(name):

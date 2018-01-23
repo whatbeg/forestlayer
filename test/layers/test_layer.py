@@ -163,17 +163,23 @@ class TestLayerForMNIST(unittest.TestCase):
         self.test_non_dis_mgs_fit()
         print('Non-distributed mgs fit cost {} s'.format(time.time() - start))
 
-    def test_pool_layer_idempotency(self):
-        pass
-
-    def test_concat_layer_idempotency(self):
-        mgs, poolayer, concat_layer, cascade, auto_cascade = self._init()
-        x_train, y_train = self.x_train, self.y_train
-        res_train = mgs.fit(x_train, y_train)
-        before_str = list2str(res_train, 2)
-        concat_layer.fit(res_train, None)
-        after_str = list2str(res_train, 2)
-        assert before_str == after_str, '{} is not equal to {}'.format(before_str, after_str)
+    # def test_pool_layer_idempotency(self):
+    #     mgs, poolayer, concat_layer, cascade, auto_cascade = self._init()
+    #     x_train, y_train = self.x_train, self.y_train
+    #     res_train = mgs.fit(x_train, y_train)
+    #     before_str = list2str(res_train, 2)
+    #     poolayer.fit(res_train, None)
+    #     after_str = list2str(res_train, 2)
+    #     assert before_str == after_str, '{} is not equal to {}'.format(before_str, after_str)
+    #
+    # def test_concat_layer_idempotency(self):
+    #     mgs, poolayer, concat_layer, cascade, auto_cascade = self._init()
+    #     x_train, y_train = self.x_train, self.y_train
+    #     res_train = mgs.fit(x_train, y_train)
+    #     before_str = list2str(res_train, 2)
+    #     concat_layer.fit(res_train, None)
+    #     after_str = list2str(res_train, 2)
+    #     assert before_str == after_str, '{} is not equal to {}'.format(before_str, after_str)
 
 
 class TestLayerForUCIADULT(unittest.TestCase):
