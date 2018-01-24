@@ -110,7 +110,7 @@ class KFoldWrapper(object):
             # fit on k-fold train
             est.fit(X[train_idx].reshape((-1, self.n_dims)), y[train_idx].reshape(-1), cache_dir=self.cache_dir)
 
-            # predict on k-fold validation
+            # predict on k-fold validation, this y_proba.dtype is float64
             y_proba = est.predict_proba(X[val_idx].reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
             if not est.is_classification:
                 y_proba = y_proba[:, np.newaxis]  # add one dimension
