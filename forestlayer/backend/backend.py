@@ -11,6 +11,7 @@ import ray
 import os.path as osp
 import os
 import numpy as np
+import time
 
 _BASE_DIR = osp.expanduser(osp.join('~', '.forestlayer'))
 
@@ -60,3 +61,14 @@ def pb2pred(y_proba):
     y_pred = np.argmax(y_proba.reshape((-1, y_proba.shape[-1])), 1)
     return y_pred
 
+
+@ray.remote
+def stat_nodes():
+    time.sleep(0.001)
+    return ray.services.get_node_ip_address()
+
+
+def get_num_nodes():
+    # Get a list of the IP addresses of the nodes that have joined the cluster.
+    nodes = set(ray.get([stat_nodes.remote() for _ in range(1000)]))
+    return nodes, len(nodes)
