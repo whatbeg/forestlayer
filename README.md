@@ -1,4 +1,4 @@
-<a href="https://github.com/whatbeg/forestflow">
+<a href="https://github.com/whatbeg/forestlayer">
 <div align="center">
 	<img src="docs/imgs/logo.jpg" width="30%" height="18%"/>
 </div>
@@ -149,8 +149,8 @@ Note that the models of all experiments contain the same structures, and have a 
 | ForestLayer 4 nodes     | 86.143%    | 6-1        |  149s        |
 
 <div align="center">
-    <img src="http://image-whatbegblog.oss-cn-shanghai.aliyuncs.com/images/mnist_perf.jpg" width="36%" height="24%"/>
-    <p><i>Figure 1. MNIST performance. </i></p>
+    <img src="docs/imgs/mnist_perf3.jpg" width="36%" height="24%"/>
+    <p><i>Figure 1. MNIST performance. (1.5x)</i></p>
 	<img src="http://7xsl28.com1.z0.glb.clouddn.com/adult_perf2.jpg" width="36%" height="24%"/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://7xsl28.com1.z0.glb.clouddn.com/imdb_perf2.jpg" width="36%" height="24%"/>
 	<p><i>Fig. 2 UCI Adult performance. (4.3x)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Fig. 3 IMDB performance. (1.86x)</i></p>
 </div>

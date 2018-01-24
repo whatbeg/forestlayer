@@ -24,7 +24,7 @@ You can refer to `Deep Forest Paper <https://arxiv.org/abs/1702.08835>`__, `Ray 
    :maxdepth: 1
    :caption: ForestLayer
 
-   source/ForestLayer.rst
+   source/introduction.rst
    source/deepforest.rst
    source/GettingStarted.rst
 
