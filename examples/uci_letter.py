@@ -23,6 +23,10 @@ start_time = time.time()
 est_configs = [
     ExtraRandomForestConfig(),
     ExtraRandomForestConfig(),
+    ExtraRandomForestConfig(),
+    ExtraRandomForestConfig(),
+    RandomForestConfig(),
+    RandomForestConfig(),
     RandomForestConfig(),
     RandomForestConfig()
 ]
@@ -31,8 +35,9 @@ agc = AutoGrowingCascadeLayer(est_configs=est_configs,
                               early_stopping_rounds=4,
                               stop_by_test=True,
                               n_classes=26,
-                              data_save_dir=osp.join(get_data_save_base(), 'uci_adult', 'auto_cascade'),
-                              keep_in_mem=False)
+                              data_save_dir=osp.join(get_data_save_base(), 'uci_letter', 'auto_cascade'),
+                              keep_in_mem=False,
+                              seed=0)
 
 model = Graph()
 model.add(agc)

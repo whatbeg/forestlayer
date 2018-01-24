@@ -147,12 +147,13 @@ Note that the models of all experiments contain the same structures, and have a 
 | ForestLayer Standalone  | 86.143%    | 6-1        |  279s        |
 | ForestLayer 2 nodes     | 86.143%    | 6-1        |  190s        |
 | ForestLayer 4 nodes     | 86.143%    | 6-1        |  149s        |
+| ForestLayer 8 nodes     | 86.143%    | 6-1        |  116s        |
 
 <div align="center">
-    <img src="docs/imgs/mnist_perf3.jpg" width="36%" height="24%"/>
-    <p><i>Figure 1. MNIST performance. (1.5x)</i></p>
-	<img src="http://7xsl28.com1.z0.glb.clouddn.com/adult_perf2.jpg" width="36%" height="24%"/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="http://7xsl28.com1.z0.glb.clouddn.com/imdb_perf2.jpg" width="36%" height="24%"/>
-	<p><i>Fig. 2 UCI Adult performance. (4.3x)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Fig. 3 IMDB performance. (1.86x)</i></p>
+    <img src="docs/imgs/mnist_perf.jpg" width="36%" height="24%"/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="docs/imgs/letter_perf.jpg" width="36%" height="24%"/>
+    <p><i>Figure 1. MNIST performance. (1.5x)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Fig. 2 UCI Letter performance. (5.5x)</i></p>
+	<img src="docs/imgs/adult_perf.jpg" width="36%" height="24%"/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="docs/imgs/imdb_perf.jpg" width="36%" height="24%"/>
+	<p><i>Fig. 3 UCI Adult performance. (5.6x)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Fig. 4 IMDB performance. (2.1x)</i></p>
 </div>
 
 From the first 2 lines of the table, we can conclude that ForestLayer has no loss of training speed of gcForest v1.0, but possess much simpler user-friendly API instead of configuring the model structure in the model json file.
