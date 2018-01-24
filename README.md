@@ -159,7 +159,7 @@ Note that the models of all experiments contain the same structures, and have a 
 From the first 2 lines of the table, we can conclude that ForestLayer has no loss of training speed of gcForest v1.0, but possess much simpler user-friendly API instead of configuring the model structure in the model json file.
 
 And from all of the lines of the table, we can see, even in the Standalone mode, ForestLayer is **2.3x** faster than single machine implementation.
-In cluster mode with 2 nodes, we obtain **3.4x** speedup. And with more nodes, the speedup will be so much better.
+In cluster mode with 8 nodes, we obtain **5.6x** speedup, which drastically accelerates the research and engineering procedure. With more nodes, the speedup will be so much better.
 
 More benchmarks and performance evaluations will be given later.
 
@@ -209,10 +209,12 @@ ForestLayer is released under the Apache 2.0 license.
 
 * [ ] More layers, including lambda layer.
 * [ ] Add model save and load mechanism
+* [ ] Load balancing
+* [ ] Forest splitting
 * [x] model.summary()
 * [x] Distributed training
 * [x] Add data save and load mechanism
-* [x] Benchmarks (Part of it)
+* [x] Benchmarks
 * [x] Documents
 * [x] Different input data load and management
 * [x] Regression task support
