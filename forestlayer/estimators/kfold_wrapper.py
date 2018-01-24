@@ -1,6 +1,7 @@
 # -*- coding:utf-8 -*-
 """
 K-fold wrapper definition.
+This page of code mainly borrow from Ji. Feng.
 """
 
 import os.path as osp
@@ -10,7 +11,7 @@ from sklearn.model_selection import KFold, StratifiedKFold
 from xgboost.sklearn import XGBClassifier, XGBRegressor
 from ..utils.metrics import Accuracy
 from ..utils.log_utils import get_logger
-from ..utils.storage_utils import name2path
+from ..utils.storage_utils import name2path, getmbof
 
 
 class KFoldWrapper(object):
@@ -96,7 +97,6 @@ class KFoldWrapper(object):
             else:
                 skf = StratifiedKFold(n_splits=self.n_folds, shuffle=True, random_state=self.seed)
                 cv = [(t, v) for (t, v) in skf.split(range(n_stratify), y_stratify)]
-        # K-fold fit
         y_proba_train = None
         y_probas_test = []
         self.n_dims = X.shape[-1]
@@ -132,7 +132,9 @@ class KFoldWrapper(object):
 
             # test
             for vi, (prefix, X_test, _) in enumerate(test_sets):
-                y_proba = est.predict_proba(X_test.reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
+                # keep float32 data type, save half of memory and communication.
+                y_proba = est.predict_proba(X_test.reshape((-1, self.n_dims)),
+                                            cache_dir=self.cache_dir).astype('float32')
                 if not est.is_classification:
                     y_proba = y_proba[:, np.newaxis]
                 if len(X.shape) == 3:
@@ -341,7 +343,8 @@ class DistributedKFoldWrapper(object):
 
             # test
             for vi, (prefix, X_test, y_test) in enumerate(test_sets):
-                y_proba = est.predict_proba(X_test.reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
+                y_proba = est.predict_proba(X_test.reshape((-1, self.n_dims)),
+                                            cache_dir=self.cache_dir).astype('float32')
                 if not est.is_classification:
                     y_proba = y_proba[:, np.newaxis]
                 if len(X.shape) == 3:
