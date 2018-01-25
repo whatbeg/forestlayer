@@ -63,12 +63,12 @@ def pb2pred(y_proba):
 
 
 @ray.remote
-def stat_nodes():
-    time.sleep(0.001)
+def stat_nodes(sleep_time=0.001):
+    time.sleep(sleep_time)
     return ray.services.get_node_ip_address()
 
 
-def get_num_nodes():
+def get_num_nodes(sleep_time=0.001, num_task=1000):
     # Get a list of the IP addresses of the nodes that have joined the cluster.
-    nodes = set(ray.get([stat_nodes.remote() for _ in range(1000)]))
-    return nodes, len(nodes)
+    nodes = set(ray.get([stat_nodes.remote(sleep_time) for _ in range(num_task)]))
+    return list(nodes), len(nodes)

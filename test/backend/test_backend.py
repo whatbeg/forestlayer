@@ -24,6 +24,7 @@ class TestBackend(unittest.TestCase):
         print('after set, base dir = {}'.format(get_base_dir()))
 
     def test_get_num_nodes(self):
+        # Turn this standalone mode to cluster mode, otherwise the num_nodes will always be 1.
         ray.init()
         nodes, num_nodes = get_num_nodes()
         print(nodes, num_nodes)

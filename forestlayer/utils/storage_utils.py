@@ -51,7 +51,16 @@ def check_dir(path):
         return
     d = osp.abspath(osp.join(path, osp.pardir))
     if not osp.exists(d):
-        os.makedirs(d)
+        try:
+            os.makedirs(d)
+        except OSError as e:
+            if e.errno != os.errno.EEXIST:
+                raise e
+            print("Attempted to create '{}', but the directory already "
+                  "exists.".format(d))
+        # Change the directory permissions so others can use it. This is
+        # important when multiple people are using the same machine. But now we don't need it.
+        # os.chmod(d, 0o0777)
 
 
 def numpy_to_disk_path(cache_dir, phase, data_name):
