@@ -35,6 +35,7 @@ class Graph(object):
         self.LOGGER = get_logger('forestlayer.layers.graph')
         self.layers = []
         self.task = task
+        self.num_workers = None
         self.FIT = False
 
     def call(self):
@@ -77,7 +78,26 @@ class Graph(object):
         self.LOGGER.info(self.to_debug_string())
 
     def summary(self):
+        """
+        Print graph summary information.
+
+        :return:
+        """
         print_summary(self)
+
+    def get_num_workers(self):
+        """
+        Get number of workers while in distributed training.
+
+        :return:
+        """
+        if self.num_workers is not None:
+            return self.num_workers
+        from forestlayer.backend.backend import get_num_nodes
+        nodes, num_nodes = get_num_nodes()
+        self.num_workers = num_nodes
+        self.LOGGER.info('Get number of workers: {}, total {}'.format(nodes, num_nodes))
+        return self.num_workers
 
     def fit(self, x_trains, y_trains):
         """
@@ -92,16 +112,22 @@ class Graph(object):
         if not isinstance(x_trains, (list, tuple)):
             inputs = [x_trains]
         else:
+            # deep copy to keep idempotency of input.
             inputs = copy.deepcopy(x_trains)
         if not isinstance(y_trains, (list, tuple)):
             labels = [y_trains]
         else:
+            # deep copy to keep idempotency of input.
             labels = copy.deepcopy(y_trains)
         for layer in self.layers:
-            self.LOGGER.info(" -------------- Now fitting layer [{}] --------------".format(layer))
+            self.LOGGER.info(" -------------- Now fitting [{}] --------------".format(layer))
+            layer_start_time = time.time()
+            if layer.distribute is True and layer.num_workers is None:
+                layer.set_num_workers(self.get_num_workers())
             inputs = layer.fit(inputs, labels)
+            self.LOGGER.info('{} time cost: {:.6f} s'.format(layer, time.time() - layer_start_time))
         time_cost = time.time() - start_time
-        self.LOGGER.info("graph fit finished! Time Cost: {} s".format(time_cost))
+        self.LOGGER.info("graph fit finished! Time Cost: {:.6f} s".format(time_cost))
         self.FIT = True
         return self
 
@@ -130,10 +156,14 @@ class Graph(object):
         if y_tests is not None and not isinstance(y_tests, (list, tuple)):
             y_tests = [y_tests]
         for li, layer in enumerate(self.layers):
-            self.LOGGER.info(" -------------- Now fitting layer - [{}] [{}] --------------".format(li, layer))
+            self.LOGGER.info(" -------------- Now fit_transforming - [{}] [{}] --------------".format(li, layer))
+            layer_start_time = time.time()
+            if layer.distribute is True and layer.num_workers is None:
+                layer.set_num_workers(self.get_num_workers())
             x_trains, x_tests = layer.fit_transform(x_trains, y_trains, x_tests, y_tests)
+            self.LOGGER.info('{} time cost: {:.6f} s'.format(layer, time.time() - layer_start_time))
         time_cost = time.time() - start_time
-        self.LOGGER.info("graph fit_transform finished! Time Cost: {} s".format(time_cost))
+        self.LOGGER.info("graph fit_transform finished! Time Cost: {:.6f} s".format(time_cost))
         self.FIT = True
         return x_trains, x_tests
 
