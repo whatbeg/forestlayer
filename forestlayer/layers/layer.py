@@ -21,6 +21,7 @@ from ..utils.layer_utils import check_list_depth
 from ..utils.storage_utils import check_dir, getmbof, output_disk_path, load_disk_cache, save_disk_cache, save_model
 from ..utils.metrics import Metrics, Accuracy, AUC, MSE, RMSE
 from ..estimators import get_estimator_kfold, get_dist_estimator_kfold, EstimatorConfig
+from ..estimators.kfold_wrapper import SplittingKFoldWrapper
 
 
 class Layer(object):
@@ -42,7 +43,7 @@ class Layer(object):
     # Class Methods
         from_config(config)
     """
-    def __init__(self, batch_size=None, dtype=None, name=None):
+    def __init__(self, batch_size=None, dtype=np.float32, name=None):
         """
         Initialize a layer.
 
@@ -57,9 +58,22 @@ class Layer(object):
             name = _to_snake_case(prefix) + "_" + str(id(self))
         self.name = name
         # Set dtype.
+        str2dtype = {'float16': np.float16, 'float32': np.float32, 'float64': np.float64}
         if dtype is None:
             dtype = np.float32
+        elif isinstance(dtype, str):
+            dtype = str2dtype[dtype]
         self.dtype = dtype
+        # num of workers, the basis of the split, default is None, which means un-set.
+        self.num_workers = None
+        # distribute, identify whether use distributed training. default is False.
+        self.distribute = False
+
+    def set_num_workers(self, n):
+        assert isinstance(n, int), 'num_workers should be int, but {}'.format(type(n))
+        assert n > 0, 'num_workers should be set to a positive number. but {}'.format(n)
+        self.num_workers = n
+        return self
 
     def call(self, x_trains):
         raise NotImplementedError
@@ -142,10 +156,10 @@ class MultiGrainScanLayer(Layer):
     """
     Multi-grain Scan Layer
     """
-    def __init__(self, batch_size=None, dtype=None, name=None, task='classification',
+    def __init__(self, batch_size=None, dtype=np.float32, name=None, task='classification',
                  windows=None, est_for_windows=None, n_class=None, keep_in_mem=False,
                  cache_in_disk=False, data_save_dir=None, eval_metrics=None, seed=None,
-                 distribute=False, dis_level=0):
+                 distribute=False, dis_level=0, num_workers=None):
         """
         Initialize a multi-grain scan layer.
 
@@ -178,13 +192,15 @@ class MultiGrainScanLayer(Layer):
         if self.task == 'regression':
             self.n_class = 1
         else:
-            assert n_class is not None
+            assert n_class is not None, 'n_class should not be None!'
             self.n_class = n_class
         self.seed = seed
         assert isinstance(distribute, bool), 'distribute variable should be Boolean, but {}'.format(type(distribute))
         self.distribute = distribute
-        assert dis_level in [0, 1], 'dis_level should be 0 or 1, but {}'.format(dis_level)
+        assert dis_level in [0, 1, 2], 'dis_level should be 0 or 1, but {}'.format(dis_level)
         self.dis_level = dis_level
+        self.split = self.dis_level == 2
+        self.num_workers = num_workers
         self.keep_in_mem = keep_in_mem
         self.cache_in_disk = cache_in_disk
         self.data_save_dir = data_save_dir
@@ -204,6 +220,7 @@ class MultiGrainScanLayer(Layer):
         :param x:
         :return:
         """
+        x = x.astype(self.dtype)
         return window.fit_transform(x)
 
     def _init_estimator(self, est_arguments, wi, ei):
@@ -236,31 +253,9 @@ class MultiGrainScanLayer(Layer):
                             est_type=est_type,
                             eval_metrics=self.eval_metrics,
                             seed=seed,
+                            dtype=self.dtype,
                             keep_in_mem=self.keep_in_mem,
                             est_args=est_args)
-
-    def _check_input(self, x, y):
-        if isinstance(x, (list, tuple)):
-            assert len(x) == 1, "Multi grain scan Layer only supports exactly one input now!"
-            x = x[0]
-        if isinstance(y, (list, tuple)):
-            assert len(y) == 1, "Multi grain scan Layer only supports exactly one input now!"
-            y = y[0]
-        return x, y
-
-    def _check_disk_cache(self, x, phase):
-        if not self.cache_in_disk or not self.data_save_dir:
-            return False
-        data_path = self._get_disk_path(x, phase)
-        if osp.exists(data_path):
-            return data_path
-        return False
-
-    def _get_disk_path(self, x, phase):
-        assert isinstance(x, np.ndarray), 'x_train should be numpy.ndarray, but {}'.format(type(x))
-        data_name = "x".join(map(str, x.shape))
-        data_path = output_disk_path(self.data_save_dir, 'mgs', phase, data_name)
-        return data_path
 
     def fit(self, x_train, y_train):
         """
@@ -270,14 +265,14 @@ class MultiGrainScanLayer(Layer):
         :param y_train:
         :return:
         """
-        if self.distribute and self.dis_level == 1:
-            return self._distributed_fit(x_train, y_train)
         x_train, y_train = self._check_input(x_train, y_train)
         # check if output of fit is exists in disk, if yes, we do not to re-train the model, just load the cached data.
         train_path = self._check_disk_cache(x_train, 'train')
         if train_path is not False:
             self.LOGGER.info("Cache hit! Loading data from {}, skip fit!".format(train_path))
             return load_disk_cache(data_path=train_path)
+        if self.distribute and self.dis_level >= 1:
+            return self._distributed_fit(x_train, y_train)
         x_wins_train = []
         for win in self.windows:
             x_wins_train.append(self.scan(win, x_train))
@@ -342,21 +337,25 @@ class MultiGrainScanLayer(Layer):
             if not isinstance(ests_for_win, (list, tuple)):
                 ests_for_win = [ests_for_win]
             for ei, est in enumerate(ests_for_win):
-                if isinstance(est, EstimatorConfig):
-                    est = self._init_estimator(est, wi, ei)
-                ests_for_win[ei] = est
+                # if isinstance(est, EstimatorConfig):
+                #     est = self._init_estimator(est, wi, ei)
+                # ests_for_win[ei] = est
                 ests.append(est)
-                ei2wi[est_offsets[wi] + ei] = wi
+                ei2wi[est_offsets[wi] + ei] = (wi, ei)
             est_offsets.append(est_offsets[-1] + len(ests_for_win))
             _, nhs[wi], nws[wi], _ = x_wins_train[wi].shape
             x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
             y_win[wi] = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
-        if self.distribute:
-            ests_output = ray.get([est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]],
-                                   y_win[ei2wi[ei]][:, 0]) for ei, est in enumerate(ests)])
-        else:
-            ests_output = [est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]], y_win[ei2wi[ei]][:, 0])
-                           for ei, est in enumerate(ests)]
+        splitting = SplittingKFoldWrapper(split=self.split, estimators=ests, ei2wi=ei2wi,
+                                          num_workers=self.num_workers, seed=self.seed,
+                                          task=self.task, eval_metrics=self.eval_metrics,
+                                          keep_in_mem=self.keep_in_mem, dtype=self.dtype)
+        ests_output = splitting.fit(x_wins_train, y_win)
+        # ests_output = ray.get([est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]],
+        #                        y_win[ei2wi[ei]][:, 0]) for ei, est in enumerate(ests)])
+        # print(ests_output)
+        # for esto in ests_output:
+        #     print(esto[0].shape)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             win_est_train = []
             # X_wins[wi] = (60000, 11, 11, 49)
@@ -430,14 +429,11 @@ class MultiGrainScanLayer(Layer):
             y_win[wi] = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
             y_win_test[wi] = None if y_test is None else y_test[:, np.newaxis].repeat(x_wins_test[wi].shape[1], axis=1)
             test_sets[wi] = [('testOfWin{}'.format(wi), x_wins_test[wi], y_win_test[wi])]
-        if self.distribute:
-            ests_output = ray.get([est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]],
-                                                            y_win[ei2wi[ei]][:, 0], test_sets[ei2wi[ei]])
-                                   for ei, est in enumerate(ests)])
-        else:
-            ests_output = [est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]],
-                                                    y_win[ei2wi[ei]][:, 0], test_sets[ei2wi[ei]])
-                           for ei, est in enumerate(ests)]
+        self.LOGGER.info('est_offsets = {}'.format(est_offsets))
+        self.LOGGER.info('ei2wi = {}'.format(ei2wi))
+        ests_output = ray.get([est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]],
+                                                        y_win[ei2wi[ei]][:, 0], test_sets[ei2wi[ei]])
+                               for ei, est in enumerate(ests)])
         # print(list_type2str(self.est_for_windows, 2))
         for wi, ests_for_win in enumerate(self.est_for_windows):
             win_est_train = []
@@ -614,6 +610,29 @@ class MultiGrainScanLayer(Layer):
 
     def evaluate(self, inputs, labels):
         raise NotImplementedError
+
+    def _check_input(self, x, y):
+        if isinstance(x, (list, tuple)):
+            assert len(x) == 1, "Multi grain scan Layer only supports exactly one input now!"
+            x = x[0]
+        if isinstance(y, (list, tuple)):
+            assert len(y) == 1, "Multi grain scan Layer only supports exactly one input now!"
+            y = y[0]
+        return x, y
+
+    def _check_disk_cache(self, x, phase, file_type='pkl'):
+        if not self.cache_in_disk or not self.data_save_dir:
+            return False
+        data_path = self._get_disk_path(x, phase, file_type)
+        if osp.exists(data_path):
+            return data_path
+        return False
+
+    def _get_disk_path(self, x, phase, file_type='pkl'):
+        assert isinstance(x, np.ndarray), 'x_train should be numpy.ndarray, but {}'.format(type(x))
+        data_name = "x".join(map(str, x.shape))
+        data_path = output_disk_path(self.data_save_dir, 'mgs', phase, data_name, file_type)
+        return data_path
 
     def save(self):
         pass
@@ -1130,6 +1149,7 @@ class CascadeLayer(Layer):
                             est_type=est_type,
                             eval_metrics=self.eval_metrics,
                             seed=seed,
+                            dtype=self.dtype,
                             keep_in_mem=self.keep_in_mem,
                             est_args=est_args)
 

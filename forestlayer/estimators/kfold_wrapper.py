@@ -1,21 +1,28 @@
 # -*- coding:utf-8 -*-
 """
 K-fold wrapper definition.
-This page of code mainly borrow from Ji. Feng.
+This page of code was partly borrowed from Ji. Feng.
 """
 
+from __future__ import print_function
 import os.path as osp
 import numpy as np
 import ray
+try:
+    import cPickle as pickle
+except:
+    import pickle
 from sklearn.model_selection import KFold, StratifiedKFold
 from xgboost.sklearn import XGBClassifier, XGBRegressor
-from ..utils.metrics import Accuracy
+from .sklearn_estimator import *
 from ..utils.log_utils import get_logger
 from ..utils.storage_utils import name2path, getmbof
+from ..utils.metrics import Accuracy, MSE
+MAX_RAND_SEED = np.iinfo(np.int32).max
 
 
 class KFoldWrapper(object):
-    def __init__(self, name, n_folds, est_class, seed=None,
+    def __init__(self, name, n_folds, est_class, seed=None, dtype=np.float32,
                  eval_metrics=None, cache_dir=None, keep_in_mem=None, est_args=None):
         """
         Initialize a KFoldWrapper.
@@ -35,6 +42,7 @@ class KFoldWrapper(object):
         self.est_class = est_class
         self.est_args = est_args if est_args is not None else {}
         self.seed = seed
+        self.dtype = dtype
         self.eval_metrics = eval_metrics if eval_metrics is not None else []
         if cache_dir is not None:
             self.cache_dir = osp.join(cache_dir, name2path(self.name))
@@ -121,9 +129,9 @@ class KFoldWrapper(object):
             # merging result
             if k == 0:
                 if len(X.shape) == 2:
-                    y_proba_cv = np.zeros((n_stratify, y_proba.shape[1]), dtype=np.float32)
+                    y_proba_cv = np.zeros((n_stratify, y_proba.shape[1]), dtype=self.dtype)
                 else:
-                    y_proba_cv = np.zeros((n_stratify, y_proba.shape[1], y_proba.shape[2]), dtype=np.float32)
+                    y_proba_cv = np.zeros((n_stratify, y_proba.shape[1], y_proba.shape[2]), dtype=self.dtype)
                 y_proba_train = y_proba_cv
             y_proba_train[val_idx, :] += y_proba
 
@@ -134,7 +142,7 @@ class KFoldWrapper(object):
             for vi, (prefix, X_test, _) in enumerate(test_sets):
                 # keep float32 data type, save half of memory and communication.
                 y_proba = est.predict_proba(X_test.reshape((-1, self.n_dims)),
-                                            cache_dir=self.cache_dir).astype('float32')
+                                            cache_dir=self.cache_dir).astype(self.dtype)
                 if not est.is_classification:
                     y_proba = y_proba[:, np.newaxis]
                 if len(X.shape) == 3:
@@ -171,7 +179,7 @@ class KFoldWrapper(object):
             x_tests = x_tests[0]
         proba_result = None
         for k, est in enumerate(self.fit_estimators):
-            y_proba = est.predict_proba(x_tests.reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
+            y_proba = est.predict_proba(x_tests.reshape((-1, self.n_dims)), cache_dir=self.cache_dir).astype(self.dtype)
             if not est.is_classification:
                 y_proba = y_proba[:, np.newaxis]  # add one dimension
             if len(x_tests.shape) == 3:
@@ -223,8 +231,8 @@ class KFoldWrapper(object):
 
 @ray.remote
 class DistributedKFoldWrapper(object):
-    def __init__(self, name, n_folds, est_class, seed=None,
-                 eval_metrics=None, cache_dir=None, keep_in_mem=None, est_args=None):
+    def __init__(self, name, n_folds, est_class, seed=None, dtype=np.float32,
+                 eval_metrics=None, cache_dir=None, keep_in_mem=None, est_args=None, cv_seed=None):
         """
         Initialize a KFoldWrapper.
 
@@ -245,6 +253,10 @@ class DistributedKFoldWrapper(object):
         self.est_class = est_class
         self.est_args = est_args if est_args is not None else {}
         self.seed = seed
+        if isinstance(seed, str):
+            self.seed = pickle.loads(seed)
+        self.dtype = dtype
+        self.cv_seed = cv_seed
         self.eval_metrics = eval_metrics if eval_metrics is not None else []
         if cache_dir is not None:
             self.cache_dir = osp.join(cache_dir, name2path(self.name))
@@ -302,10 +314,10 @@ class DistributedKFoldWrapper(object):
             cv = [(range(len(X)), range(len(X)))]
         else:
             if y_stratify is None:
-                skf = KFold(n_splits=self.n_folds, shuffle=True, random_state=self.seed)
+                skf = KFold(n_splits=self.n_folds, shuffle=True, random_state=self.cv_seed)
                 cv = [(t, v) for (t, v) in skf.split(range(n_stratify))]
             else:
-                skf = StratifiedKFold(n_splits=self.n_folds, shuffle=True, random_state=self.seed)
+                skf = StratifiedKFold(n_splits=self.n_folds, shuffle=True, random_state=self.cv_seed)
                 cv = [(t, v) for (t, v) in skf.split(range(n_stratify), y_stratify)]
         # K-fold fit
         y_proba_train = None
@@ -332,9 +344,9 @@ class DistributedKFoldWrapper(object):
             # merging result
             if k == 0:
                 if len(X.shape) == 2:
-                    y_proba_cv = np.zeros((n_stratify, y_proba.shape[1]), dtype=np.float32)
+                    y_proba_cv = np.zeros((n_stratify, y_proba.shape[1]), dtype=self.dtype)
                 else:
-                    y_proba_cv = np.zeros((n_stratify, y_proba.shape[1], y_proba.shape[2]), dtype=np.float32)
+                    y_proba_cv = np.zeros((n_stratify, y_proba.shape[1], y_proba.shape[2]), dtype=self.dtype)
                 y_proba_train = y_proba_cv
             y_proba_train[val_idx, :] += y_proba
 
@@ -344,7 +356,7 @@ class DistributedKFoldWrapper(object):
             # test
             for vi, (prefix, X_test, y_test) in enumerate(test_sets):
                 y_proba = est.predict_proba(X_test.reshape((-1, self.n_dims)),
-                                            cache_dir=self.cache_dir).astype('float32')
+                                            cache_dir=self.cache_dir).astype(self.dtype)
                 if not est.is_classification:
                     y_proba = y_proba[:, np.newaxis]
                 if len(X.shape) == 3:
@@ -381,7 +393,7 @@ class DistributedKFoldWrapper(object):
             x_tests = x_tests[0]
         proba_result = None
         for k, est in enumerate(self.fit_estimators):
-            y_proba = est.predict_proba(x_tests.reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
+            y_proba = est.predict_proba(x_tests.reshape((-1, self.n_dims)), cache_dir=self.cache_dir).astype(self.dtype)
             if not est.is_classification:
                 y_proba = y_proba[:, np.newaxis]  # add one dimension
             if len(x_tests.shape) == 3:
@@ -436,11 +448,265 @@ class DistributedKFoldWrapper(object):
                                               est_args=self.est_args)
 
 
+class SplittingKFoldWrapper(object):
+    def __init__(self, split=None, estimators=None, ei2wi=None, num_workers=None, seed=None, task='classification',
+                 eval_metrics=None, keep_in_mem=False, cv_seed=None, dtype=np.float32):
+        self.LOGGER = get_logger('estimators.splittingkfoldwrapper')
+        self.split = split
+        self.estimators = estimators
+        self.ei2wi = ei2wi
+        self.num_workers = num_workers
+        self.seed = seed
+        self.task = task
+        self.dtype = dtype
+        self.eval_metrics = eval_metrics
+        self.keep_in_mem = keep_in_mem
+        self.cv_seed = cv_seed
+
+    def splitting(self, ests):
+        assert isinstance(ests, list), 'estimators should be a list, but {}'.format(type(ests))
+        num_ests = len(ests)
+        should_split = False
+        if self.num_workers > num_ests / 2:
+            should_split = True
+        # if user do not want to split, and pass an argument split which is False, we don't split!
+        if self.split is False:
+            should_split = False
+        split_ests = []
+        split_group = []
+        # For debug, making it true directly
+        # should_split = True
+        # TODO: make splitting and no-splitting outputs same output for MNIST200 when seed=0
+        # Now the accuracy of the first fold of the first estimator different version are follows.
+        # Tests are conducted on cluster.
+        # ==========================================================
+        # distributed. splitting.    MNIST200, 12.55s(MGS) 89.8551%
+        # distributed. no-splitting. MNIST200, 15.34s(MGS) 80.4058%
+        # single machine.            MNIST200, 41.8s (MGS) 80.4058%
+        # ==========================================================
+        self.LOGGER.info('num_workers = {}, num_estimators = {}, should_split? {}'.format(self.num_workers,
+                                                                                          num_ests, should_split))
+        if self.cv_seed is None:
+            self.cv_seed = self.seed
+        if should_split:
+            i = 0
+            new_ei2wi = dict()
+            for ei, est in enumerate(ests):
+                wi, wei = self.ei2wi[ei]
+                num_trees = est.get_est_args().get('n_estimators', 500)
+                est_name = 'win - {} - estimator - {} - {}folds'.format(wi, wei, est.get_est_args().get('n_folds', 3))
+                if self.seed is not None:
+                    common_seed = (self.seed + hash("[estimator] {}".format(est_name))) % 1000000007
+                    seed = np.random.RandomState(common_seed)
+                    seed2 = np.random.RandomState(common_seed)
+                    seed2.randint(MAX_RAND_SEED, size=num_trees/2)
+                else:
+                    seed = np.random.mtrand._rand
+                    seed2 = np.random.mtrand._rand
+                    seed2.randint(MAX_RAND_SEED, size=num_trees/2)
+                self.LOGGER.debug('{} trees split to {} + {}'.format(num_trees, num_trees / 2, num_trees - num_trees/2))
+                args = est.get_est_args().copy()
+                args['n_estimators'] = num_trees / 2
+                sub_est1 = self._init_estimators(args, wi, wei, seed, self.cv_seed)
+                args['n_estimators'] = num_trees - num_trees / 2
+                sub_est2 = self._init_estimators(args, wi, wei, seed2, self.cv_seed)
+                split_ests.append(sub_est1)
+                split_ests.append(sub_est2)
+                split_group.append([i, i + 1])
+                new_ei2wi[i] = (wi, wei)
+                new_ei2wi[i + 1] = (wi, wei)
+                i += 2
+            self.ei2wi = new_ei2wi
+        else:
+            for ei, est in enumerate(ests):
+                wi, wei = self.ei2wi[ei]
+                gen_est = self._init_estimators(est.get_est_args().copy(), wi, wei, self.seed, self.cv_seed)
+                split_ests.append(gen_est)
+            split_group = [[i, ] for i in range(len(ests))]
+        return split_ests, split_group
+
+    def _init_estimators(self, args, wi, ei, seed, cv_seed):
+        est_args = args.copy()
+        est_name = 'win - {} - estimator - {} - {}folds'.format(wi, ei, est_args['n_folds'])
+        n_folds = int(est_args['n_folds'])
+        est_args.pop('n_folds')
+        est_type = est_args['est_type']
+        est_args.pop('est_type')
+        # seed
+        if seed is not None and not isinstance(seed, np.random.RandomState):
+            seed = (seed + hash("[estimator] {}".format(est_name))) % 1000000007
+        if isinstance(seed, np.random.RandomState):
+            seed = pickle.dumps(seed)
+        # we must keep the cross validation seed same, but keep the seed not the same
+        # so that no duplicate forest are generated, but exactly same cross validation datasets are generated.
+        if cv_seed is not None and not isinstance(cv_seed, np.random.RandomState):
+            cv_seed = (cv_seed + hash("[estimator] {}".format(est_name))) % 1000000007
+        else:
+            cv_seed = (0 + hash("[estimator] {}".format(est_name))) % 1000000007
+        # print('seed, cv_seed = {}, {}'.format(pickle.loads(seed) if isinstance(seed, str) else seed, cv_seed))
+        return get_dist_estimator_kfold(name=est_name,
+                                        n_folds=n_folds,
+                                        task=self.task,
+                                        est_type=est_type,
+                                        eval_metrics=self.eval_metrics,
+                                        seed=seed,
+                                        dtype=self.dtype,
+                                        keep_in_mem=self.keep_in_mem,
+                                        est_args=est_args,
+                                        cv_seed=cv_seed)
+
+    def fit(self, x_wins_train, y_win):
+        split_ests, split_group = self.splitting(self.estimators)
+        self.LOGGER.debug('split_group = {}'.format(split_group))
+        self.LOGGER.debug('ei2wi = {}'.format(self.ei2wi))
+        ests_output = [est.fit_transform.remote(x_wins_train[self.ei2wi[ei][0]], y_win[self.ei2wi[ei][0]],
+                       y_win[self.ei2wi[ei][0]][:, 0]) for ei, est in enumerate(split_ests)]
+        est_group = []
+        for grp in split_group:
+            if len(grp) == 2:
+                # est_group.append(ests_output[grp[0]])
+                # est_group.append(ests_output[grp[1]])
+                # Tree reduce
+                est_group.append(merge.remote(ests_output[grp[0]], ests_output[grp[1]]))
+            else:
+                est_group.append(ests_output[grp[0]])
+        est_group_result = ray.get(est_group)
+        return est_group_result
 
 
+@ray.remote
+def merge(tup_1, tup_2):
+    """
+    Merge 2 tuple of (y_proba_train, y_proba_tests).
+
+    :param tup_1: tuple like (y_proba_train, y_proba_tests)
+    :param tup_2: tuple like (y_proba_train, y_proba_tests)
+    :return:
+    """
+    tests = []
+    for i in range(len(tup_1[1])):
+        tests.append((tup_1[1][i] + tup_2[1][i])/2.0)
+    print("t1 = {} add t2 = {} equals to {}".format(tup_1[0].dtype, tup_2[0].dtype, ((tup_1[0] + tup_2[0]) / 2.0).dtype))
+    print("t1 = {} add t2 = {} equals to {}".format(tup_1[0], tup_2[0], ((tup_1[0] + tup_2[0])/2.0)))
+    return (tup_1[0] + tup_2[0])/2.0, tests
 
 
+def est_class_from_type(task, est_type):
+    """
+    Get estimator class from task ('classification' or 'regression') and estimator type (a string).
+
+    :param task: what task does this estimator to execute ('classification' or 'regression')
+    :param est_type: estimator type (a string)
+    :return: a concrete estimator instance
+    """
+    if task == 'classification':
+        if est_type == 'FLCRF':
+            return FLCRFClassifier
+        if est_type == 'FLRF':
+            return FLRFClassifier
+        if est_type == 'FLGBDT':
+            return FLGBDTClassifier
+        if est_type == 'FLXGB':
+            return FLXGBoostClassifier
+        if est_type == 'FLLGBM':
+            raise FLLGBMClassifier
+        raise ValueError('Unknown Estimator: {}'.format(est_type))
+    elif task == 'regression':
+        if est_type == 'FLCRF':
+            return FLCRFRegressor
+        if est_type == 'FLRF':
+            return FLRFRegressor
+        if est_type == 'FLGBDT':
+            return FLGBDTRegressor
+        if est_type == 'FLXGB':
+            return FLXGBoostRegressor
+        if est_type == 'FLLGBM':
+            return FLLGBMRegressor
+        raise ValueError('Unknown Estimator: {}'.format(est_type))
+    else:
+        raise ValueError('Unknown task: {}'.format(task))
 
 
+def get_estimator(name, task, est_type, est_args):
+    """
+    Get an estimator.
 
+    :param name: estimator name
+    :param task: what task does this estimator to execute ('classification' or 'regression')
+    :param est_type: estimator type (a string)
+    :param est_args: estimator arguments
+    :return: a concrete estimator instance
+    """
+    est_class = est_class_from_type(task, est_type)
+    return est_class(name, est_args)
+
+
+def get_estimator_kfold(name, n_folds=3, task='classification', est_type='FLRF', eval_metrics=None, seed=None,
+                        dtype=np.float32, cache_dir=None, keep_in_mem=True, est_args=None):
+    """
+    A factory method to get a k-fold estimator.
+
+    :param name: estimator name
+    :param n_folds: how many folds to execute in cross validation
+    :param task: what task does this estimator to execute ('classification' or 'regression')
+    :param est_type: estimator type (a string)
+    :param eval_metrics: evaluation metrics. [Default: Accuracy (classification), MSE (regression)]
+    :param seed: random seed
+    :param dtype: data type
+    :param cache_dir: data cache dir to cache intermediate data
+    :param keep_in_mem: whether keep the model in memory
+    :param est_args: estimator arguments
+    :return: a KFoldWrapper instance of concrete estimator
+    """
+    est_class = est_class_from_type(task, est_type)
+    if eval_metrics is None:
+        if task == 'classification':
+            eval_metrics = [Accuracy('accuracy')]
+        else:
+            eval_metrics = [MSE('MSE')]
+    return KFoldWrapper(name,
+                        n_folds,
+                        est_class,
+                        seed=seed,
+                        dtype=dtype,
+                        eval_metrics=eval_metrics,
+                        cache_dir=cache_dir,
+                        keep_in_mem=keep_in_mem,
+                        est_args=est_args)
+
+
+def get_dist_estimator_kfold(name, n_folds=3, task='classification', est_type='RF', eval_metrics=None, seed=None,
+                             dtype=np.float32, cache_dir=None, keep_in_mem=True, est_args=None, cv_seed=None):
+    """
+    A factory method to get a distributed k-fold estimator.
+
+    :param name: estimator name
+    :param n_folds: how many folds to execute in cross validation
+    :param task: what task does this estimator to execute ('classification' or 'regression')
+    :param est_type: estimator type (a string)
+    :param eval_metrics: evaluation metrics. [Default: Accuracy (classification), MSE (regression)]
+    :param seed: random seed
+    :param dtype: data type
+    :param cache_dir: data cache dir to cache intermediate data
+    :param keep_in_mem: whether keep the model in memory
+    :param est_args: estimator arguments
+    :param cv_seed: random seed for cross validation
+    :return: a KFoldWrapper instance of concrete estimator
+    """
+    est_class = est_class_from_type(task, est_type)
+    if eval_metrics is None:
+        if task == 'classification':
+            eval_metrics = [Accuracy('accuracy')]
+        else:
+            eval_metrics = [MSE('MSE')]
+    return DistributedKFoldWrapper.remote(name,
+                                          n_folds,
+                                          est_class,
+                                          seed=seed,
+                                          dtype=dtype,
+                                          eval_metrics=eval_metrics,
+                                          cache_dir=cache_dir,
+                                          keep_in_mem=keep_in_mem,
+                                          est_args=est_args,
+                                          cv_seed=cv_seed)
 

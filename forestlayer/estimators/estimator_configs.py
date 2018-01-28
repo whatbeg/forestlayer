@@ -7,6 +7,16 @@ Estimator Configuration Class Definition.
 # Authors: Qiu Hu <huqiu00#163.com>
 # License: Apache-2.0
 
+__all__ = ['EstimatorConfig',
+           'MultiClassXGBConfig',
+           'BinClassXGBConfig',
+           'RandomForestConfig',
+           'ExtraRandomForestConfig',
+           'GBDTConfig',
+           'XGBRegressorConfig',
+           'LGBMRegressorConfig',
+           'Basic4x2']
+
 from ..utils.log_utils import get_logger
 
 
