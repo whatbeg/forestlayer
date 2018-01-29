@@ -23,7 +23,7 @@ MAX_RAND_SEED = np.iinfo(np.int32).max
 
 class KFoldWrapper(object):
     def __init__(self, name, n_folds, est_class, seed=None, dtype=np.float32,
-                 eval_metrics=None, cache_dir=None, keep_in_mem=None, est_args=None):
+                 eval_metrics=None, cache_dir=None, keep_in_mem=None, est_args=None, cv_seed=None):
         """
         Initialize a KFoldWrapper.
 
@@ -43,6 +43,10 @@ class KFoldWrapper(object):
         self.est_args = est_args if est_args is not None else {}
         self.seed = seed
         self.dtype = dtype
+        # TODO: enable cv_seed
+        self.cv_seed = cv_seed
+        if self.cv_seed is None:
+            self.cv_seed = self.seed
         self.eval_metrics = eval_metrics if eval_metrics is not None else []
         if cache_dir is not None:
             self.cache_dir = osp.join(cache_dir, name2path(self.name))
@@ -257,6 +261,8 @@ class DistributedKFoldWrapper(object):
             self.seed = pickle.loads(seed)
         self.dtype = dtype
         self.cv_seed = cv_seed
+        if self.cv_seed is None:
+            self.cv_seed = self.seed
         self.eval_metrics = eval_metrics if eval_metrics is not None else []
         if cache_dir is not None:
             self.cache_dir = osp.join(cache_dir, name2path(self.name))
@@ -467,7 +473,7 @@ class SplittingKFoldWrapper(object):
         assert isinstance(ests, list), 'estimators should be a list, but {}'.format(type(ests))
         num_ests = len(ests)
         should_split = False
-        if self.num_workers > num_ests / 2:
+        if self.num_workers >= num_ests / 2:
             should_split = True
         # if user do not want to split, and pass an argument split which is False, we don't split!
         if self.split is False:
@@ -559,8 +565,14 @@ class SplittingKFoldWrapper(object):
         split_ests, split_group = self.splitting(self.estimators)
         self.LOGGER.debug('split_group = {}'.format(split_group))
         self.LOGGER.debug('ei2wi = {}'.format(self.ei2wi))
-        ests_output = [est.fit_transform.remote(x_wins_train[self.ei2wi[ei][0]], y_win[self.ei2wi[ei][0]],
-                       y_win[self.ei2wi[ei][0]][:, 0]) for ei, est in enumerate(split_ests)]
+        x_wins_train_obj_ids = [ray.put(x_wins_train[wi]) for wi in range(len(x_wins_train))]
+        y_win_obj_ids = [ray.put(y_win[wi]) for wi in range(len(y_win))]
+        y_stratify = [ray.put(y_win[wi][:, 0]) for wi in range(len(y_win))]
+        ests_output = [est.fit_transform.remote(x_wins_train_obj_ids[self.ei2wi[ei][0]],
+                                                y_win_obj_ids[self.ei2wi[ei][0]],
+                       y_stratify[self.ei2wi[ei][0]]) for ei, est in enumerate(split_ests)]
+        # ests_output = [est.fit_transform.remote(x_wins_train[self.ei2wi[ei][0]], y_win[self.ei2wi[ei][0]],
+        #                y_win[self.ei2wi[ei][0]][:, 0]) for ei, est in enumerate(split_ests)]
         est_group = []
         for grp in split_group:
             if len(grp) == 2:
@@ -587,7 +599,7 @@ def merge(tup_1, tup_2):
     for i in range(len(tup_1[1])):
         tests.append((tup_1[1][i] + tup_2[1][i])/2.0)
     print("t1 = {} add t2 = {} equals to {}".format(tup_1[0].dtype, tup_2[0].dtype, ((tup_1[0] + tup_2[0]) / 2.0).dtype))
-    print("t1 = {} add t2 = {} equals to {}".format(tup_1[0], tup_2[0], ((tup_1[0] + tup_2[0])/2.0)))
+    # print("t1 = {} add t2 = {} equals to {}".format(tup_1[0], tup_2[0], ((tup_1[0] + tup_2[0])/2.0)))
     return (tup_1[0] + tup_2[0])/2.0, tests
 
 
