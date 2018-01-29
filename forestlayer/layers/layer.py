@@ -13,7 +13,7 @@ import datetime
 import os.path as osp
 try:
     import cPickle as pickle
-except:
+except ImportError:
     import pickle
 import ray
 from ..utils.log_utils import get_logger, list2str
@@ -61,7 +61,7 @@ class Layer(object):
         str2dtype = {'float16': np.float16, 'float32': np.float32, 'float64': np.float64}
         if dtype is None:
             dtype = np.float32
-        elif isinstance(dtype, str):
+        elif isinstance(dtype, basestring):
             dtype = str2dtype[dtype]
         self.dtype = dtype
         # num of workers, the basis of the split, default is None, which means un-set.
@@ -1078,7 +1078,8 @@ class CascadeLayer(Layer):
     def __call__(self, inputs, **kwargs):
         self.call(inputs, **kwargs)
 
-    def _concat(self, x, depth):
+    @staticmethod
+    def _concat(x, depth):
         """
         Concatenation inner method, to make multiple inputs to be single input, so that to feed it into classifiers.
 
@@ -1599,8 +1600,8 @@ class AutoGrowingCascadeLayer(Layer):
         group_starts, group_ends, group_dims = [], [], []
         # train set
         for i, x_train in enumerate(x_trains):
-            assert x_train.shape[0] == n_trains, 'x_train.shape[0]={} not equal to' \
-                                                 ' n_trains={}'.format(x_train.shape[0], n_trains)
+            assert x_train.shape[0] == n_trains, ('x_train.shape[0]={} not equal to'
+                                                  ' n_trains={}'.format(x_train.shape[0], n_trains))
             x_train = x_train.reshape(n_trains, -1)
             group_dims.append(x_train.shape[1])
             group_starts.append(i if i == 0 else group_ends[i - 1])
@@ -2104,7 +2105,7 @@ def get_eval_metrics(metrics, task='classification', name=''):
             eval_metrics = [Accuracy(name)]
     elif isinstance(metrics, Metrics):
         eval_metrics = [metrics]
-    elif isinstance(metrics, str):
+    elif isinstance(metrics, basestring):
         if metrics == 'accuracy':
             eval_metrics = [Accuracy(name)]
         elif metrics == 'auc':

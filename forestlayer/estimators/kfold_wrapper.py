@@ -10,7 +10,7 @@ import numpy as np
 import ray
 try:
     import cPickle as pickle
-except:
+except ImportError:
     import pickle
 from sklearn.model_selection import KFold, StratifiedKFold
 from xgboost.sklearn import XGBClassifier, XGBRegressor
@@ -257,7 +257,7 @@ class DistributedKFoldWrapper(object):
         self.est_class = est_class
         self.est_args = est_args if est_args is not None else {}
         self.seed = seed
-        if isinstance(seed, str):
+        if isinstance(seed, basestring):
             self.seed = pickle.loads(seed)
         self.dtype = dtype
         self.cv_seed = cv_seed
@@ -542,7 +542,7 @@ class SplittingKFoldWrapper(object):
         if seed is not None and not isinstance(seed, np.random.RandomState):
             seed = (seed + hash("[estimator] {}".format(est_name))) % 1000000007
         if isinstance(seed, np.random.RandomState):
-            seed = pickle.dumps(seed)
+            seed = pickle.dumps(seed, pickle.HIGHEST_PROTOCOL)
         # we must keep the cross validation seed same, but keep the seed not the same
         # so that no duplicate forest are generated, but exactly same cross validation datasets are generated.
         if cv_seed is not None and not isinstance(cv_seed, np.random.RandomState):
@@ -598,7 +598,7 @@ def merge(tup_1, tup_2):
     tests = []
     for i in range(len(tup_1[1])):
         tests.append((tup_1[1][i] + tup_2[1][i])/2.0)
-    print("t1 = {} add t2 = {} equals to {}".format(tup_1[0].dtype, tup_2[0].dtype, ((tup_1[0] + tup_2[0]) / 2.0).dtype))
+    # print("t1 = {} add t2 = {} equals to {}".format(tup_1[0].dtype, tup_2[0].dtype, ((tup_1[0] + tup_2[0]) / 2.0).dtype))
     # print("t1 = {} add t2 = {} equals to {}".format(tup_1[0], tup_2[0], ((tup_1[0] + tup_2[0])/2.0)))
     return (tup_1[0] + tup_2[0])/2.0, tests
 
