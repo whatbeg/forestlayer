@@ -220,7 +220,6 @@ class MultiGrainScanLayer(Layer):
         :param x:
         :return:
         """
-        x = x.astype(self.dtype)
         return window.fit_transform(x)
 
     def _init_estimator(self, est_arguments, wi, ei):
@@ -292,7 +291,10 @@ class MultiGrainScanLayer(Layer):
                     est = self._init_estimator(est, wi, ei)
                 ests_for_win[ei] = est
             if self.distribute:
-                y_proba_trains = ray.get([est.fit_transform.remote(x_wins_train[wi], y_win, y_win[:, 0])
+                x_wins_train_obj_id = ray.put(x_wins_train[wi])
+                y_win_obj_id = ray.put(y_win)
+                y_stratify = ray.put(y_win[:, 0])
+                y_proba_trains = ray.get([est.fit_transform.remote(x_wins_train_obj_id, y_win_obj_id, y_stratify)
                                           for est in ests_for_win])
             else:
                 y_proba_trains = [est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0]) for est in ests_for_win]
@@ -327,6 +329,7 @@ class MultiGrainScanLayer(Layer):
         for win in self.windows:
             x_wins_train.append(self.scan(win, x_train))
         self.LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
+        self.LOGGER.debug('Scaned dtype for X_wins of train: {}'.format([win.dtype for win in x_wins_train]))
         x_win_est_train = []
         ests = []
         est_offsets = [0, ]
@@ -346,6 +349,8 @@ class MultiGrainScanLayer(Layer):
             _, nhs[wi], nws[wi], _ = x_wins_train[wi].shape
             x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
             y_win[wi] = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
+            self.LOGGER.debug('x_wins_train[{}] size={}, dtype={}'.format(wi, getmbof(x_wins_train[wi]), x_wins_train[wi].dtype))
+            self.LOGGER.debug('y_win[{}] size={}, dtype={}'.format(wi, getmbof(y_win[wi]), y_win[wi].dtype))
         splitting = SplittingKFoldWrapper(split=self.split, estimators=ests, ei2wi=ei2wi,
                                           num_workers=self.num_workers, seed=self.seed,
                                           task=self.task, eval_metrics=self.eval_metrics,
@@ -484,8 +489,6 @@ class MultiGrainScanLayer(Layer):
         """
         if x_test is None:
             return self.fit(x_train, y_train), None
-        if self.distribute and self.dis_level == 1:
-            return self._distribute_fit_transform(x_train, y_train, x_test, y_test)
         x_train, y_train = self._check_input(x_train, y_train)
         x_test, y_test = self._check_input(x_test, y_test)
         self.LOGGER.debug('x_train size = {}, x_test size = {}'.format(getmbof(x_train[:]), getmbof(x_test[:])))
@@ -496,6 +499,8 @@ class MultiGrainScanLayer(Layer):
             self.LOGGER.info("Cache hit! Loading train from {}, skip fit!".format(train_path))
             self.LOGGER.info("Cache hit! Loading test from {}, skip fit!".format(test_path))
             return load_disk_cache(train_path), load_disk_cache(test_path)
+        if self.distribute and self.dis_level >= 1:
+            return self._distribute_fit_transform(x_train, y_train, x_test, y_test)
         # Construct test sets
         x_wins_train = []
         x_wins_test = []
@@ -533,7 +538,12 @@ class MultiGrainScanLayer(Layer):
             self.LOGGER.debug('x_wins_train[{}].size = {}'.format(wi, getmbof(x_wins_train[wi])))
             self.LOGGER.debug('y_win.size = {}'.format(getmbof(y_win)))
             if self.distribute:
-                y_proba_train_tests = ray.get([est.fit_transform.remote(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
+                x_wins_train_obj_id = ray.put(x_wins_train[wi])
+                y_win_obj_id = ray.put(y_win)
+                y_stratify = ray.put(y_win[:, 0])
+                test_sets_obj_id = ray.put(test_sets)
+                y_proba_train_tests = ray.get([est.fit_transform.remote(x_wins_train_obj_id, y_win_obj_id,
+                                                                        y_stratify, test_sets_obj_id)
                                                for est in ests_for_win])
             else:
                 y_proba_train_tests = [est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
@@ -1151,7 +1161,8 @@ class CascadeLayer(Layer):
                             seed=seed,
                             dtype=self.dtype,
                             keep_in_mem=self.keep_in_mem,
-                            est_args=est_args)
+                            est_args=est_args,
+                            cv_seed=seed)
 
     def fit(self, x_train, y_train):
         """
@@ -1182,7 +1193,13 @@ class CascadeLayer(Layer):
         # fit and transform
         y_stratify = y_train if self.task == 'classification' else None
         if self.distribute:
-            y_proba_trains = ray.get([est.fit_transform.remote(x_train, y_train, y_stratify, test_sets=None)
+            x_train_obj_id = ray.put(x_train)
+            y_train_obj_id = ray.put(y_train)
+            y_stratify_obj_id = ray.put(y_stratify)
+            y_proba_trains = ray.get([est.fit_transform.remote(x_train_obj_id,
+                                                               y_train_obj_id,
+                                                               y_stratify_obj_id,
+                                                               test_sets=None)
                                       for est in estimators])
         else:
             y_proba_trains = [est.fit_transform(x_train, y_train, y_stratify, test_sets=None)
@@ -1252,8 +1269,12 @@ class CascadeLayer(Layer):
         # fit and transform
         y_stratify = y_train if self.task == 'classification' else None
         if self.distribute:
-            y_proba_train_tests = ray.get([est.fit_transform.remote(x_train, y_train, y_stratify,
-                                                                    test_sets=[('test', x_test, y_test)])
+            x_train_obj_id = ray.put(x_train)
+            y_train_obj_id = ray.put(y_train)
+            y_stratify_obj_id = ray.put(y_stratify)
+            test_sets_obj_id = ray.put([('test', x_test, y_test)])
+            y_proba_train_tests = ray.get([est.fit_transform.remote(x_train_obj_id, y_train_obj_id, y_stratify_obj_id,
+                                                                    test_sets=test_sets_obj_id)
                                            for est in estimators])
         else:
             y_proba_train_tests = [est.fit_transform(x_train, y_train, y_stratify,
