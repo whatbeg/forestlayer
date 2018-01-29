@@ -571,13 +571,32 @@ class SplittingKFoldWrapper(object):
         ests_output = [est.fit_transform.remote(x_wins_train_obj_ids[self.ei2wi[ei][0]],
                                                 y_win_obj_ids[self.ei2wi[ei][0]],
                        y_stratify[self.ei2wi[ei][0]]) for ei, est in enumerate(split_ests)]
-        # ests_output = [est.fit_transform.remote(x_wins_train[self.ei2wi[ei][0]], y_win[self.ei2wi[ei][0]],
-        #                y_win[self.ei2wi[ei][0]][:, 0]) for ei, est in enumerate(split_ests)]
         est_group = []
         for grp in split_group:
             if len(grp) == 2:
-                # est_group.append(ests_output[grp[0]])
-                # est_group.append(ests_output[grp[1]])
+                # Tree reduce
+                est_group.append(merge.remote(ests_output[grp[0]], ests_output[grp[1]]))
+            else:
+                est_group.append(ests_output[grp[0]])
+        est_group_result = ray.get(est_group)
+        return est_group_result
+
+    def fit_transform(self, x_wins_train, y_win, test_sets):
+        split_ests, split_group = self.splitting(self.estimators)
+        self.LOGGER.debug('split_group = {}'.format(split_group))
+        self.LOGGER.debug('new ei2wi = {}'.format(self.ei2wi))
+        x_wins_train_obj_ids = [ray.put(x_wins_train[wi]) for wi in range(len(x_wins_train))]
+        y_win_obj_ids = [ray.put(y_win[wi]) for wi in range(len(y_win))]
+        y_stratify = [ray.put(y_win[wi][:, 0]) for wi in range(len(y_win))]
+        test_sets_obj_ids = [ray.put(test_sets[wi]) for wi in range(len(test_sets))]
+        ests_output = [est.fit_transform.remote(x_wins_train_obj_ids[self.ei2wi[ei][0]],
+                                                y_win_obj_ids[self.ei2wi[ei][0]], y_stratify[self.ei2wi[ei][0]],
+                                                test_sets=test_sets_obj_ids[self.ei2wi[ei][0]])
+                       for ei, est in enumerate(split_ests)]
+        # ests_output: (y_proba_train, y_proba_tests)
+        est_group = []
+        for grp in split_group:
+            if len(grp) == 2:
                 # Tree reduce
                 est_group.append(merge.remote(ests_output[grp[0]], ests_output[grp[1]]))
             else:
@@ -654,7 +673,7 @@ def get_estimator(name, task, est_type, est_args):
 
 
 def get_estimator_kfold(name, n_folds=3, task='classification', est_type='FLRF', eval_metrics=None, seed=None,
-                        dtype=np.float32, cache_dir=None, keep_in_mem=True, est_args=None):
+                        dtype=np.float32, cache_dir=None, keep_in_mem=True, est_args=None, cv_seed=None):
     """
     A factory method to get a k-fold estimator.
 
@@ -684,7 +703,8 @@ def get_estimator_kfold(name, n_folds=3, task='classification', est_type='FLRF',
                         eval_metrics=eval_metrics,
                         cache_dir=cache_dir,
                         keep_in_mem=keep_in_mem,
-                        est_args=est_args)
+                        est_args=est_args,
+                        cv_seed=cv_seed)
 
 
 def get_dist_estimator_kfold(name, n_folds=3, task='classification', est_type='RF', eval_metrics=None, seed=None,

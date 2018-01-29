@@ -356,11 +356,6 @@ class MultiGrainScanLayer(Layer):
                                           task=self.task, eval_metrics=self.eval_metrics,
                                           keep_in_mem=self.keep_in_mem, dtype=self.dtype)
         ests_output = splitting.fit(x_wins_train, y_win)
-        # ests_output = ray.get([est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]],
-        #                        y_win[ei2wi[ei]][:, 0]) for ei, est in enumerate(ests)])
-        # print(ests_output)
-        # for esto in ests_output:
-        #     print(esto[0].shape)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             win_est_train = []
             # X_wins[wi] = (60000, 11, 11, 49)
@@ -422,11 +417,11 @@ class MultiGrainScanLayer(Layer):
             if not isinstance(ests_for_win, (list, tuple)):
                 ests_for_win = [ests_for_win]
             for ei, est in enumerate(ests_for_win):
-                if isinstance(est, EstimatorConfig):
-                    est = self._init_estimator(est, wi, ei)
-                ests_for_win[ei] = est
+                # if isinstance(est, EstimatorConfig):
+                #     est = self._init_estimator(est, wi, ei)
+                # ests_for_win[ei] = est
                 ests.append(est)
-                ei2wi[est_offsets[wi] + ei] = wi
+                ei2wi[est_offsets[wi] + ei] = (wi, ei)
             est_offsets.append(est_offsets[-1] + len(ests_for_win))
             _, nhs[wi], nws[wi], _ = x_wins_train[wi].shape
             x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
@@ -434,11 +429,19 @@ class MultiGrainScanLayer(Layer):
             y_win[wi] = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
             y_win_test[wi] = None if y_test is None else y_test[:, np.newaxis].repeat(x_wins_test[wi].shape[1], axis=1)
             test_sets[wi] = [('testOfWin{}'.format(wi), x_wins_test[wi], y_win_test[wi])]
-        self.LOGGER.info('est_offsets = {}'.format(est_offsets))
-        self.LOGGER.info('ei2wi = {}'.format(ei2wi))
-        ests_output = ray.get([est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]],
-                                                        y_win[ei2wi[ei]][:, 0], test_sets[ei2wi[ei]])
-                               for ei, est in enumerate(ests)])
+            self.LOGGER.debug(
+                'x_wins_train[{}] size={}, dtype={}'.format(wi, getmbof(x_wins_train[wi]), x_wins_train[wi].dtype))
+            self.LOGGER.debug('y_win[{}] size={}, dtype={}'.format(wi, getmbof(y_win[wi]), y_win[wi].dtype))
+        self.LOGGER.debug('est_offsets = {}'.format(est_offsets))
+        self.LOGGER.debug('ei2wi = {}'.format(ei2wi))
+        splitting = SplittingKFoldWrapper(split=self.split, estimators=ests, ei2wi=ei2wi,
+                                          num_workers=self.num_workers, seed=self.seed,
+                                          task=self.task, eval_metrics=self.eval_metrics,
+                                          keep_in_mem=self.keep_in_mem, dtype=self.dtype)
+        ests_output = splitting.fit_transform(x_wins_train, y_win, test_sets)
+        # ests_output = ray.get([est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]],
+        #                                                 y_win[ei2wi[ei]][:, 0], test_sets[ei2wi[ei]])
+        #                        for ei, est in enumerate(ests)])
         # print(list_type2str(self.est_for_windows, 2))
         for wi, ests_for_win in enumerate(self.est_for_windows):
             win_est_train = []
