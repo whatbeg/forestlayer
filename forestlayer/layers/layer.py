@@ -21,7 +21,7 @@ from ..utils.layer_utils import check_list_depth
 from ..utils.storage_utils import check_dir, getmbof, output_disk_path, load_disk_cache, save_disk_cache, save_model
 from ..utils.metrics import Metrics, Accuracy, AUC, MSE, RMSE
 from ..estimators import get_estimator_kfold, get_dist_estimator_kfold, EstimatorConfig
-from ..estimators.kfold_wrapper import SplittingKFoldWrapper
+from ..estimators.kfold_wrapper import SplittingKFoldWrapper, CascadeSplittingKFoldWrapper
 
 
 class Layer(object):
@@ -351,10 +351,10 @@ class MultiGrainScanLayer(Layer):
             y_win[wi] = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
             self.LOGGER.debug('x_wins_train[{}] size={}, dtype={}'.format(wi, getmbof(x_wins_train[wi]), x_wins_train[wi].dtype))
             self.LOGGER.debug('y_win[{}] size={}, dtype={}'.format(wi, getmbof(y_win[wi]), y_win[wi].dtype))
-        splitting = SplittingKFoldWrapper(split=self.split, estimators=ests, ei2wi=ei2wi,
+        splitting = SplittingKFoldWrapper(dis_level=self.dis_level, estimators=ests, ei2wi=ei2wi,
                                           num_workers=self.num_workers, seed=self.seed,
                                           task=self.task, eval_metrics=self.eval_metrics,
-                                          keep_in_mem=self.keep_in_mem, dtype=self.dtype)
+                                          keep_in_mem=self.keep_in_mem, cv_seed=self.seed, dtype=self.dtype)
         ests_output = splitting.fit(x_wins_train, y_win)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             win_est_train = []
@@ -434,10 +434,10 @@ class MultiGrainScanLayer(Layer):
             self.LOGGER.debug('y_win[{}] size={}, dtype={}'.format(wi, getmbof(y_win[wi]), y_win[wi].dtype))
         self.LOGGER.debug('est_offsets = {}'.format(est_offsets))
         self.LOGGER.debug('ei2wi = {}'.format(ei2wi))
-        splitting = SplittingKFoldWrapper(split=self.split, estimators=ests, ei2wi=ei2wi,
+        splitting = SplittingKFoldWrapper(dis_level=self.dis_level, estimators=ests, ei2wi=ei2wi,
                                           num_workers=self.num_workers, seed=self.seed,
                                           task=self.task, eval_metrics=self.eval_metrics,
-                                          keep_in_mem=self.keep_in_mem, dtype=self.dtype)
+                                          keep_in_mem=self.keep_in_mem, cv_seed=self.seed, dtype=self.dtype)
         ests_output = splitting.fit_transform(x_wins_train, y_win, test_sets)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             win_est_train = []
@@ -458,6 +458,7 @@ class MultiGrainScanLayer(Layer):
                 if len(y_proba_tup) == 3 and self.verbose_dis:
                     for log in y_proba_tup[2]:
                         print(log)
+            # TODO: improving keep estimators.
             if self.keep_in_mem:
                 self.est_for_windows[wi] = ests_for_win
             else:
@@ -1002,7 +1003,7 @@ class ConcatLayer(Layer):
 class CascadeLayer(Layer):
     def __init__(self, batch_size=None, dtype=None, name=None, task='classification', est_configs=None,
                  layer_id='anonymous', n_classes=None, keep_in_mem=False, data_save_dir=None, model_save_dir=None,
-                 metrics=None, seed=None, distribute=False, verbose_dis=False):
+                 num_workers=None, metrics=None, seed=None, distribute=False, verbose_dis=False, dis_level=0):
         """Cascade Layer.
         A cascade layer contains several estimators, it accepts single input, go through these estimators, produces
         predicted probability by every estimators, and stacks them together for next cascade layer.
@@ -1020,6 +1021,7 @@ class CascadeLayer(Layer):
                             TODO: support dump model to disk to save memory
         :param data_save_dir: directory to save intermediate data into
         :param model_save_dir: directory to save fit estimators into
+        :param num_workers: number of workers in the cluster
         :param metrics: str or user-defined Metrics object, evaluation metrics used in training model and evaluating
                          testing data.
                         Support: 'accuracy', 'auc', 'mse', 'rmse',
@@ -1031,6 +1033,12 @@ class CascadeLayer(Layer):
                            and write `ray.init(<redis-address>)` at the beginning of the main program.
         :param verbose_dis: boolean, whether print logging info that generated on different worker machines.
                             default = False.
+        :param dis_level: distributed level, or parallelization level, 0 / 1 / 2
+                           0 means lowest parallelization level, parallelization is len(self.est_configs).
+                           1 means we will split the forests in some condition to making more full use of
+                            cluster resources, so the parallelization may be larger than len(self.est_configs).
+                           2 means that anyway we must split forests.
+                           Now 2 is the HIGHEST_DISLEVEL
 
         # Properties
             eval_metrics: evaluation metrics
@@ -1064,6 +1072,8 @@ class CascadeLayer(Layer):
         self.seed = seed
         self.distribute = distribute
         self.verbose_dis = verbose_dis
+        self.dis_level = dis_level
+        self.num_workers = num_workers
         self.larger_better = True
         self.metrics = metrics
         self.eval_metrics = get_eval_metrics(self.metrics, self.task, self.name)
@@ -1188,23 +1198,34 @@ class CascadeLayer(Layer):
             n_classes = 1
         x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=np.float32)
         eval_proba_train = np.zeros((n_trains, n_classes), dtype=np.float32)
-        # fit estimators, get probas (classification) or targets (regression)
-        estimators = []
-        for ei in range(self.n_estimators):
-            est = self._init_estimators(self.layer_id, ei)
-            estimators.append(est)
         # fit and transform
         y_stratify = y_train if self.task == 'classification' else None
         if self.distribute:
-            x_train_obj_id = ray.put(x_train)
-            y_train_obj_id = ray.put(y_train)
-            y_stratify_obj_id = ray.put(y_stratify)
-            y_proba_trains = ray.get([est.fit_transform.remote(x_train_obj_id,
-                                                               y_train_obj_id,
-                                                               y_stratify_obj_id,
-                                                               test_sets=None)
-                                      for est in estimators])
+            # x_train_obj_id = ray.put(x_train)
+            # y_train_obj_id = ray.put(y_train)
+            # y_stratify_obj_id = ray.put(y_stratify)
+            # y_proba_trains = ray.get([est.fit_transform.remote(x_train_obj_id,
+            #                                                    y_train_obj_id,
+            #                                                    y_stratify_obj_id,
+            #                                                    test_sets=None)
+            #                           for est in estimators])
+            splitting = CascadeSplittingKFoldWrapper(dis_level=self.dis_level, estimators=self.est_args,
+                                                     num_workers=self.num_workers, seed=self.seed, task=self.task,
+                                                     eval_metrics=self.eval_metrics, keep_in_mem=self.keep_in_mem,
+                                                     cv_seed=self.seed, dtype=self.dtype, layer_id=self.layer_id)
+            y_proba_trains, split_ests, split_group = splitting.fit_transform(x_train, y_train, y_stratify,
+                                                                              test_sets=None)
+            # TODO: fill the estimators, utilize est_group
+            if self.keep_in_mem:
+                estimators = split_ests
+            else:
+                estimators = None
         else:
+            # fit estimators, get probas (classification) or targets (regression)
+            estimators = []
+            for ei in range(self.n_estimators):
+                est = self._init_estimators(self.layer_id, ei)
+                estimators.append(est)
             y_proba_trains = [est.fit_transform(x_train, y_train, y_stratify, test_sets=None)
                               for est in estimators]
         for ei, y_proba_train_tup in enumerate(y_proba_trains):
@@ -1264,25 +1285,37 @@ class CascadeLayer(Layer):
         x_proba_test = np.zeros((n_tests, n_classes * self.n_estimators), dtype=np.float32)
         eval_proba_train = np.zeros((n_trains, n_classes), dtype=np.float32)
         eval_proba_test = np.zeros((n_tests, n_classes), dtype=np.float32)
-        # fit estimators, get probas
-        estimators = []
-        for ei in range(self.n_estimators):
-            est = self._init_estimators(self.layer_id, ei)
-            estimators.append(est)
         # fit and transform
         y_stratify = y_train if self.task == 'classification' else None
         if self.distribute:
-            x_train_obj_id = ray.put(x_train)
-            y_train_obj_id = ray.put(y_train)
-            y_stratify_obj_id = ray.put(y_stratify)
-            test_sets_obj_id = ray.put([('test', x_test, y_test)])
-            y_proba_train_tests = ray.get([est.fit_transform.remote(x_train_obj_id, y_train_obj_id, y_stratify_obj_id,
-                                                                    test_sets=test_sets_obj_id)
-                                           for est in estimators])
+            # x_train_obj_id = ray.put(x_train)
+            # y_train_obj_id = ray.put(y_train)
+            # y_stratify_obj_id = ray.put(y_stratify)
+            # test_sets_obj_id = ray.put([('test', x_test, y_test)])
+            # y_proba_train_tests = ray.get([est.fit_transform.remote(x_train_obj_id, y_train_obj_id, y_stratify_obj_id,
+            #                                                         test_sets=test_sets_obj_id)
+            #                                for est in estimators])
+            splitting = CascadeSplittingKFoldWrapper(dis_level=self.dis_level, estimators=self.est_args,
+                                                     num_workers=self.num_workers, seed=self.seed, task=self.task,
+                                                     eval_metrics=self.eval_metrics, keep_in_mem=self.keep_in_mem,
+                                                     cv_seed=self.seed, dtype=self.dtype, layer_id=self.layer_id)
+            y_proba_train_tests, split_ests, split_group = splitting.fit_transform(x_train, y_train, y_stratify,
+                                                                                   test_sets=[('test', x_test,  y_test)])
+            # TODO: fill the estimators
+            if self.keep_in_mem:
+                estimators = split_ests
+            else:
+                estimators = None
         else:
-            y_proba_train_tests = [est.fit_transform(x_train, y_train, y_stratify,
-                                                     test_sets=[('test', x_test,  y_test)])
-                                   for est in estimators]
+            # fit estimators, get probas
+            y_proba_train_tests = []
+            estimators = []
+            for ei in range(self.n_estimators):
+                est = self._init_estimators(self.layer_id, ei)
+                estimators.append(est)
+                y_probas = est.fit_transform(x_train, y_train, y_stratify, test_sets=[('test', x_test,  y_test)])
+                y_proba_train_tests.append(y_probas)
+
         for ei, y_proba_train_tup in enumerate(y_proba_train_tests):
             y_proba_train = y_proba_train_tup[0]
             y_proba_test = y_proba_train_tup[1]
@@ -1324,7 +1357,8 @@ class CascadeLayer(Layer):
             self.eval_proba_test = eval_proba_test
         return x_proba_train, x_proba_test
 
-    def check_shape(self, y_proba, n, n_classes):
+    @staticmethod
+    def check_shape(y_proba, n, n_classes):
         if y_proba.shape != (n, n_classes):
             raise ValueError('output shape incorrect!,'
                              ' should be {}, but {}'.format((n, n_classes), y_proba.shape))
@@ -1432,7 +1466,8 @@ class AutoGrowingCascadeLayer(Layer):
     def __init__(self, batch_size=None, dtype=np.float32, name=None, task='classification', est_configs=None,
                  early_stopping_rounds=None, max_layers=0, look_index_cycle=None, data_save_rounds=0,
                  stop_by_test=True, n_classes=None, keep_in_mem=False, data_save_dir=None, model_save_dir=None,
-                 metrics=None, keep_test_result=False, seed=None, distribute=False, verbose_dis=False):
+                 metrics=None, keep_test_result=False, seed=None, distribute=False, verbose_dis=False,
+                 dis_level=0, num_workers=None):
         """AutoGrowingCascadeLayer
         An AutoGrowingCascadeLayer is a virtual layer that consists of many single cascade layers.
         `auto-growing` means this kind of layer can decide the depth of cascade forest,
@@ -1476,6 +1511,13 @@ class AutoGrowingCascadeLayer(Layer):
                            and write `ray.init(<redis-address>)` at the beginning of the main program.
         :param verbose_dis: boolean, whether print logging info that generated on different worker machines.
                             default = False.
+        :param dis_level: distributed level, or parallelization level, 0 / 1 / 2
+                           0 means lowest parallelization level, parallelization is len(self.est_configs).
+                           1 means we will split the forests in some condition to making more full use of
+                            cluster resources, so the parallelization may be larger than len(self.est_configs).
+                           2 means that anyway we must split forests.
+                           Now 2 is the HIGHEST_DISLEVEL
+        :param num_workers: number of workers in the cluster
         """
         self.est_configs = [] if est_configs is None else est_configs
         super(AutoGrowingCascadeLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
@@ -1504,6 +1546,8 @@ class AutoGrowingCascadeLayer(Layer):
         self.seed = seed
         self.distribute = distribute
         self.verbose_dis = verbose_dis
+        self.dis_level = dis_level
+        self.num_workers = num_workers
         # properties
         self.layer_fit_cascades = []
         self.n_layers = 0
@@ -1538,10 +1582,12 @@ class AutoGrowingCascadeLayer(Layer):
                             keep_in_mem=self.keep_in_mem,
                             data_save_dir=data_save_dir,
                             model_save_dir=model_save_dir,
+                            num_workers=self.num_workers,
                             metrics=metrics,
                             seed=seed,
                             distribute=self.distribute,
-                            verbose_dis=self.verbose_dis)
+                            verbose_dis=self.verbose_dis,
+                            dis_level=self.dis_level)
 
     def call(self, x_trains):
         pass

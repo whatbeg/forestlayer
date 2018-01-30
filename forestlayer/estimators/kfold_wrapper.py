@@ -16,6 +16,7 @@ except ImportError:
 from sklearn.model_selection import KFold, StratifiedKFold
 from xgboost.sklearn import XGBClassifier, XGBRegressor
 from .sklearn_estimator import *
+from .estimator_configs import EstimatorConfig
 from ..utils.log_utils import get_logger
 from ..utils.storage_utils import name2path, getmbof
 from ..utils.metrics import Accuracy, MSE
@@ -464,13 +465,17 @@ class SplittingKFoldWrapper(object):
     Wrapper for splitting forests to smaller forests.
     TODO: support intelligent load-aware splitting method.
     """
-    def __init__(self, split=None, estimators=None, ei2wi=None, num_workers=None, seed=None, task='classification',
+    def __init__(self, dis_level=0, estimators=None, ei2wi=None, num_workers=None, seed=None, task='classification',
                  eval_metrics=None, keep_in_mem=False, cv_seed=None, dtype=np.float32):
         """
         Initialize SplittingKFoldWrapper.
 
-        :param split: boolean, specify whether not to split, if split is False, we do not split, else we judge if we
-                       should to split and how to split.
+        :param dis_level: distributed level, or parallelization level, 0 / 1 / 2
+                           0 means lowest parallelization level, parallelization is len(self.est_configs).
+                           1 means we will split the forests in some condition to making more full use of
+                            cluster resources, so the parallelization may be larger than len(self.est_configs).
+                           2 means that anyway we must split forests.
+                           Now 2 is the HIGHEST_DISLEVEL
         :param estimators: base estimators.
         :param ei2wi: estimator to window it belongs to.
         :param num_workers: number of workers in the cluster.
@@ -478,12 +483,12 @@ class SplittingKFoldWrapper(object):
         :param task: regression or classification.
         :param eval_metrics: evaluation metrics.
         :param keep_in_mem: boolean, if keep the model in mem, now we do not support model
-                             saving of spliitingkfoldwrapper.
+                             saving of splitting_kfold_wrapper.
         :param cv_seed: cross validation random state.
         :param dtype: data type.
         """
-        self.LOGGER = get_logger('estimators.splittingkfoldwrapper')
-        self.split = split
+        self.LOGGER = get_logger('estimators.splitting_kfold_wrapper')
+        self.dis_level = dis_level
         self.estimators = estimators
         self.ei2wi = ei2wi
         self.num_workers = num_workers
@@ -493,6 +498,16 @@ class SplittingKFoldWrapper(object):
         self.eval_metrics = eval_metrics
         self.keep_in_mem = keep_in_mem
         self.cv_seed = cv_seed
+
+    def determine_split(self, num_estimators):
+        if self.dis_level == 0:
+            return False
+        if self.dis_level == 1:
+            if self.num_workers >= num_estimators / 2:
+                return True
+        if self.dis_level == 2:
+            return True
+        return False
 
     def splitting(self, ests):
         """
@@ -504,16 +519,17 @@ class SplittingKFoldWrapper(object):
         """
         assert isinstance(ests, list), 'estimators should be a list, but {}'.format(type(ests))
         num_ests = len(ests)
-        should_split = False
-        if self.num_workers >= num_ests / 2:
-            should_split = True
-        # if user do not want to split, and pass an argument split which is False, we don't split!
-        if self.split is False:
-            should_split = False
+        # should_split = False
+        # if self.num_workers >= num_ests / 2:
+        #     should_split = True
+        # # if user do not want to split, and pass an argument split which is False, we don't split!
+        # if self.split is False:
+        #     should_split = False
+        should_split = self.determine_split(num_ests)
         split_ests = []
         split_group = []
-        self.LOGGER.info('num_workers = {}, num_estimators = {}, should_split? {}'.format(self.num_workers,
-                                                                                          num_ests, should_split))
+        self.LOGGER.info('dis_level = {}, num_workers = {}, num_estimators = {}, should_split? {}'.format(
+            self.dis_level, self.num_workers, num_ests, should_split))
         if self.cv_seed is None:
             self.cv_seed = self.seed
         if should_split:
@@ -655,6 +671,200 @@ class SplittingKFoldWrapper(object):
                 est_group.append(ests_output[grp[0]])
         est_group_result = ray.get(est_group)
         return est_group_result
+
+
+class CascadeSplittingKFoldWrapper(object):
+    """
+    Wrapper for splitting forests to smaller forests.
+    TODO: support intelligent load-aware splitting method.
+    """
+    def __init__(self, dis_level=0, estimators=None, num_workers=None, seed=None, task='classification',
+                 eval_metrics=None, keep_in_mem=False, cv_seed=None, dtype=np.float32,
+                 layer_id=None):
+        """
+        Initialize CascadeSplittingKFoldWrapper.
+
+        :param dis_level: distributed level, or parallelization level, 0 / 1 / 2
+                           0 means lowest parallelization level, parallelization is len(self.est_configs).
+                           1 means we will split the forests in some condition to making more full use of
+                            cluster resources, so the parallelization may be larger than len(self.est_configs).
+                           2 means that anyway we must split forests.
+                           Now 2 is the HIGHEST_DISLEVEL
+        :param estimators: base estimators.
+        :param num_workers: number of workers in the cluster.
+        :param seed: random state.
+        :param task: regression or classification.
+        :param eval_metrics: evaluation metrics.
+        :param keep_in_mem: boolean, if keep the model in mem, now we do not support model
+                             saving of cascade_splitting_kfold_wrapper.
+        :param cv_seed: cross validation random state.
+        :param dtype: data type.
+        """
+        self.LOGGER = get_logger('estimators.cascade_splitting_kfold_wrapper')
+        self.dis_level = dis_level
+        self.estimators = estimators
+        self.num_workers = num_workers
+        self.seed = seed
+        self.task = task
+        self.dtype = dtype
+        self.eval_metrics = eval_metrics
+        self.keep_in_mem = keep_in_mem
+        self.cv_seed = cv_seed
+        # cascade
+        self.layer_id = layer_id
+        for ei, est in enumerate(self.estimators):
+            # convert estimators from EstimatorConfig to dictionary.
+            if isinstance(est, EstimatorConfig):
+                self.estimators[ei] = est.get_est_args().copy()
+
+    def determine_split(self, num_estimators):
+        if self.dis_level == 0:
+            return False
+        if self.dis_level == 1:
+            if self.num_workers >= num_estimators / 2:
+                return True
+        if self.dis_level == 2:
+            return True
+        return False
+
+    def splitting(self, ests):
+        """
+        Splitting method.
+        Judge if we should to split and how we split.
+
+        :param ests:
+        :return:
+        """
+        assert isinstance(ests, list), 'estimators should be a list, but {}'.format(type(ests))
+        num_ests = len(ests)
+        # should_split = False
+        # if self.num_workers >= num_ests / 2:
+        #     should_split = True
+        # # if user do not want to split, and pass an argument split which is False, we don't split!
+        # if self.split is False:
+        #     should_split = False
+        should_split = self.determine_split(num_ests)
+        split_ests = []
+        split_group = []
+        self.LOGGER.info('dis_level = {}, num_workers = {}, num_estimators = {}, should_split? {}'.format(
+            self.dis_level, self.num_workers, num_ests, should_split))
+        if self.cv_seed is None:
+            self.cv_seed = self.seed
+        if should_split:
+            i = 0
+            for ei, est in enumerate(ests):
+                num_trees = est.get('n_estimators', 500)
+                est_name = 'layer - {} - estimator - {} - {}folds'.format(self.layer_id, ei,
+                                                                          est.get('n_folds', 3))
+                if self.seed is not None:
+                    common_seed = (self.seed + hash("[estimator] {}".format(est_name))) % 1000000007
+                    seed = np.random.RandomState(common_seed)
+                    seed2 = np.random.RandomState(common_seed)
+                    seed2.randint(MAX_RAND_SEED, size=num_trees/2)
+                else:
+                    seed = np.random.mtrand._rand
+                    seed2 = np.random.mtrand._rand
+                    seed2.randint(MAX_RAND_SEED, size=num_trees/2)
+                self.LOGGER.debug('{} trees split to {} + {}'.format(num_trees, num_trees / 2, num_trees - num_trees/2))
+                args = est.copy()
+                args['n_estimators'] = num_trees / 2
+                sub_est1 = self._init_estimators(args, self.layer_id, ei, seed, self.cv_seed)
+                args['n_estimators'] = num_trees - num_trees / 2
+                sub_est2 = self._init_estimators(args, self.layer_id, ei, seed2, self.cv_seed)
+                split_ests.append(sub_est1)
+                split_ests.append(sub_est2)
+                split_group.append([i, i + 1])
+                i += 2
+        else:
+            for ei, est in enumerate(ests):
+                gen_est = self._init_estimators(est.copy(), self.layer_id, ei, self.seed, self.cv_seed)
+                split_ests.append(gen_est)
+            split_group = [[i, ] for i in range(len(ests))]
+        return split_ests, split_group
+
+    def _init_estimators(self, args, layer_id, ei, seed, cv_seed):
+        """
+        Initialize distributed kfold wrapper. dumps the seed if seed is a np.random.RandomState.
+
+        :param args:
+        :param layer_id:
+        :param ei:
+        :param seed:
+        :param cv_seed:
+        :return:
+        """
+        est_args = args.copy()
+        est_name = 'layer - {} - estimator - {} - {}folds'.format(layer_id, ei, est_args['n_folds'])
+        n_folds = int(est_args['n_folds'])
+        est_args.pop('n_folds')
+        est_type = est_args['est_type']
+        est_args.pop('est_type')
+        # seed, if seed is not None and is integer, we add it with estimator name.
+        # if seed is already a RandomState, just pickle it in order to pass to every worker.
+        if seed is not None and not isinstance(seed, np.random.RandomState):
+            seed = (seed + hash("[estimator] {}".format(est_name))) % 1000000007
+        if isinstance(seed, np.random.RandomState):
+            seed = pickle.dumps(seed, pickle.HIGHEST_PROTOCOL)
+        # we must keep the cross validation seed same, but keep the seed not the same
+        # so that no duplicate forest are generated, but exactly same cross validation datasets are generated.
+        if cv_seed is not None and not isinstance(cv_seed, np.random.RandomState):
+            cv_seed = (cv_seed + hash("[estimator] {}".format(est_name))) % 1000000007
+        else:
+            cv_seed = (0 + hash("[estimator] {}".format(est_name))) % 1000000007
+        return get_dist_estimator_kfold(name=est_name,
+                                        n_folds=n_folds,
+                                        task=self.task,
+                                        est_type=est_type,
+                                        eval_metrics=self.eval_metrics,
+                                        seed=seed,
+                                        dtype=self.dtype,
+                                        keep_in_mem=self.keep_in_mem,
+                                        est_args=est_args,
+                                        cv_seed=cv_seed)
+
+    def fit(self, x_train, y_train, y_stratify):
+        split_ests, split_group = self.splitting(self.estimators)
+        self.LOGGER.debug('split_group = {}'.format(split_group))
+        x_train_obj_id = ray.put(x_train)
+        y_train_obj_id = ray.put(y_train)
+        y_stratify_obj_id = ray.put(y_stratify)
+        # the base kfold_wrapper of SplittingKFoldWrapper must be DistributedKFoldWrapper,
+        # so with the y_proba_train, y_proba_tests, there is a log info list will be return.
+        # so, ests_output is like (y_proba_train, y_proba_tests, logs)
+        ests_output = [est.fit_transform.remote(x_train_obj_id, y_train_obj_id, y_stratify_obj_id, test_sets=None)
+                       for est in split_ests]
+        est_group = []
+        for grp in split_group:
+            if len(grp) == 2:
+                # Tree reduce
+                est_group.append(merge.remote(ests_output[grp[0]], ests_output[grp[1]]))
+            else:
+                est_group.append(ests_output[grp[0]])
+        est_group_result = ray.get(est_group)
+        return est_group_result, split_ests, split_group
+
+    def fit_transform(self, x_train, y_train, y_stratify, test_sets=None):
+        split_ests, split_group = self.splitting(self.estimators)
+        self.LOGGER.debug('split_group = {}'.format(split_group))
+        x_train_obj_id = ray.put(x_train)
+        y_train_obj_id = ray.put(y_train)
+        y_stratify_obj_id = ray.put(y_stratify)
+        test_sets_obj_id = ray.put(test_sets)
+        # the base kfold_wrapper of SplittingKFoldWrapper must be DistributedKFoldWrapper,
+        # so with the y_proba_train, y_proba_tests, there is a log info list will be return.
+        # so, ests_output is like (y_proba_train, y_proba_tests, logs)
+        ests_output = [est.fit_transform.remote(x_train_obj_id, y_train_obj_id, y_stratify_obj_id,
+                                                test_sets=test_sets_obj_id)
+                       for est in split_ests]
+        est_group = []
+        for grp in split_group:
+            if len(grp) == 2:
+                # Tree reduce
+                est_group.append(merge.remote(ests_output[grp[0]], ests_output[grp[1]]))
+            else:
+                est_group.append(ests_output[grp[0]])
+        est_group_result = ray.get(est_group)
+        return est_group_result, split_ests, split_group
 
 
 @ray.remote
