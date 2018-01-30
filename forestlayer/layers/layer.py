@@ -159,7 +159,7 @@ class MultiGrainScanLayer(Layer):
     def __init__(self, batch_size=None, dtype=np.float32, name=None, task='classification',
                  windows=None, est_for_windows=None, n_class=None, keep_in_mem=False,
                  cache_in_disk=False, data_save_dir=None, eval_metrics=None, seed=None,
-                 distribute=False, dis_level=0, num_workers=None):
+                 distribute=False, dis_level=0, verbose_dis=True, num_workers=None):
         """
         Initialize a multi-grain scan layer.
 
@@ -200,6 +200,7 @@ class MultiGrainScanLayer(Layer):
         assert dis_level in [0, 1, 2], 'dis_level should be 0 or 1, but {}'.format(dis_level)
         self.dis_level = dis_level
         self.split = self.dis_level == 2
+        self.verbose_dis = verbose_dis
         self.num_workers = num_workers
         self.keep_in_mem = keep_in_mem
         self.cache_in_disk = cache_in_disk
@@ -246,6 +247,7 @@ class MultiGrainScanLayer(Layer):
             get_est_func = get_dist_estimator_kfold
         else:
             get_est_func = get_estimator_kfold
+        # print('init_estimator seed = {}, cv_seed = {}'.format(seed, cv_seed))
         return get_est_func(name=est_name,
                             n_folds=n_folds,
                             task=self.task,
@@ -254,7 +256,8 @@ class MultiGrainScanLayer(Layer):
                             seed=seed,
                             dtype=self.dtype,
                             keep_in_mem=self.keep_in_mem,
-                            est_args=est_args)
+                            est_args=est_args,
+                            cv_seed=seed)
 
     def fit(self, x_train, y_train):
         """
@@ -340,9 +343,6 @@ class MultiGrainScanLayer(Layer):
             if not isinstance(ests_for_win, (list, tuple)):
                 ests_for_win = [ests_for_win]
             for ei, est in enumerate(ests_for_win):
-                # if isinstance(est, EstimatorConfig):
-                #     est = self._init_estimator(est, wi, ei)
-                # ests_for_win[ei] = est
                 ests.append(est)
                 ei2wi[est_offsets[wi] + ei] = (wi, ei)
             est_offsets.append(est_offsets[-1] + len(ests_for_win))
@@ -366,6 +366,9 @@ class MultiGrainScanLayer(Layer):
                 y_proba_train = y_proba_train_tup[0]
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
                 win_est_train.append(y_proba_train)
+                if len(y_proba_train_tup) == 3 and self.verbose_dis:
+                    for log in y_proba_train_tup[2]:
+                        print(log)
             if self.keep_in_mem:
                 self.est_for_windows[wi] = ests_for_win
             else:
@@ -417,9 +420,6 @@ class MultiGrainScanLayer(Layer):
             if not isinstance(ests_for_win, (list, tuple)):
                 ests_for_win = [ests_for_win]
             for ei, est in enumerate(ests_for_win):
-                # if isinstance(est, EstimatorConfig):
-                #     est = self._init_estimator(est, wi, ei)
-                # ests_for_win[ei] = est
                 ests.append(est)
                 ei2wi[est_offsets[wi] + ei] = (wi, ei)
             est_offsets.append(est_offsets[-1] + len(ests_for_win))
@@ -439,10 +439,6 @@ class MultiGrainScanLayer(Layer):
                                           task=self.task, eval_metrics=self.eval_metrics,
                                           keep_in_mem=self.keep_in_mem, dtype=self.dtype)
         ests_output = splitting.fit_transform(x_wins_train, y_win, test_sets)
-        # ests_output = ray.get([est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]],
-        #                                                 y_win[ei2wi[ei]][:, 0], test_sets[ei2wi[ei]])
-        #                        for ei, est in enumerate(ests)])
-        # print(list_type2str(self.est_for_windows, 2))
         for wi, ests_for_win in enumerate(self.est_for_windows):
             win_est_train = []
             win_est_test = []
@@ -459,6 +455,9 @@ class MultiGrainScanLayer(Layer):
                 y_probas_test = y_probas_test.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
                 win_est_train.append(y_proba_train)
                 win_est_test.append(y_probas_test)
+                if len(y_proba_tup) == 3 and self.verbose_dis:
+                    for log in y_proba_tup[2]:
+                        print(log)
             if self.keep_in_mem:
                 self.est_for_windows[wi] = ests_for_win
             else:
@@ -1293,7 +1292,6 @@ class CascadeLayer(Layer):
             # if only one element on test_sets, return one test result like y_proba_train
             if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
                 y_proba_test = y_proba_test[0]
-            # print(y_proba_train.shape, y_proba_test.shape)
             if y_proba_train is None:
                 raise RuntimeError("layer - {} - estimator - {} fit FAILED!,"
                                    " y_proba_train is None".format(self.layer_id, ei))
