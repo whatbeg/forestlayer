@@ -22,6 +22,7 @@ LOGGER = get_logger('estimators.sklearn_estimator')
 def forest_predict_batch_size(clf, X, task):
     """
     Decide predict batch size by calculating memory occupation.
+    TODO: Different cluster need different batch size determination strategy.
 
     :param clf: classifier
     :param X: training data

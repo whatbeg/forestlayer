@@ -176,7 +176,7 @@ class MultiGrainScanLayer(Layer):
         :param distribute: whether use distributed training. If use, you should `import ray`
                            and write `ray.init(<redis-address>)` at the beginning of the main program.
         :param dis_level: temporary variable. Only take effect when distribute is True.
-                          When distribute is True, dis_level = 0 means using a low level parallelization
+                           When distribute is True, dis_level = 0 means using a low level parallelization
                            for multi-grain scan layer. dis_level = 1 means using a higher level parallelization
                            for multi-grain scan layer. [default is 0]
         """

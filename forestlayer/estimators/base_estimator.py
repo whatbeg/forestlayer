@@ -39,10 +39,6 @@ class BaseEstimator(object):
 
         :return:
         """
-        # print("BaseEstimator {}({})".format(self.est_class.__name__, self.est_args))
-        # seed = self.est_args.get('random_state', None)
-        # print(seed.get_state())
-        # self.est_args['n_estimators'] = 500
         return self.est_class(**self.est_args)
 
     def fit(self, X, y, cache_dir=None):
