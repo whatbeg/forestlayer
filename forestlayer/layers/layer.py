@@ -159,7 +159,7 @@ class MultiGrainScanLayer(Layer):
     def __init__(self, batch_size=None, dtype=np.float32, name=None, task='classification',
                  windows=None, est_for_windows=None, n_class=None, keep_in_mem=False,
                  cache_in_disk=False, data_save_dir=None, eval_metrics=None, seed=None,
-                 distribute=False, dis_level=0, verbose_dis=True, num_workers=None):
+                 distribute=False, dis_level=1, verbose_dis=True, num_workers=None):
         """
         Initialize a multi-grain scan layer.
 
@@ -175,10 +175,12 @@ class MultiGrainScanLayer(Layer):
         :param seed:
         :param distribute: whether use distributed training. If use, you should `import ray`
                            and write `ray.init(<redis-address>)` at the beginning of the main program.
-        :param dis_level: temporary variable. Only take effect when distribute is True.
-                           When distribute is True, dis_level = 0 means using a low level parallelization
-                           for multi-grain scan layer. dis_level = 1 means using a higher level parallelization
-                           for multi-grain scan layer. [default is 0]
+        :param dis_level: distributed level, or parallelization level, 0 / 1 / 2
+                           0 means lowest parallelization level, parallelization is len(self.est_configs).
+                           1 means we will split the forests in some condition to making more full use of
+                            cluster resources, so the parallelization may be larger than len(self.est_configs).
+                           2 means that anyway we must split forests.
+                           Now 2 is the HIGHEST_DISLEVEL, default is 1.
         """
         if not name:
             prefix = 'multi_grain_scan'
@@ -199,7 +201,6 @@ class MultiGrainScanLayer(Layer):
         self.distribute = distribute
         assert dis_level in [0, 1, 2], 'dis_level should be 0 or 1, but {}'.format(dis_level)
         self.dis_level = dis_level
-        self.split = self.dis_level == 2
         self.verbose_dis = verbose_dis
         self.num_workers = num_workers
         self.keep_in_mem = keep_in_mem
@@ -368,7 +369,11 @@ class MultiGrainScanLayer(Layer):
                 win_est_train.append(y_proba_train)
                 if len(y_proba_train_tup) == 3 and self.verbose_dis:
                     for log in y_proba_train_tup[2]:
-                        print(log)
+                        if log[0] == 'INFO':
+                            self.LOGGER.info("[{}] {}".format(log[0], log[1].format(log[2])))
+                        elif log[0] == 'WARN':
+                            self.LOGGER.warn("{}".format(log))
+
             if self.keep_in_mem:
                 self.est_for_windows[wi] = ests_for_win
             else:
@@ -457,7 +462,11 @@ class MultiGrainScanLayer(Layer):
                 win_est_test.append(y_probas_test)
                 if len(y_proba_tup) == 3 and self.verbose_dis:
                     for log in y_proba_tup[2]:
-                        print(log)
+                        if log[0] == 'INFO':
+                            self.LOGGER.info("[{}] {}".format(log[0], log[1].format(log[2])))
+                        elif log[0] == 'WARN':
+                            self.LOGGER.warn("{}".format(log))
+
             # TODO: improving keep estimators.
             if self.keep_in_mem:
                 self.est_for_windows[wi] = ests_for_win
@@ -1003,7 +1012,7 @@ class ConcatLayer(Layer):
 class CascadeLayer(Layer):
     def __init__(self, batch_size=None, dtype=None, name=None, task='classification', est_configs=None,
                  layer_id='anonymous', n_classes=None, keep_in_mem=False, data_save_dir=None, model_save_dir=None,
-                 num_workers=None, metrics=None, seed=None, distribute=False, verbose_dis=False, dis_level=0):
+                 num_workers=None, metrics=None, seed=None, distribute=False, verbose_dis=False, dis_level=1):
         """Cascade Layer.
         A cascade layer contains several estimators, it accepts single input, go through these estimators, produces
         predicted probability by every estimators, and stacks them together for next cascade layer.
@@ -1038,7 +1047,7 @@ class CascadeLayer(Layer):
                            1 means we will split the forests in some condition to making more full use of
                             cluster resources, so the parallelization may be larger than len(self.est_configs).
                            2 means that anyway we must split forests.
-                           Now 2 is the HIGHEST_DISLEVEL
+                           Now 2 is the HIGHEST_DISLEVEL, default is 1.
 
         # Properties
             eval_metrics: evaluation metrics
@@ -1232,7 +1241,11 @@ class CascadeLayer(Layer):
             y_proba_train = y_proba_train_tup[0]
             if len(y_proba_train_tup) == 3 and self.verbose_dis:
                 for log in y_proba_train_tup[2]:
-                    print(log)
+                    if log[0] == 'INFO':
+                        self.LOGGER.info("[{}] {}".format(log[0], log[1].format(log[2])))
+                    elif log[0] == 'WARN':
+                        self.LOGGER.warn("{}".format(log))
+
             if y_proba_train is None:
                 raise RuntimeError("layer - {} - estimator - {} fit FAILED!,"
                                    " y_proba_train is None!".format(self.layer_id, ei))
@@ -1321,7 +1334,11 @@ class CascadeLayer(Layer):
             y_proba_test = y_proba_train_tup[1]
             if len(y_proba_train_tup) == 3 and self.verbose_dis:
                 for log in y_proba_train_tup[2]:
-                    print(log)
+                    if log[0] == 'INFO':
+                        self.LOGGER.info("[{}] {}".format(log[0], log[1].format(log[2])))
+                    elif log[0] == 'WARN':
+                        self.LOGGER.warn("{}".format(log))
+
             # if only one element on test_sets, return one test result like y_proba_train
             if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
                 y_proba_test = y_proba_test[0]
@@ -1467,7 +1484,7 @@ class AutoGrowingCascadeLayer(Layer):
                  early_stopping_rounds=None, max_layers=0, look_index_cycle=None, data_save_rounds=0,
                  stop_by_test=True, n_classes=None, keep_in_mem=False, data_save_dir=None, model_save_dir=None,
                  metrics=None, keep_test_result=False, seed=None, distribute=False, verbose_dis=False,
-                 dis_level=0, num_workers=None):
+                 dis_level=1, num_workers=None):
         """AutoGrowingCascadeLayer
         An AutoGrowingCascadeLayer is a virtual layer that consists of many single cascade layers.
         `auto-growing` means this kind of layer can decide the depth of cascade forest,

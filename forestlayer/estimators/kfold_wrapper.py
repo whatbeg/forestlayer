@@ -898,7 +898,7 @@ def merge(tup_1, tup_2):
     for key in mean_dict.keys():
         mean_dict[key] = mean_dict[key] / 2.0
         key_split = key.split(',')
-        logs.append((key_split[0], key_split[1].format(mean_dict[key])))
+        logs.append((key_split[0], key_split[1], mean_dict[key]))
     logs.sort()
     return (tup_1[0] + tup_2[0])/2.0, tests, logs
 
