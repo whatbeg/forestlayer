@@ -302,8 +302,15 @@ class MultiGrainScanLayer(Layer):
                                           for est in ests_for_win])
             else:
                 y_proba_trains = [est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0]) for est in ests_for_win]
-            for y_proba_train, _ in y_proba_trains:
+            for y_proba_train_tup in y_proba_trains:
+                y_proba_train = y_proba_train_tup[0]
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                if len(y_proba_train_tup) == 3 and self.verbose_dis:
+                    for log in y_proba_train_tup[2]:
+                        if log[0] == 'INFO':
+                            self.LOGGER.info("{}".format(log[1].format(log[2])))
+                        elif log[0] == 'WARN':
+                            self.LOGGER.warn("{}".format(log))
                 win_est_train.append(y_proba_train)
             if self.keep_in_mem:
                 self.est_for_windows[wi] = ests_for_win
@@ -370,7 +377,7 @@ class MultiGrainScanLayer(Layer):
                 if len(y_proba_train_tup) == 3 and self.verbose_dis:
                     for log in y_proba_train_tup[2]:
                         if log[0] == 'INFO':
-                            self.LOGGER.info("[{}] {}".format(log[0], log[1].format(log[2])))
+                            self.LOGGER.info("{}".format(log[1].format(log[2])))
                         elif log[0] == 'WARN':
                             self.LOGGER.warn("{}".format(log))
 
@@ -463,7 +470,7 @@ class MultiGrainScanLayer(Layer):
                 if len(y_proba_tup) == 3 and self.verbose_dis:
                     for log in y_proba_tup[2]:
                         if log[0] == 'INFO':
-                            self.LOGGER.info("[{}] {}".format(log[0], log[1].format(log[2])))
+                            self.LOGGER.info("{}".format(log[1].format(log[2])))
                         elif log[0] == 'WARN':
                             self.LOGGER.warn("{}".format(log))
 
@@ -561,12 +568,18 @@ class MultiGrainScanLayer(Layer):
                 y_proba_train_tests = [est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
                                        for est in ests_for_win]
             self.LOGGER.debug('got y_proba_train_tests size = {}'.format(getmbof(y_proba_train_tests)))
-            for y_proba_train, y_probas_test in y_proba_train_tests:
-                # (60000, 121, 10)
+            for y_proba_tup in y_proba_train_tests:
+                y_proba_train = y_proba_tup[0]
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
-                assert len(y_probas_test) == 1, 'assume there is only one test set!'
+                y_probas_test = y_proba_tup[1]
                 y_probas_test = y_probas_test[0]
                 y_probas_test = y_probas_test.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                if len(y_proba_tup) == 3 and self.verbose_dis:
+                    for log in y_proba_tup[2]:
+                        if log[0] == 'INFO':
+                            self.LOGGER.info("{}".format(log[1].format(log[2])))
+                        elif log[0] == 'WARN':
+                            self.LOGGER.warn("{}".format(log))
                 win_est_train.append(y_proba_train)
                 win_est_test.append(y_probas_test)
             if self.keep_in_mem:
@@ -1210,14 +1223,6 @@ class CascadeLayer(Layer):
         # fit and transform
         y_stratify = y_train if self.task == 'classification' else None
         if self.distribute:
-            # x_train_obj_id = ray.put(x_train)
-            # y_train_obj_id = ray.put(y_train)
-            # y_stratify_obj_id = ray.put(y_stratify)
-            # y_proba_trains = ray.get([est.fit_transform.remote(x_train_obj_id,
-            #                                                    y_train_obj_id,
-            #                                                    y_stratify_obj_id,
-            #                                                    test_sets=None)
-            #                           for est in estimators])
             splitting = CascadeSplittingKFoldWrapper(dis_level=self.dis_level, estimators=self.est_args,
                                                      num_workers=self.num_workers, seed=self.seed, task=self.task,
                                                      eval_metrics=self.eval_metrics, keep_in_mem=self.keep_in_mem,
@@ -1242,7 +1247,7 @@ class CascadeLayer(Layer):
             if len(y_proba_train_tup) == 3 and self.verbose_dis:
                 for log in y_proba_train_tup[2]:
                     if log[0] == 'INFO':
-                        self.LOGGER.info("[{}] {}".format(log[0], log[1].format(log[2])))
+                        self.LOGGER.info("{}".format(log[1].format(log[2])))
                     elif log[0] == 'WARN':
                         self.LOGGER.warn("{}".format(log))
 
@@ -1301,13 +1306,6 @@ class CascadeLayer(Layer):
         # fit and transform
         y_stratify = y_train if self.task == 'classification' else None
         if self.distribute:
-            # x_train_obj_id = ray.put(x_train)
-            # y_train_obj_id = ray.put(y_train)
-            # y_stratify_obj_id = ray.put(y_stratify)
-            # test_sets_obj_id = ray.put([('test', x_test, y_test)])
-            # y_proba_train_tests = ray.get([est.fit_transform.remote(x_train_obj_id, y_train_obj_id, y_stratify_obj_id,
-            #                                                         test_sets=test_sets_obj_id)
-            #                                for est in estimators])
             splitting = CascadeSplittingKFoldWrapper(dis_level=self.dis_level, estimators=self.est_args,
                                                      num_workers=self.num_workers, seed=self.seed, task=self.task,
                                                      eval_metrics=self.eval_metrics, keep_in_mem=self.keep_in_mem,
@@ -1335,7 +1333,7 @@ class CascadeLayer(Layer):
             if len(y_proba_train_tup) == 3 and self.verbose_dis:
                 for log in y_proba_train_tup[2]:
                     if log[0] == 'INFO':
-                        self.LOGGER.info("[{}] {}".format(log[0], log[1].format(log[2])))
+                        self.LOGGER.info("{}".format(log[0], log[1].format(log[2])))
                     elif log[0] == 'WARN':
                         self.LOGGER.warn("{}".format(log))
 

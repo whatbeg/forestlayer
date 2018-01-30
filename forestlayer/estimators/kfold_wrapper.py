@@ -429,7 +429,7 @@ class DistributedKFoldWrapper(object):
             return
         for metric in self.eval_metrics:
             acc = metric.calc_proba(y_true, y_proba)
-            self.logs.append(('INFO', "Approximate {a}({b} - {c}) = {d}{e}".format(
+            self.logs.append(('INFO', "{a}({b} - {c}) = {d}{e}".format(
                 a=metric.__class__.__name__, b=est_name, c=y_name, d="{:.4f}",
                 e='%' if isinstance(metric, Accuracy) else ''), acc))
 
@@ -898,7 +898,7 @@ def merge(tup_1, tup_2):
     for key in mean_dict.keys():
         mean_dict[key] = mean_dict[key] / 2.0
         key_split = key.split(',')
-        logs.append((key_split[0], key_split[1], mean_dict[key]))
+        logs.append((key_split[0], "Approximate " + key_split[1], mean_dict[key]))
     logs.sort()
     return (tup_1[0] + tup_2[0])/2.0, tests, logs
 
