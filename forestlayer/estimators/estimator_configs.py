@@ -27,9 +27,12 @@ class EstimatorConfig(object):
     Every time we create a multi-grain scan layer or a cascade layer, we don't put concrete estimator instances into
     initialization parameters, but put the EstimatorConfig that describes the estimator.
     """
-    def __init__(self):
-        self.LOGGER = get_logger('estimator.argument')
-        self.est_args = {}
+    def __init__(self, est_args=None):
+        self.LOGGER = get_logger('estimator.estimator_configs')
+        if est_args is None:
+            self.est_args = {}
+        else:
+            self.est_args = est_args.copy()
 
     def get_est_args(self):
         """
@@ -41,6 +44,9 @@ class EstimatorConfig(object):
 
     def __str__(self):
         return "{}".format(self.est_args['est_type'])
+
+    def __copy__(self):
+        return EstimatorConfig(self.est_args)
 
 
 class MultiClassXGBConfig(EstimatorConfig):

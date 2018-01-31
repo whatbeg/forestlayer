@@ -46,10 +46,13 @@ class KFoldWrapper(object):
         self.est_args = est_args if est_args is not None else {}
         self.seed = seed
         self.dtype = dtype
-        # TODO: enable cv_seed
         self.cv_seed = cv_seed
+        # assign a cv_seed
         if self.cv_seed is None:
-            self.cv_seed = self.seed
+            if isinstance(self.seed, np.random.RandomState):
+                self.cv_seed = copy.deepcopy(self.seed)
+            else:
+                self.cv_seed = self.seed
         self.eval_metrics = eval_metrics if eval_metrics is not None else []
         if cache_dir is not None:
             self.cache_dir = osp.join(cache_dir, name2path(self.name))
@@ -72,9 +75,9 @@ class KFoldWrapper(object):
         # main program by users, so we need not to set random_state there.
         # More importantly, if some estimators have no random_state parameter, this assignment can throw problems.
         if isinstance(self.est_class, (XGBClassifier, XGBRegressor)):
-            if est_args.get('seed', None) is None:
+            if est_args.get('seed', "NONE") == "NONE":
                 est_args['seed'] = copy.deepcopy(self.seed)
-        elif est_args.get('random_state', None) is None:
+        elif est_args.get('random_state', "NONE") == "NONE":
             est_args['random_state'] = copy.deepcopy(self.seed)
         return self.est_class(est_name, est_args)
 
@@ -126,7 +129,8 @@ class KFoldWrapper(object):
             est.fit(X[train_idx].reshape((-1, self.n_dims)), y[train_idx].reshape(-1), cache_dir=self.cache_dir)
 
             # predict on k-fold validation, this y_proba.dtype is float64
-            y_proba = est.predict_proba(X[val_idx].reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
+            y_proba = est.predict_proba(X[val_idx].reshape((-1, self.n_dims)),
+                                        cache_dir=self.cache_dir)
             if not est.is_classification:
                 y_proba = y_proba[:, np.newaxis]  # add one dimension
             if len(X.shape) == 3:
@@ -149,7 +153,7 @@ class KFoldWrapper(object):
             for vi, (prefix, X_test, _) in enumerate(test_sets):
                 # keep float32 data type, save half of memory and communication.
                 y_proba = est.predict_proba(X_test.reshape((-1, self.n_dims)),
-                                            cache_dir=self.cache_dir).astype(self.dtype)
+                                            cache_dir=self.cache_dir)
                 if not est.is_classification:
                     y_proba = y_proba[:, np.newaxis]
                 if len(X.shape) == 3:
@@ -186,7 +190,7 @@ class KFoldWrapper(object):
             x_tests = x_tests[0]
         proba_result = None
         for k, est in enumerate(self.fit_estimators):
-            y_proba = est.predict_proba(x_tests.reshape((-1, self.n_dims)), cache_dir=self.cache_dir).astype(self.dtype)
+            y_proba = est.predict_proba(x_tests.reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
             if not est.is_classification:
                 y_proba = y_proba[:, np.newaxis]  # add one dimension
             if len(x_tests.shape) == 3:
@@ -223,6 +227,8 @@ class KFoldWrapper(object):
     def copy(self):
         """
         copy.
+        NOTE: This copy does not confirm object consistency now, be careful to use it.
+        TODO: check object consistency.
 
         :return:
         """
@@ -233,7 +239,8 @@ class KFoldWrapper(object):
                             eval_metrics=self.eval_metrics,
                             cache_dir=self.cache_dir,
                             keep_in_mem=self.keep_in_mem,
-                            est_args=self.est_args)
+                            est_args=self.est_args,
+                            cv_seed=self.cv_seed)
 
 
 @ray.remote
@@ -289,9 +296,10 @@ class DistributedKFoldWrapper(object):
         est_args = self.est_args.copy()
         est_name = '{}/{}'.format(self.name, k)
         if isinstance(self.est_class, (XGBClassifier, XGBRegressor)):
-            if est_args.get('seed', None) is None:
+            if est_args.get('seed', "NONE") == "NONE":
                 est_args['seed'] = copy.deepcopy(self.seed)
-        elif est_args.get('random_state', None) is None:
+        # there is no 'random_state' in est_args
+        elif est_args.get('random_state', "NONE") == "NONE":
             est_args['random_state'] = copy.deepcopy(self.seed)
         return self.est_class(est_name, est_args)
 
@@ -366,7 +374,7 @@ class DistributedKFoldWrapper(object):
             # test
             for vi, (prefix, X_test, y_test) in enumerate(test_sets):
                 y_proba = est.predict_proba(X_test.reshape((-1, self.n_dims)),
-                                            cache_dir=self.cache_dir).astype(self.dtype)
+                                            cache_dir=self.cache_dir)
                 if not est.is_classification:
                     y_proba = y_proba[:, np.newaxis]
                 if len(X.shape) == 3:
@@ -403,7 +411,7 @@ class DistributedKFoldWrapper(object):
             x_tests = x_tests[0]
         proba_result = None
         for k, est in enumerate(self.fit_estimators):
-            y_proba = est.predict_proba(x_tests.reshape((-1, self.n_dims)), cache_dir=self.cache_dir).astype(self.dtype)
+            y_proba = est.predict_proba(x_tests.reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
             if not est.is_classification:
                 y_proba = y_proba[:, np.newaxis]  # add one dimension
             if len(x_tests.shape) == 3:
@@ -447,6 +455,8 @@ class DistributedKFoldWrapper(object):
     def copy(self):
         """
         copy.
+        NOTE: This copy does not confirm object consistency now, be careful to use it.
+        TODO: check object consistency.
 
         :return:
         """
@@ -457,7 +467,8 @@ class DistributedKFoldWrapper(object):
                                               eval_metrics=self.eval_metrics,
                                               cache_dir=self.cache_dir,
                                               keep_in_mem=self.keep_in_mem,
-                                              est_args=self.est_args)
+                                              est_args=self.est_args,
+                                              cv_seed=self.cv_seed)
 
 
 class SplittingKFoldWrapper(object):
@@ -737,12 +748,6 @@ class CascadeSplittingKFoldWrapper(object):
         """
         assert isinstance(ests, list), 'estimators should be a list, but {}'.format(type(ests))
         num_ests = len(ests)
-        # should_split = False
-        # if self.num_workers >= num_ests / 2:
-        #     should_split = True
-        # # if user do not want to split, and pass an argument split which is False, we don't split!
-        # if self.split is False:
-        #     should_split = False
         should_split = self.determine_split(num_ests)
         split_ests = []
         split_group = []

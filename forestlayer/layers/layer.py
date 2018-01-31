@@ -70,6 +70,7 @@ class Layer(object):
         self.distribute = False
 
     def set_num_workers(self, n):
+        # TODO: layer fit/fit_transform num_workers calculation
         assert isinstance(n, int), 'num_workers should be int, but {}'.format(type(n))
         assert n > 0, 'num_workers should be set to a positive number. but {}'.format(n)
         self.num_workers = n
@@ -1209,8 +1210,8 @@ class CascadeLayer(Layer):
         :return: train_output
         """
         x_train, y_train, _, _ = self._validate_input(x_train, y_train)
-        assert x_train.shape[0] == y_train.shape[0], 'x_train.shape[0] = {} not equal to y_train.shape[0]' \
-                                                     ' = {}'.format(x_train.shape[0], y_train.shape[0])
+        assert x_train.shape[0] == y_train.shape[0], ('x_train.shape[0] = {} not equal to y_train.shape[0]'
+                                                      ' = {}'.format(x_train.shape[0], y_train.shape[0]))
         self.LOGGER.info('X_train.shape={}, y_train.shape={}'.format(x_train.shape, y_train.shape))
         n_trains = x_train.shape[0]
         n_classes = self.n_classes  # if regression, n_classes = 1
@@ -1218,8 +1219,8 @@ class CascadeLayer(Layer):
             n_classes = np.unique(y_train)
         if self.task == 'regression' and n_classes is None:
             n_classes = 1
-        x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=np.float32)
-        eval_proba_train = np.zeros((n_trains, n_classes), dtype=np.float32)
+        x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=self.dtype)
+        eval_proba_train = np.zeros((n_trains, n_classes), dtype=self.dtype)
         # fit and transform
         y_stratify = y_train if self.task == 'classification' else None
         if self.distribute:
@@ -1299,10 +1300,10 @@ class CascadeLayer(Layer):
             n_classes = np.unique(y_train)
         if self.task == 'regression' and n_classes is None:
             n_classes = 1
-        x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=np.float32)
-        x_proba_test = np.zeros((n_tests, n_classes * self.n_estimators), dtype=np.float32)
-        eval_proba_train = np.zeros((n_trains, n_classes), dtype=np.float32)
-        eval_proba_test = np.zeros((n_tests, n_classes), dtype=np.float32)
+        x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=self.dtype)
+        x_proba_test = np.zeros((n_tests, n_classes * self.n_estimators), dtype=self.dtype)
+        eval_proba_train = np.zeros((n_trains, n_classes), dtype=self.dtype)
+        eval_proba_test = np.zeros((n_tests, n_classes), dtype=self.dtype)
         # fit and transform
         y_stratify = y_train if self.task == 'classification' else None
         if self.distribute:
@@ -1333,7 +1334,7 @@ class CascadeLayer(Layer):
             if len(y_proba_train_tup) == 3 and self.verbose_dis:
                 for log in y_proba_train_tup[2]:
                     if log[0] == 'INFO':
-                        self.LOGGER.info("{}".format(log[0], log[1].format(log[2])))
+                        self.LOGGER.info("{}".format(log[1].format(log[2])))
                     elif log[0] == 'WARN':
                         self.LOGGER.warn("{}".format(log))
 
@@ -1399,7 +1400,7 @@ class CascadeLayer(Layer):
             X = None if len(X) == 0 else X[0]
         n_trains = X.shape[0]
         n_classes = self.n_classes
-        x_proba = np.zeros((n_trains, n_classes * self.n_estimators), dtype=np.float32)
+        x_proba = np.zeros((n_trains, n_classes * self.n_estimators), dtype=self.dtype)
         # fit estimators, get probas
         for ei, est in enumerate(self.fit_estimators):
             # transform by n-folds CV
@@ -1437,7 +1438,7 @@ class CascadeLayer(Layer):
             X = None if len(X) == 0 else X[0]
         n_trains = X.shape[0]
         n_classes = self.n_classes
-        proba_sum = np.zeros((n_trains, n_classes), dtype=np.float32)
+        proba_sum = np.zeros((n_trains, n_classes), dtype=self.dtype)
         # fit estimators, get probas
         for ei, est in enumerate(self.fit_estimators):
             # transform by n-folds CV
@@ -1683,7 +1684,7 @@ class AutoGrowingCascadeLayer(Layer):
                 if np.max(look_index) >= n_groups_train or np.min(look_index) < 0 or len(look_index) == 0:
                     raise ValueError("look_index invalid! look_index={}".format(look_index))
         x_cur_train = None
-        x_proba_train = np.zeros((n_trains, 0), dtype=np.float32)
+        x_proba_train = np.zeros((n_trains, 0), dtype=self.dtype)
         layer_id = 0
         layer_metric_list = []
         opt_data = [None, None]
@@ -1692,7 +1693,7 @@ class AutoGrowingCascadeLayer(Layer):
                 if layer_id >= self.max_layers > 0:
                     break
                 # clear x_cur_train
-                x_cur_train = np.zeros((n_trains, 0), dtype=np.float32)
+                x_cur_train = np.zeros((n_trains, 0), dtype=self.dtype)
                 train_ids = self.look_index_cycle[layer_id % len(self.look_index_cycle)]
                 for gid in train_ids:
                     x_cur_train = np.hstack((x_cur_train, x_train_group[:, group_starts[gid]:group_ends[gid]]))
@@ -1813,8 +1814,8 @@ class AutoGrowingCascadeLayer(Layer):
                 if np.max(look_index) >= n_groups_train or np.min(look_index) < 0 or len(look_index) == 0:
                     raise ValueError("look_index invalid! look_index={}".format(look_index))
         x_cur_train, x_cur_test = None, None
-        x_proba_train = np.zeros((n_trains, 0), dtype=np.float32)
-        x_proba_test = np.zeros((n_tests, 0), dtype=np.float32)
+        x_proba_train = np.zeros((n_trains, 0), dtype=self.dtype)
+        x_proba_test = np.zeros((n_tests, 0), dtype=self.dtype)
         cascade = None  # for save test results
         layer_id = 0
         layer_train_metrics, layer_test_metrics = [], []
@@ -1823,8 +1824,8 @@ class AutoGrowingCascadeLayer(Layer):
             while True:
                 if layer_id >= self.max_layers > 0:
                     break
-                x_cur_train = np.zeros((n_trains, 0), dtype=np.float32)
-                x_cur_test = np.zeros((n_tests, 0), dtype=np.float32)
+                x_cur_train = np.zeros((n_trains, 0), dtype=self.dtype)
+                x_cur_test = np.zeros((n_tests, 0), dtype=self.dtype)
                 train_ids = self.look_index_cycle[layer_id % len(self.look_index_cycle)]
                 for gid in train_ids:
                     x_cur_train = np.hstack((x_cur_train, x_train_group[:, group_starts[gid]:group_ends[gid]]))
@@ -1956,12 +1957,12 @@ class AutoGrowingCascadeLayer(Layer):
 
         if self.look_index_cycle is None:
             self.look_index_cycle = [[i, ] for i in range(n_groups)]
-        x_proba_test = np.zeros((n_examples, 0), dtype=np.float32)
+        x_proba_test = np.zeros((n_examples, 0), dtype=self.dtype)
         layer_id = 0
         try:
             while layer_id <= self.opt_layer_id:
                 self.LOGGER.info('Transforming layer - {} / {}'.format(layer_id, self.n_layers))
-                x_cur_test = np.zeros((n_examples, 0), dtype=np.float32)
+                x_cur_test = np.zeros((n_examples, 0), dtype=self.dtype)
                 train_ids = self.look_index_cycle[layer_id % n_groups]
                 for gid in train_ids:
                     x_cur_test = np.hstack((x_cur_test, x_test_group[:, self.group_starts[gid]:self.group_ends[gid]]))
@@ -2001,7 +2002,7 @@ class AutoGrowingCascadeLayer(Layer):
         if not isinstance(X, (list, tuple)):
             X = [X]
         x_proba = self.transform(X)
-        total_proba = np.zeros((X[0].shape[0], self.n_classes), dtype=np.float32)
+        total_proba = np.zeros((X[0].shape[0], self.n_classes), dtype=self.dtype)
         for i in range(len(self.est_configs)):
             total_proba += x_proba[:, i * self.n_classes:i * self.n_classes + self.n_classes]
         return total_proba
@@ -2098,7 +2099,7 @@ class AutoGrowingCascadeLayer(Layer):
             if phase == 'train':
                 data = {"X": x_train, "y": y_train}
             else:
-                data = {"X": x_test, "y": y_test if y_test is not None else np.zeros((0,), dtype=np.float32)}
+                data = {"X": x_test, "y": y_test if y_test is not None else np.zeros((0,), dtype=self.dtype)}
             self.LOGGER.info("Saving {} Data in {} ... X.shape={}, y.shape={}".format(
                 phase, data_path, data["X"].shape, data["y"].shape))
             with open(data_path, "wb") as f:
