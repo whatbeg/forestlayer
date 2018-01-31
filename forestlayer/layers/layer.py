@@ -22,6 +22,7 @@ from ..utils.storage_utils import check_dir, getmbof, output_disk_path, load_dis
 from ..utils.metrics import Metrics, Accuracy, AUC, MSE, RMSE
 from ..estimators import get_estimator_kfold, get_dist_estimator_kfold, EstimatorConfig
 from ..estimators.kfold_wrapper import SplittingKFoldWrapper, CascadeSplittingKFoldWrapper
+from forestlayer.backend.backend import get_num_nodes
 str2dtype = {'float16': np.float16, 'float32': np.float32, 'float64': np.float64}
 
 
@@ -65,16 +66,27 @@ class Layer(object):
             dtype = str2dtype[dtype]
         self.dtype = dtype
         # num of workers, the basis of the split, default is None, which means un-set.
-        self.num_workers = None
+        self._num_workers = None
         # distribute, identify whether use distributed training. default is False.
         self.distribute = False
 
-    def set_num_workers(self, n):
+    @property
+    def num_workers(self):
+        return self._num_workers
+
+    @num_workers.setter
+    def num_workers(self, n):
         # TODO: layer fit/fit_transform num_workers calculation
         assert isinstance(n, int), 'num_workers should be int, but {}'.format(type(n))
         assert n > 0, 'num_workers should be set to a positive number. but {}'.format(n)
-        self.num_workers = n
-        return self
+        self._num_workers = n
+
+    def init_num_workers(self):
+        if self._num_workers is not None:
+            return
+        nodes, num_nodes = get_num_nodes()
+        self._num_workers = num_nodes
+        self.LOGGER.info('Get number of workers: {}, total {}'.format(nodes, num_nodes))
 
     def call(self, x_trains):
         raise NotImplementedError
@@ -203,7 +215,11 @@ class MultiGrainScanLayer(Layer):
         assert dis_level in [0, 1, 2], 'dis_level should be 0 or 1, but {}'.format(dis_level)
         self.dis_level = dis_level
         self.verbose_dis = verbose_dis
-        self.num_workers = num_workers
+        # initialize num_workers if not provided
+        if num_workers is None and distribute is True:
+            self.init_num_workers()
+        else:
+            self.num_workers = num_workers
         self.keep_in_mem = keep_in_mem
         self.cache_in_disk = cache_in_disk
         self.data_save_dir = data_save_dir
@@ -1096,7 +1112,11 @@ class CascadeLayer(Layer):
         self.distribute = distribute
         self.verbose_dis = verbose_dis
         self.dis_level = dis_level
-        self.num_workers = num_workers
+        # initialize num_workers if not provided
+        if num_workers is None and distribute is True:
+            self.init_num_workers()
+        else:
+            self.num_workers = num_workers
         self.larger_better = True
         self.metrics = metrics
         self.eval_metrics = get_eval_metrics(self.metrics, self.task, self.name)
@@ -1563,7 +1583,10 @@ class AutoGrowingCascadeLayer(Layer):
         self.distribute = distribute
         self.verbose_dis = verbose_dis
         self.dis_level = dis_level
-        self.num_workers = num_workers
+        if num_workers is None and distribute is True:
+            self.init_num_workers()
+        else:
+            self.num_workers = num_workers
         # properties
         self.layer_fit_cascades = []
         self.n_layers = 0

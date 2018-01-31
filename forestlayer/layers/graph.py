@@ -123,7 +123,7 @@ class Graph(object):
             self.LOGGER.info(" -------------- Now fitting [{}] --------------".format(layer))
             layer_start_time = time.time()
             if layer.distribute is True and layer.num_workers is None:
-                layer.set_num_workers(self.get_num_workers())
+                layer.num_workers = self.get_num_workers()
             inputs = layer.fit(inputs, labels)
             self.LOGGER.info('{} time cost: {:.6f} s'.format(layer, time.time() - layer_start_time))
         time_cost = time.time() - start_time
@@ -159,7 +159,7 @@ class Graph(object):
             self.LOGGER.info(" -------------- Now fit_transforming - [{}] [{}] --------------".format(li, layer))
             layer_start_time = time.time()
             if layer.distribute is True and layer.num_workers is None:
-                layer.set_num_workers(self.get_num_workers())
+                layer.num_workers = self.get_num_workers()
             x_trains, x_tests = layer.fit_transform(x_trains, y_trains, x_tests, y_tests)
             self.LOGGER.info('{} time cost: {:.6f} s'.format(layer, time.time() - layer_start_time))
         time_cost = time.time() - start_time
