@@ -15,6 +15,7 @@ class YOURRegressor(xSKLearnBaseEstimator):
 from base_estimator import BaseEstimator
 from ..utils.log_utils import get_logger
 from sklearn.externals import joblib
+import psutil
 
 LOGGER = get_logger('estimators.sklearn_estimator')
 
@@ -22,14 +23,13 @@ LOGGER = get_logger('estimators.sklearn_estimator')
 def forest_predict_batch_size(clf, X, task):
     """
     Decide predict batch size by calculating memory occupation.
-    TODO: Different cluster need different batch size determination strategy.
 
     :param clf: classifier
     :param X: training data
     :param task: learning task
     :return: batch_size
     """
-    import psutil
+    # TODO: Different cluster need different batch size determination strategy.
     free_memory = psutil.virtual_memory().free
     LOGGER.debug('free_memory: {}'.format(free_memory))
     if free_memory < 2e9:

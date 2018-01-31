@@ -22,6 +22,22 @@ from ..utils.storage_utils import name2path, getmbof
 from ..utils.metrics import Accuracy, MSE
 from collections import defaultdict
 MAX_RAND_SEED = np.iinfo(np.int32).max
+str2est_class = {
+    'classification': {
+        'FLCRF': FLCRFClassifier,
+        'FLRF': FLRFClassifier,
+        'FLGBDT': FLGBDTClassifier,
+        'FLXGB': FLXGBoostClassifier,
+        'FLLGBM': FLLGBMClassifier,
+    },
+    'regression': {
+        'FLCRF': FLCRFRegressor,
+        'FLRF': FLRFRegressor,
+        'FLGBDT': FLGBDTRegressor,
+        'FLXGB': FLXGBoostRegressor,
+        'FLLGBM': FLLGBMRegressor,
+    }
+}
 
 
 class KFoldWrapper(object):
@@ -936,32 +952,7 @@ def est_class_from_type(task, est_type):
     :param est_type: estimator type (a string)
     :return: a concrete estimator instance
     """
-    if task == 'classification':
-        if est_type == 'FLCRF':
-            return FLCRFClassifier
-        if est_type == 'FLRF':
-            return FLRFClassifier
-        if est_type == 'FLGBDT':
-            return FLGBDTClassifier
-        if est_type == 'FLXGB':
-            return FLXGBoostClassifier
-        if est_type == 'FLLGBM':
-            raise FLLGBMClassifier
-        raise ValueError('Unknown Estimator: {}'.format(est_type))
-    elif task == 'regression':
-        if est_type == 'FLCRF':
-            return FLCRFRegressor
-        if est_type == 'FLRF':
-            return FLRFRegressor
-        if est_type == 'FLGBDT':
-            return FLGBDTRegressor
-        if est_type == 'FLXGB':
-            return FLXGBoostRegressor
-        if est_type == 'FLLGBM':
-            return FLLGBMRegressor
-        raise ValueError('Unknown Estimator: {}'.format(est_type))
-    else:
-        raise ValueError('Unknown task: {}'.format(task))
+    return str2est_class[task][est_type]
 
 
 def get_estimator(name, task, est_type, est_args):
