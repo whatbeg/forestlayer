@@ -75,9 +75,9 @@ class KFoldWrapper(object):
         # main program by users, so we need not to set random_state there.
         # More importantly, if some estimators have no random_state parameter, this assignment can throw problems.
         if isinstance(self.est_class, (XGBClassifier, XGBRegressor)):
-            if est_args.get('seed', "NONE") == "NONE":
+            if est_args.get('seed', None) is None:
                 est_args['seed'] = copy.deepcopy(self.seed)
-        elif est_args.get('random_state', "NONE") == "NONE":
+        elif est_args.get('random_state', None) is None:
             est_args['random_state'] = copy.deepcopy(self.seed)
         return self.est_class(est_name, est_args)
 
@@ -245,7 +245,7 @@ class KFoldWrapper(object):
 
 @ray.remote
 class DistributedKFoldWrapper(object):
-    def __init__(self, name, n_folds, est_class, seed=None, dtype=np.float32,
+    def __init__(self, name, n_folds, est_class, seed=None, dtype=np.float32, splitting=False,
                  eval_metrics=None, cache_dir=None, keep_in_mem=None, est_args=None, cv_seed=None):
         """
         Initialize a KFoldWrapper.
@@ -254,6 +254,11 @@ class DistributedKFoldWrapper(object):
         :param n_folds:
         :param est_class:
         :param seed:
+        :param dtype:
+        :param splitting: whether is in splitting, if true, we do not transfer proba results to self.dtype
+                           (may float32, default proba results of forests is float64) to keep Floating-point precision,
+                           after merge, we transfer it to self.dtype.
+                           if false, we directly transfer it to self.dtype (may be float32) to save memory.
         :param eval_metrics:
         :param cache_dir:
         :param keep_in_mem:
@@ -271,6 +276,7 @@ class DistributedKFoldWrapper(object):
         if isinstance(seed, basestring):
             self.seed = pickle.loads(seed)
         self.dtype = dtype
+        self.splitting = splitting
         self.cv_seed = cv_seed
         if self.cv_seed is None:
             self.cv_seed = self.seed
@@ -296,10 +302,11 @@ class DistributedKFoldWrapper(object):
         est_args = self.est_args.copy()
         est_name = '{}/{}'.format(self.name, k)
         if isinstance(self.est_class, (XGBClassifier, XGBRegressor)):
-            if est_args.get('seed', "NONE") == "NONE":
+            if est_args.get('seed', None) is None:
                 est_args['seed'] = copy.deepcopy(self.seed)
-        # there is no 'random_state' in est_args
-        elif est_args.get('random_state', "NONE") == "NONE":
+        # TODO: thus user cannot define their single forest with random_state=None, because it will be ignored if
+        # layer seed is not None.
+        elif est_args.get('random_state', None) is None:
             est_args['random_state'] = copy.deepcopy(self.seed)
         return self.est_class(est_name, est_args)
 
@@ -362,9 +369,12 @@ class DistributedKFoldWrapper(object):
             # merging result
             if k == 0:
                 if len(X.shape) == 2:
-                    y_proba_cv = np.zeros((n_stratify, y_proba.shape[1]), dtype=self.dtype)
+                    y_proba_cv = np.zeros((n_stratify, y_proba.shape[1]))
                 else:
-                    y_proba_cv = np.zeros((n_stratify, y_proba.shape[1], y_proba.shape[2]), dtype=self.dtype)
+                    y_proba_cv = np.zeros((n_stratify, y_proba.shape[1], y_proba.shape[2]))
+                # if not splitting, we directly let it be self.dtype to potentially save memory
+                if not self.splitting:
+                    y_proba_cv = y_proba_cv.astype(self.dtype)
                 y_proba_train = y_proba_cv
             y_proba_train[val_idx, :] += y_proba
 
@@ -373,8 +383,7 @@ class DistributedKFoldWrapper(object):
 
             # test
             for vi, (prefix, X_test, y_test) in enumerate(test_sets):
-                y_proba = est.predict_proba(X_test.reshape((-1, self.n_dims)),
-                                            cache_dir=self.cache_dir)
+                y_proba = est.predict_proba(X_test.reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
                 if not est.is_classification:
                     y_proba = y_proba[:, np.newaxis]
                 if len(X.shape) == 3:
@@ -464,6 +473,8 @@ class DistributedKFoldWrapper(object):
                                               n_folds=self.n_folds,
                                               est_class=self.est_class,
                                               seed=self.seed,
+                                              dtype=self.dtype,
+                                              splitting=self.splitting,
                                               eval_metrics=self.eval_metrics,
                                               cache_dir=self.cache_dir,
                                               keep_in_mem=self.keep_in_mem,
@@ -562,9 +573,9 @@ class SplittingKFoldWrapper(object):
                 self.LOGGER.debug('{} trees split to {} + {}'.format(num_trees, num_trees / 2, num_trees - num_trees/2))
                 args = est.get_est_args().copy()
                 args['n_estimators'] = num_trees / 2
-                sub_est1 = self._init_estimators(args, wi, wei, seed, self.cv_seed)
+                sub_est1 = self._init_estimators(args, wi, wei, seed, self.cv_seed, splitting=True)
                 args['n_estimators'] = num_trees - num_trees / 2
-                sub_est2 = self._init_estimators(args, wi, wei, seed2, self.cv_seed)
+                sub_est2 = self._init_estimators(args, wi, wei, seed2, self.cv_seed, splitting=True)
                 split_ests.append(sub_est1)
                 split_ests.append(sub_est2)
                 split_group.append([i, i + 1])
@@ -575,12 +586,13 @@ class SplittingKFoldWrapper(object):
         else:
             for ei, est in enumerate(ests):
                 wi, wei = self.ei2wi[ei]
-                gen_est = self._init_estimators(est.get_est_args().copy(), wi, wei, self.seed, self.cv_seed)
+                gen_est = self._init_estimators(est.get_est_args().copy(),
+                                                wi, wei, self.seed, self.cv_seed, splitting=False)
                 split_ests.append(gen_est)
             split_group = [[i, ] for i in range(len(ests))]
         return split_ests, split_group
 
-    def _init_estimators(self, args, wi, ei, seed, cv_seed):
+    def _init_estimators(self, args, wi, ei, seed, cv_seed, splitting=False):
         """
         Initialize distributed kfold wrapper. dumps the seed if seed is a np.random.RandomState.
 
@@ -616,6 +628,7 @@ class SplittingKFoldWrapper(object):
                                         eval_metrics=self.eval_metrics,
                                         seed=seed,
                                         dtype=self.dtype,
+                                        splitting=splitting,
                                         keep_in_mem=self.keep_in_mem,
                                         est_args=est_args,
                                         cv_seed=cv_seed)
@@ -773,21 +786,21 @@ class CascadeSplittingKFoldWrapper(object):
                 self.LOGGER.debug('{} trees split to {} + {}'.format(num_trees, num_trees / 2, num_trees - num_trees/2))
                 args = est.copy()
                 args['n_estimators'] = num_trees / 2
-                sub_est1 = self._init_estimators(args, self.layer_id, ei, seed, self.cv_seed)
+                sub_est1 = self._init_estimators(args, self.layer_id, ei, seed, self.cv_seed, splitting=True)
                 args['n_estimators'] = num_trees - num_trees / 2
-                sub_est2 = self._init_estimators(args, self.layer_id, ei, seed2, self.cv_seed)
+                sub_est2 = self._init_estimators(args, self.layer_id, ei, seed2, self.cv_seed, splitting=True)
                 split_ests.append(sub_est1)
                 split_ests.append(sub_est2)
                 split_group.append([i, i + 1])
                 i += 2
         else:
             for ei, est in enumerate(ests):
-                gen_est = self._init_estimators(est.copy(), self.layer_id, ei, self.seed, self.cv_seed)
+                gen_est = self._init_estimators(est.copy(), self.layer_id, ei, self.seed, self.cv_seed, splitting=False)
                 split_ests.append(gen_est)
             split_group = [[i, ] for i in range(len(ests))]
         return split_ests, split_group
 
-    def _init_estimators(self, args, layer_id, ei, seed, cv_seed):
+    def _init_estimators(self, args, layer_id, ei, seed, cv_seed, splitting=False):
         """
         Initialize distributed kfold wrapper. dumps the seed if seed is a np.random.RandomState.
 
@@ -823,6 +836,7 @@ class CascadeSplittingKFoldWrapper(object):
                                         eval_metrics=self.eval_metrics,
                                         seed=seed,
                                         dtype=self.dtype,
+                                        splitting=splitting,
                                         keep_in_mem=self.keep_in_mem,
                                         est_args=est_args,
                                         cv_seed=cv_seed)
@@ -865,7 +879,7 @@ class CascadeSplittingKFoldWrapper(object):
         for grp in split_group:
             if len(grp) == 2:
                 # Tree reduce
-                est_group.append(merge.remote(ests_output[grp[0]], ests_output[grp[1]]))
+                est_group.append(merge.remote(ests_output[grp[0]], ests_output[grp[1]], dtype=self.dtype))
             else:
                 est_group.append(ests_output[grp[0]])
         est_group_result = ray.get(est_group)
@@ -873,7 +887,7 @@ class CascadeSplittingKFoldWrapper(object):
 
 
 @ray.remote
-def merge(tup_1, tup_2):
+def merge(tup_1, tup_2, dtype=np.float32):
     """
     Merge 2 tuple of (y_proba_train, y_proba_tests, logs).
     NOTE: Now in splitting mode, the logs will be approximate log, because we should calculate metrics after collect
@@ -883,11 +897,17 @@ def merge(tup_1, tup_2):
 
     :param tup_1: tuple like (y_proba_train, y_proba_tests, logs)
     :param tup_2: tuple like (y_proba_train, y_proba_tests, logs)
-    :return:
+    :param dtype: result data type. when we invoke merge, we must in splitting mode, in this mode, we will keep
+                   origin float-point precision (may be float64), and when we combine result of small forests, we
+                   should convert the data type to self.dtype (may be float32), which can reduce memory and
+                   communication overhead.
+    :return: tuple of results, (y_proba_train: numpy.ndarray,
+              y_proba_tests: numpy.ndarray, may be None, list of y_proba_test,
+              logs: list of tuple which contains log level, log info)
     """
     tests = []
     for i in range(len(tup_1[1])):
-        tests.append((tup_1[1][i] + tup_2[1][i])/2.0)
+        tests.append(((tup_1[1][i] + tup_2[1][i])/2.0).astype(dtype))
     mean_dict = defaultdict(float)
     logs = []
     for t1 in tup_1[2]:
@@ -905,7 +925,7 @@ def merge(tup_1, tup_2):
         key_split = key.split(',')
         logs.append((key_split[0], "Approximate " + key_split[1], mean_dict[key]))
     logs.sort()
-    return (tup_1[0] + tup_2[0])/2.0, tests, logs
+    return ((tup_1[0] + tup_2[0])/2.0).astype(dtype), tests, logs
 
 
 def est_class_from_type(task, est_type):
@@ -994,8 +1014,9 @@ def get_estimator_kfold(name, n_folds=3, task='classification', est_type='FLRF',
                         cv_seed=cv_seed)
 
 
-def get_dist_estimator_kfold(name, n_folds=3, task='classification', est_type='RF', eval_metrics=None, seed=None,
-                             dtype=np.float32, cache_dir=None, keep_in_mem=True, est_args=None, cv_seed=None):
+def get_dist_estimator_kfold(name, n_folds=3, task='classification', est_type='FLRF', eval_metrics=None,
+                             seed=None, dtype=np.float32, splitting=False, cache_dir=None,
+                             keep_in_mem=True, est_args=None, cv_seed=None):
     """
     A factory method to get a distributed k-fold estimator.
 
@@ -1006,6 +1027,7 @@ def get_dist_estimator_kfold(name, n_folds=3, task='classification', est_type='R
     :param eval_metrics: evaluation metrics. [Default: Accuracy (classification), MSE (regression)]
     :param seed: random seed
     :param dtype: data type
+    :param splitting: whether in splitting mode
     :param cache_dir: data cache dir to cache intermediate data
     :param keep_in_mem: whether keep the model in memory
     :param est_args: estimator arguments
@@ -1023,6 +1045,7 @@ def get_dist_estimator_kfold(name, n_folds=3, task='classification', est_type='R
                                           est_class,
                                           seed=seed,
                                           dtype=dtype,
+                                          splitting=splitting,
                                           eval_metrics=eval_metrics,
                                           cache_dir=cache_dir,
                                           keep_in_mem=keep_in_mem,

@@ -22,6 +22,7 @@ from ..utils.storage_utils import check_dir, getmbof, output_disk_path, load_dis
 from ..utils.metrics import Metrics, Accuracy, AUC, MSE, RMSE
 from ..estimators import get_estimator_kfold, get_dist_estimator_kfold, EstimatorConfig
 from ..estimators.kfold_wrapper import SplittingKFoldWrapper, CascadeSplittingKFoldWrapper
+str2dtype = {'float16': np.float16, 'float32': np.float32, 'float64': np.float64}
 
 
 class Layer(object):
@@ -58,7 +59,6 @@ class Layer(object):
             name = _to_snake_case(prefix) + "_" + str(id(self))
         self.name = name
         # Set dtype.
-        str2dtype = {'float16': np.float16, 'float32': np.float32, 'float64': np.float64}
         if dtype is None:
             dtype = np.float32
         elif isinstance(dtype, basestring):
