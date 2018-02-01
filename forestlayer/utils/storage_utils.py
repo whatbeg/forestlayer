@@ -68,20 +68,31 @@ def numpy_to_disk_path(cache_dir, phase, data_name):
     return data_path
 
 
-def output_disk_path(cache_dir, layer, phase, data_name):
-    data_path = osp.join(cache_dir, layer, phase, name2path(data_name) + '.pkl')
+def output_disk_path(cache_dir, layer, phase, data_name, file_type='pkl'):
+    assert file_type in ['pkl', 'txt'], 'Unknown file type.'
+    data_path = osp.join(cache_dir, layer, phase, name2path(data_name) + '.{}'.format(file_type))
     return data_path
 
 
-def load_disk_cache(data_path):
-    with open(data_path, 'rb') as f:
-        res = pickle.load(f)
+def load_disk_cache(data_path, file_type='pkl'):
+    if file_type == 'pkl':
+        with open(data_path, 'rb') as f:
+            res = pickle.load(f)
+    elif file_type == 'txt':
+        res = np.loadtxt(data_path)
+    else:
+        raise ValueError('Unknown file type.')
     return res
 
 
-def save_disk_cache(save_path, x2save):
-    with open(save_path, "wb") as f:
-        pickle.dump(x2save, f, pickle.HIGHEST_PROTOCOL)
+def save_disk_cache(save_path, x2save, file_type='pkl'):
+    if file_type == 'pkl':
+        with open(save_path, "wb") as f:
+            pickle.dump(x2save, f, pickle.HIGHEST_PROTOCOL)
+    elif file_type == 'txt':
+        np.savetxt(save_path, x2save, fmt='%s')
+    else:
+        raise ValueError('Unknown file type.')
 
 
 def get_data_save_base():

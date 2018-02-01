@@ -13,7 +13,7 @@ import datetime
 import os.path as osp
 try:
     import cPickle as pickle
-except:
+except ImportError:
     import pickle
 import ray
 from ..utils.log_utils import get_logger, list2str
@@ -21,6 +21,9 @@ from ..utils.layer_utils import check_list_depth
 from ..utils.storage_utils import check_dir, getmbof, output_disk_path, load_disk_cache, save_disk_cache, save_model
 from ..utils.metrics import Metrics, Accuracy, AUC, MSE, RMSE
 from ..estimators import get_estimator_kfold, get_dist_estimator_kfold, EstimatorConfig
+from ..estimators.kfold_wrapper import SplittingKFoldWrapper, CascadeSplittingKFoldWrapper
+from forestlayer.backend.backend import get_num_nodes
+str2dtype = {'float16': np.float16, 'float32': np.float32, 'float64': np.float64}
 
 
 class Layer(object):
@@ -42,7 +45,7 @@ class Layer(object):
     # Class Methods
         from_config(config)
     """
-    def __init__(self, batch_size=None, dtype=None, name=None):
+    def __init__(self, batch_size=None, dtype=np.float32, name=None):
         """
         Initialize a layer.
 
@@ -59,7 +62,31 @@ class Layer(object):
         # Set dtype.
         if dtype is None:
             dtype = np.float32
+        elif isinstance(dtype, basestring):
+            dtype = str2dtype[dtype]
         self.dtype = dtype
+        # num of workers, the basis of the split, default is None, which means un-set.
+        self._num_workers = None
+        # distribute, identify whether use distributed training. default is False.
+        self.distribute = False
+
+    @property
+    def num_workers(self):
+        return self._num_workers
+
+    @num_workers.setter
+    def num_workers(self, n):
+        # TODO: layer fit/fit_transform num_workers calculation
+        assert isinstance(n, int), 'num_workers should be int, but {}'.format(type(n))
+        assert n > 0, 'num_workers should be set to a positive number. but {}'.format(n)
+        self._num_workers = n
+
+    def init_num_workers(self):
+        if self._num_workers is not None:
+            return
+        nodes, num_nodes = get_num_nodes()
+        self._num_workers = num_nodes
+        self.LOGGER.info('Get number of workers: {}, total {}'.format(nodes, num_nodes))
 
     def call(self, x_trains):
         raise NotImplementedError
@@ -142,10 +169,10 @@ class MultiGrainScanLayer(Layer):
     """
     Multi-grain Scan Layer
     """
-    def __init__(self, batch_size=None, dtype=None, name=None, task='classification',
+    def __init__(self, batch_size=None, dtype=np.float32, name=None, task='classification',
                  windows=None, est_for_windows=None, n_class=None, keep_in_mem=False,
                  cache_in_disk=False, data_save_dir=None, eval_metrics=None, seed=None,
-                 distribute=False, dis_level=0):
+                 distribute=False, dis_level=1, verbose_dis=True, num_workers=None):
         """
         Initialize a multi-grain scan layer.
 
@@ -161,10 +188,12 @@ class MultiGrainScanLayer(Layer):
         :param seed:
         :param distribute: whether use distributed training. If use, you should `import ray`
                            and write `ray.init(<redis-address>)` at the beginning of the main program.
-        :param dis_level: temporary variable. Only take effect when distribute is True.
-                          When distribute is True, dis_level = 0 means using a low level parallelization
-                           for multi-grain scan layer. dis_level = 1 means using a higher level parallelization
-                           for multi-grain scan layer. [default is 0]
+        :param dis_level: distributed level, or parallelization level, 0 / 1 / 2
+                           0 means lowest parallelization level, parallelization is len(self.est_configs).
+                           1 means we will split the forests in some condition to making more full use of
+                            cluster resources, so the parallelization may be larger than len(self.est_configs).
+                           2 means that anyway we must split forests.
+                           Now 2 is the HIGHEST_DISLEVEL, default is 1.
         """
         if not name:
             prefix = 'multi_grain_scan'
@@ -178,13 +207,19 @@ class MultiGrainScanLayer(Layer):
         if self.task == 'regression':
             self.n_class = 1
         else:
-            assert n_class is not None
+            assert n_class is not None, 'n_class should not be None!'
             self.n_class = n_class
         self.seed = seed
         assert isinstance(distribute, bool), 'distribute variable should be Boolean, but {}'.format(type(distribute))
         self.distribute = distribute
-        assert dis_level in [0, 1], 'dis_level should be 0 or 1, but {}'.format(dis_level)
+        assert dis_level in [0, 1, 2], 'dis_level should be 0 or 1, but {}'.format(dis_level)
         self.dis_level = dis_level
+        self.verbose_dis = verbose_dis
+        # initialize num_workers if not provided
+        if num_workers is None and distribute is True:
+            self.init_num_workers()
+        else:
+            self.num_workers = num_workers
         self.keep_in_mem = keep_in_mem
         self.cache_in_disk = cache_in_disk
         self.data_save_dir = data_save_dir
@@ -230,37 +265,17 @@ class MultiGrainScanLayer(Layer):
             get_est_func = get_dist_estimator_kfold
         else:
             get_est_func = get_estimator_kfold
+        # print('init_estimator seed = {}, cv_seed = {}'.format(seed, cv_seed))
         return get_est_func(name=est_name,
                             n_folds=n_folds,
                             task=self.task,
                             est_type=est_type,
                             eval_metrics=self.eval_metrics,
                             seed=seed,
+                            dtype=self.dtype,
                             keep_in_mem=self.keep_in_mem,
-                            est_args=est_args)
-
-    def _check_input(self, x, y):
-        if isinstance(x, (list, tuple)):
-            assert len(x) == 1, "Multi grain scan Layer only supports exactly one input now!"
-            x = x[0]
-        if isinstance(y, (list, tuple)):
-            assert len(y) == 1, "Multi grain scan Layer only supports exactly one input now!"
-            y = y[0]
-        return x, y
-
-    def _check_disk_cache(self, x, phase):
-        if not self.cache_in_disk or not self.data_save_dir:
-            return False
-        data_path = self._get_disk_path(x, phase)
-        if osp.exists(data_path):
-            return data_path
-        return False
-
-    def _get_disk_path(self, x, phase):
-        assert isinstance(x, np.ndarray), 'x_train should be numpy.ndarray, but {}'.format(type(x))
-        data_name = "x".join(map(str, x.shape))
-        data_path = output_disk_path(self.data_save_dir, 'mgs', phase, data_name)
-        return data_path
+                            est_args=est_args,
+                            cv_seed=seed)
 
     def fit(self, x_train, y_train):
         """
@@ -270,14 +285,14 @@ class MultiGrainScanLayer(Layer):
         :param y_train:
         :return:
         """
-        if self.distribute and self.dis_level == 1:
-            return self._distributed_fit(x_train, y_train)
         x_train, y_train = self._check_input(x_train, y_train)
         # check if output of fit is exists in disk, if yes, we do not to re-train the model, just load the cached data.
         train_path = self._check_disk_cache(x_train, 'train')
         if train_path is not False:
             self.LOGGER.info("Cache hit! Loading data from {}, skip fit!".format(train_path))
             return load_disk_cache(data_path=train_path)
+        if self.distribute and self.dis_level >= 1:
+            return self._distributed_fit(x_train, y_train)
         x_wins_train = []
         for win in self.windows:
             x_wins_train.append(self.scan(win, x_train))
@@ -297,12 +312,22 @@ class MultiGrainScanLayer(Layer):
                     est = self._init_estimator(est, wi, ei)
                 ests_for_win[ei] = est
             if self.distribute:
-                y_proba_trains = ray.get([est.fit_transform.remote(x_wins_train[wi], y_win, y_win[:, 0])
+                x_wins_train_obj_id = ray.put(x_wins_train[wi])
+                y_win_obj_id = ray.put(y_win)
+                y_stratify = ray.put(y_win[:, 0])
+                y_proba_trains = ray.get([est.fit_transform.remote(x_wins_train_obj_id, y_win_obj_id, y_stratify)
                                           for est in ests_for_win])
             else:
                 y_proba_trains = [est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0]) for est in ests_for_win]
-            for y_proba_train, _ in y_proba_trains:
+            for y_proba_train_tup in y_proba_trains:
+                y_proba_train = y_proba_train_tup[0]
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                if len(y_proba_train_tup) == 3 and self.verbose_dis:
+                    for log in y_proba_train_tup[2]:
+                        if log[0] == 'INFO':
+                            self.LOGGER.info("{}".format(log[1].format(log[2])))
+                        elif log[0] == 'WARN':
+                            self.LOGGER.warn("{}".format(log))
                 win_est_train.append(y_proba_train)
             if self.keep_in_mem:
                 self.est_for_windows[wi] = ests_for_win
@@ -332,6 +357,7 @@ class MultiGrainScanLayer(Layer):
         for win in self.windows:
             x_wins_train.append(self.scan(win, x_train))
         self.LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
+        self.LOGGER.debug('Scaned dtype for X_wins of train: {}'.format([win.dtype for win in x_wins_train]))
         x_win_est_train = []
         ests = []
         est_offsets = [0, ]
@@ -342,21 +368,19 @@ class MultiGrainScanLayer(Layer):
             if not isinstance(ests_for_win, (list, tuple)):
                 ests_for_win = [ests_for_win]
             for ei, est in enumerate(ests_for_win):
-                if isinstance(est, EstimatorConfig):
-                    est = self._init_estimator(est, wi, ei)
-                ests_for_win[ei] = est
                 ests.append(est)
-                ei2wi[est_offsets[wi] + ei] = wi
+                ei2wi[est_offsets[wi] + ei] = (wi, ei)
             est_offsets.append(est_offsets[-1] + len(ests_for_win))
             _, nhs[wi], nws[wi], _ = x_wins_train[wi].shape
             x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
             y_win[wi] = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
-        if self.distribute:
-            ests_output = ray.get([est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]],
-                                   y_win[ei2wi[ei]][:, 0]) for ei, est in enumerate(ests)])
-        else:
-            ests_output = [est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]], y_win[ei2wi[ei]][:, 0])
-                           for ei, est in enumerate(ests)]
+            self.LOGGER.debug('x_wins_train[{}] size={}, dtype={}'.format(wi, getmbof(x_wins_train[wi]), x_wins_train[wi].dtype))
+            self.LOGGER.debug('y_win[{}] size={}, dtype={}'.format(wi, getmbof(y_win[wi]), y_win[wi].dtype))
+        splitting = SplittingKFoldWrapper(dis_level=self.dis_level, estimators=ests, ei2wi=ei2wi,
+                                          num_workers=self.num_workers, seed=self.seed,
+                                          task=self.task, eval_metrics=self.eval_metrics,
+                                          keep_in_mem=self.keep_in_mem, cv_seed=self.seed, dtype=self.dtype)
+        ests_output = splitting.fit(x_wins_train, y_win)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             win_est_train = []
             # X_wins[wi] = (60000, 11, 11, 49)
@@ -367,6 +391,13 @@ class MultiGrainScanLayer(Layer):
                 y_proba_train = y_proba_train_tup[0]
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
                 win_est_train.append(y_proba_train)
+                if len(y_proba_train_tup) == 3 and self.verbose_dis:
+                    for log in y_proba_train_tup[2]:
+                        if log[0] == 'INFO':
+                            self.LOGGER.info("{}".format(log[1].format(log[2])))
+                        elif log[0] == 'WARN':
+                            self.LOGGER.warn("{}".format(log))
+
             if self.keep_in_mem:
                 self.est_for_windows[wi] = ests_for_win
             else:
@@ -418,11 +449,8 @@ class MultiGrainScanLayer(Layer):
             if not isinstance(ests_for_win, (list, tuple)):
                 ests_for_win = [ests_for_win]
             for ei, est in enumerate(ests_for_win):
-                if isinstance(est, EstimatorConfig):
-                    est = self._init_estimator(est, wi, ei)
-                ests_for_win[ei] = est
                 ests.append(est)
-                ei2wi[est_offsets[wi] + ei] = wi
+                ei2wi[est_offsets[wi] + ei] = (wi, ei)
             est_offsets.append(est_offsets[-1] + len(ests_for_win))
             _, nhs[wi], nws[wi], _ = x_wins_train[wi].shape
             x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
@@ -430,15 +458,16 @@ class MultiGrainScanLayer(Layer):
             y_win[wi] = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
             y_win_test[wi] = None if y_test is None else y_test[:, np.newaxis].repeat(x_wins_test[wi].shape[1], axis=1)
             test_sets[wi] = [('testOfWin{}'.format(wi), x_wins_test[wi], y_win_test[wi])]
-        if self.distribute:
-            ests_output = ray.get([est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]],
-                                                            y_win[ei2wi[ei]][:, 0], test_sets[ei2wi[ei]])
-                                   for ei, est in enumerate(ests)])
-        else:
-            ests_output = [est.fit_transform.remote(x_wins_train[ei2wi[ei]], y_win[ei2wi[ei]],
-                                                    y_win[ei2wi[ei]][:, 0], test_sets[ei2wi[ei]])
-                           for ei, est in enumerate(ests)]
-        # print(list_type2str(self.est_for_windows, 2))
+            self.LOGGER.debug(
+                'x_wins_train[{}] size={}, dtype={}'.format(wi, getmbof(x_wins_train[wi]), x_wins_train[wi].dtype))
+            self.LOGGER.debug('y_win[{}] size={}, dtype={}'.format(wi, getmbof(y_win[wi]), y_win[wi].dtype))
+        self.LOGGER.debug('est_offsets = {}'.format(est_offsets))
+        self.LOGGER.debug('ei2wi = {}'.format(ei2wi))
+        splitting = SplittingKFoldWrapper(dis_level=self.dis_level, estimators=ests, ei2wi=ei2wi,
+                                          num_workers=self.num_workers, seed=self.seed,
+                                          task=self.task, eval_metrics=self.eval_metrics,
+                                          keep_in_mem=self.keep_in_mem, cv_seed=self.seed, dtype=self.dtype)
+        ests_output = splitting.fit_transform(x_wins_train, y_win, test_sets)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             win_est_train = []
             win_est_test = []
@@ -455,6 +484,14 @@ class MultiGrainScanLayer(Layer):
                 y_probas_test = y_probas_test.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
                 win_est_train.append(y_proba_train)
                 win_est_test.append(y_probas_test)
+                if len(y_proba_tup) == 3 and self.verbose_dis:
+                    for log in y_proba_tup[2]:
+                        if log[0] == 'INFO':
+                            self.LOGGER.info("{}".format(log[1].format(log[2])))
+                        elif log[0] == 'WARN':
+                            self.LOGGER.warn("{}".format(log))
+
+            # TODO: improving keep estimators.
             if self.keep_in_mem:
                 self.est_for_windows[wi] = ests_for_win
             else:
@@ -488,8 +525,6 @@ class MultiGrainScanLayer(Layer):
         """
         if x_test is None:
             return self.fit(x_train, y_train), None
-        if self.distribute and self.dis_level == 1:
-            return self._distribute_fit_transform(x_train, y_train, x_test, y_test)
         x_train, y_train = self._check_input(x_train, y_train)
         x_test, y_test = self._check_input(x_test, y_test)
         self.LOGGER.debug('x_train size = {}, x_test size = {}'.format(getmbof(x_train[:]), getmbof(x_test[:])))
@@ -500,6 +535,8 @@ class MultiGrainScanLayer(Layer):
             self.LOGGER.info("Cache hit! Loading train from {}, skip fit!".format(train_path))
             self.LOGGER.info("Cache hit! Loading test from {}, skip fit!".format(test_path))
             return load_disk_cache(train_path), load_disk_cache(test_path)
+        if self.distribute and self.dis_level >= 1:
+            return self._distribute_fit_transform(x_train, y_train, x_test, y_test)
         # Construct test sets
         x_wins_train = []
         x_wins_test = []
@@ -537,18 +574,29 @@ class MultiGrainScanLayer(Layer):
             self.LOGGER.debug('x_wins_train[{}].size = {}'.format(wi, getmbof(x_wins_train[wi])))
             self.LOGGER.debug('y_win.size = {}'.format(getmbof(y_win)))
             if self.distribute:
-                y_proba_train_tests = ray.get([est.fit_transform.remote(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
+                x_wins_train_obj_id = ray.put(x_wins_train[wi])
+                y_win_obj_id = ray.put(y_win)
+                y_stratify = ray.put(y_win[:, 0])
+                test_sets_obj_id = ray.put(test_sets)
+                y_proba_train_tests = ray.get([est.fit_transform.remote(x_wins_train_obj_id, y_win_obj_id,
+                                                                        y_stratify, test_sets_obj_id)
                                                for est in ests_for_win])
             else:
                 y_proba_train_tests = [est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
                                        for est in ests_for_win]
             self.LOGGER.debug('got y_proba_train_tests size = {}'.format(getmbof(y_proba_train_tests)))
-            for y_proba_train, y_probas_test in y_proba_train_tests:
-                # (60000, 121, 10)
+            for y_proba_tup in y_proba_train_tests:
+                y_proba_train = y_proba_tup[0]
                 y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
-                assert len(y_probas_test) == 1, 'assume there is only one test set!'
+                y_probas_test = y_proba_tup[1]
                 y_probas_test = y_probas_test[0]
                 y_probas_test = y_probas_test.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                if len(y_proba_tup) == 3 and self.verbose_dis:
+                    for log in y_proba_tup[2]:
+                        if log[0] == 'INFO':
+                            self.LOGGER.info("{}".format(log[1].format(log[2])))
+                        elif log[0] == 'WARN':
+                            self.LOGGER.warn("{}".format(log))
                 win_est_train.append(y_proba_train)
                 win_est_test.append(y_probas_test)
             if self.keep_in_mem:
@@ -614,6 +662,29 @@ class MultiGrainScanLayer(Layer):
 
     def evaluate(self, inputs, labels):
         raise NotImplementedError
+
+    def _check_input(self, x, y):
+        if isinstance(x, (list, tuple)):
+            assert len(x) == 1, "Multi grain scan Layer only supports exactly one input now!"
+            x = x[0]
+        if isinstance(y, (list, tuple)):
+            assert len(y) == 1, "Multi grain scan Layer only supports exactly one input now!"
+            y = y[0]
+        return x, y
+
+    def _check_disk_cache(self, x, phase, file_type='pkl'):
+        if not self.cache_in_disk or not self.data_save_dir:
+            return False
+        data_path = self._get_disk_path(x, phase, file_type)
+        if osp.exists(data_path):
+            return data_path
+        return False
+
+    def _get_disk_path(self, x, phase, file_type='pkl'):
+        assert isinstance(x, np.ndarray), 'x_train should be numpy.ndarray, but {}'.format(type(x))
+        data_name = "x".join(map(str, x.shape))
+        data_path = output_disk_path(self.data_save_dir, 'mgs', phase, data_name, file_type)
+        return data_path
 
     def save(self):
         pass
@@ -971,7 +1042,7 @@ class ConcatLayer(Layer):
 class CascadeLayer(Layer):
     def __init__(self, batch_size=None, dtype=None, name=None, task='classification', est_configs=None,
                  layer_id='anonymous', n_classes=None, keep_in_mem=False, data_save_dir=None, model_save_dir=None,
-                 metrics=None, seed=None, distribute=False, verbose_dis=False):
+                 num_workers=None, metrics=None, seed=None, distribute=False, verbose_dis=False, dis_level=1):
         """Cascade Layer.
         A cascade layer contains several estimators, it accepts single input, go through these estimators, produces
         predicted probability by every estimators, and stacks them together for next cascade layer.
@@ -989,6 +1060,7 @@ class CascadeLayer(Layer):
                             TODO: support dump model to disk to save memory
         :param data_save_dir: directory to save intermediate data into
         :param model_save_dir: directory to save fit estimators into
+        :param num_workers: number of workers in the cluster
         :param metrics: str or user-defined Metrics object, evaluation metrics used in training model and evaluating
                          testing data.
                         Support: 'accuracy', 'auc', 'mse', 'rmse',
@@ -1000,6 +1072,12 @@ class CascadeLayer(Layer):
                            and write `ray.init(<redis-address>)` at the beginning of the main program.
         :param verbose_dis: boolean, whether print logging info that generated on different worker machines.
                             default = False.
+        :param dis_level: distributed level, or parallelization level, 0 / 1 / 2
+                           0 means lowest parallelization level, parallelization is len(self.est_configs).
+                           1 means we will split the forests in some condition to making more full use of
+                            cluster resources, so the parallelization may be larger than len(self.est_configs).
+                           2 means that anyway we must split forests.
+                           Now 2 is the HIGHEST_DISLEVEL, default is 1.
 
         # Properties
             eval_metrics: evaluation metrics
@@ -1033,6 +1111,12 @@ class CascadeLayer(Layer):
         self.seed = seed
         self.distribute = distribute
         self.verbose_dis = verbose_dis
+        self.dis_level = dis_level
+        # initialize num_workers if not provided
+        if num_workers is None and distribute is True:
+            self.init_num_workers()
+        else:
+            self.num_workers = num_workers
         self.larger_better = True
         self.metrics = metrics
         self.eval_metrics = get_eval_metrics(self.metrics, self.task, self.name)
@@ -1049,7 +1133,8 @@ class CascadeLayer(Layer):
     def __call__(self, inputs, **kwargs):
         self.call(inputs, **kwargs)
 
-    def _concat(self, x, depth):
+    @staticmethod
+    def _concat(x, depth):
         """
         Concatenation inner method, to make multiple inputs to be single input, so that to feed it into classifiers.
 
@@ -1130,8 +1215,10 @@ class CascadeLayer(Layer):
                             est_type=est_type,
                             eval_metrics=self.eval_metrics,
                             seed=seed,
+                            dtype=self.dtype,
                             keep_in_mem=self.keep_in_mem,
-                            est_args=est_args)
+                            est_args=est_args,
+                            cv_seed=seed)
 
     def fit(self, x_train, y_train):
         """
@@ -1143,8 +1230,8 @@ class CascadeLayer(Layer):
         :return: train_output
         """
         x_train, y_train, _, _ = self._validate_input(x_train, y_train)
-        assert x_train.shape[0] == y_train.shape[0], 'x_train.shape[0] = {} not equal to y_train.shape[0]' \
-                                                     ' = {}'.format(x_train.shape[0], y_train.shape[0])
+        assert x_train.shape[0] == y_train.shape[0], ('x_train.shape[0] = {} not equal to y_train.shape[0]'
+                                                      ' = {}'.format(x_train.shape[0], y_train.shape[0]))
         self.LOGGER.info('X_train.shape={}, y_train.shape={}'.format(x_train.shape, y_train.shape))
         n_trains = x_train.shape[0]
         n_classes = self.n_classes  # if regression, n_classes = 1
@@ -1152,26 +1239,39 @@ class CascadeLayer(Layer):
             n_classes = np.unique(y_train)
         if self.task == 'regression' and n_classes is None:
             n_classes = 1
-        x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=np.float32)
-        eval_proba_train = np.zeros((n_trains, n_classes), dtype=np.float32)
-        # fit estimators, get probas (classification) or targets (regression)
-        estimators = []
-        for ei in range(self.n_estimators):
-            est = self._init_estimators(self.layer_id, ei)
-            estimators.append(est)
+        x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=self.dtype)
+        eval_proba_train = np.zeros((n_trains, n_classes), dtype=self.dtype)
         # fit and transform
         y_stratify = y_train if self.task == 'classification' else None
         if self.distribute:
-            y_proba_trains = ray.get([est.fit_transform.remote(x_train, y_train, y_stratify, test_sets=None)
-                                      for est in estimators])
+            splitting = CascadeSplittingKFoldWrapper(dis_level=self.dis_level, estimators=self.est_args,
+                                                     num_workers=self.num_workers, seed=self.seed, task=self.task,
+                                                     eval_metrics=self.eval_metrics, keep_in_mem=self.keep_in_mem,
+                                                     cv_seed=self.seed, dtype=self.dtype, layer_id=self.layer_id)
+            y_proba_trains, split_ests, split_group = splitting.fit_transform(x_train, y_train, y_stratify,
+                                                                              test_sets=None)
+            # TODO: fill the estimators, utilize est_group
+            if self.keep_in_mem:
+                estimators = split_ests
+            else:
+                estimators = None
         else:
+            # fit estimators, get probas (classification) or targets (regression)
+            estimators = []
+            for ei in range(self.n_estimators):
+                est = self._init_estimators(self.layer_id, ei)
+                estimators.append(est)
             y_proba_trains = [est.fit_transform(x_train, y_train, y_stratify, test_sets=None)
                               for est in estimators]
         for ei, y_proba_train_tup in enumerate(y_proba_trains):
             y_proba_train = y_proba_train_tup[0]
             if len(y_proba_train_tup) == 3 and self.verbose_dis:
                 for log in y_proba_train_tup[2]:
-                    print(log)
+                    if log[0] == 'INFO':
+                        self.LOGGER.info("{}".format(log[1].format(log[2])))
+                    elif log[0] == 'WARN':
+                        self.LOGGER.warn("{}".format(log))
+
             if y_proba_train is None:
                 raise RuntimeError("layer - {} - estimator - {} fit FAILED!,"
                                    " y_proba_train is None!".format(self.layer_id, ei))
@@ -1220,35 +1320,47 @@ class CascadeLayer(Layer):
             n_classes = np.unique(y_train)
         if self.task == 'regression' and n_classes is None:
             n_classes = 1
-        x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=np.float32)
-        x_proba_test = np.zeros((n_tests, n_classes * self.n_estimators), dtype=np.float32)
-        eval_proba_train = np.zeros((n_trains, n_classes), dtype=np.float32)
-        eval_proba_test = np.zeros((n_tests, n_classes), dtype=np.float32)
-        # fit estimators, get probas
-        estimators = []
-        for ei in range(self.n_estimators):
-            est = self._init_estimators(self.layer_id, ei)
-            estimators.append(est)
+        x_proba_train = np.zeros((n_trains, n_classes * self.n_estimators), dtype=self.dtype)
+        x_proba_test = np.zeros((n_tests, n_classes * self.n_estimators), dtype=self.dtype)
+        eval_proba_train = np.zeros((n_trains, n_classes), dtype=self.dtype)
+        eval_proba_test = np.zeros((n_tests, n_classes), dtype=self.dtype)
         # fit and transform
         y_stratify = y_train if self.task == 'classification' else None
         if self.distribute:
-            y_proba_train_tests = ray.get([est.fit_transform.remote(x_train, y_train, y_stratify,
-                                                                    test_sets=[('test', x_test, y_test)])
-                                           for est in estimators])
+            splitting = CascadeSplittingKFoldWrapper(dis_level=self.dis_level, estimators=self.est_args,
+                                                     num_workers=self.num_workers, seed=self.seed, task=self.task,
+                                                     eval_metrics=self.eval_metrics, keep_in_mem=self.keep_in_mem,
+                                                     cv_seed=self.seed, dtype=self.dtype, layer_id=self.layer_id)
+            y_proba_train_tests, split_ests, split_group = splitting.fit_transform(x_train, y_train, y_stratify,
+                                                                                   test_sets=[('test', x_test,  y_test)])
+            # TODO: fill the estimators
+            if self.keep_in_mem:
+                estimators = split_ests
+            else:
+                estimators = None
         else:
-            y_proba_train_tests = [est.fit_transform(x_train, y_train, y_stratify,
-                                                     test_sets=[('test', x_test,  y_test)])
-                                   for est in estimators]
+            # fit estimators, get probas
+            y_proba_train_tests = []
+            estimators = []
+            for ei in range(self.n_estimators):
+                est = self._init_estimators(self.layer_id, ei)
+                estimators.append(est)
+                y_probas = est.fit_transform(x_train, y_train, y_stratify, test_sets=[('test', x_test,  y_test)])
+                y_proba_train_tests.append(y_probas)
+
         for ei, y_proba_train_tup in enumerate(y_proba_train_tests):
             y_proba_train = y_proba_train_tup[0]
             y_proba_test = y_proba_train_tup[1]
             if len(y_proba_train_tup) == 3 and self.verbose_dis:
                 for log in y_proba_train_tup[2]:
-                    print(log)
+                    if log[0] == 'INFO':
+                        self.LOGGER.info("{}".format(log[1].format(log[2])))
+                    elif log[0] == 'WARN':
+                        self.LOGGER.warn("{}".format(log))
+
             # if only one element on test_sets, return one test result like y_proba_train
             if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
                 y_proba_test = y_proba_test[0]
-            # print(y_proba_train.shape, y_proba_test.shape)
             if y_proba_train is None:
                 raise RuntimeError("layer - {} - estimator - {} fit FAILED!,"
                                    " y_proba_train is None".format(self.layer_id, ei))
@@ -1281,7 +1393,8 @@ class CascadeLayer(Layer):
             self.eval_proba_test = eval_proba_test
         return x_proba_train, x_proba_test
 
-    def check_shape(self, y_proba, n, n_classes):
+    @staticmethod
+    def check_shape(y_proba, n, n_classes):
         if y_proba.shape != (n, n_classes):
             raise ValueError('output shape incorrect!,'
                              ' should be {}, but {}'.format((n, n_classes), y_proba.shape))
@@ -1307,7 +1420,7 @@ class CascadeLayer(Layer):
             X = None if len(X) == 0 else X[0]
         n_trains = X.shape[0]
         n_classes = self.n_classes
-        x_proba = np.zeros((n_trains, n_classes * self.n_estimators), dtype=np.float32)
+        x_proba = np.zeros((n_trains, n_classes * self.n_estimators), dtype=self.dtype)
         # fit estimators, get probas
         for ei, est in enumerate(self.fit_estimators):
             # transform by n-folds CV
@@ -1345,7 +1458,7 @@ class CascadeLayer(Layer):
             X = None if len(X) == 0 else X[0]
         n_trains = X.shape[0]
         n_classes = self.n_classes
-        proba_sum = np.zeros((n_trains, n_classes), dtype=np.float32)
+        proba_sum = np.zeros((n_trains, n_classes), dtype=self.dtype)
         # fit estimators, get probas
         for ei, est in enumerate(self.fit_estimators):
             # transform by n-folds CV
@@ -1389,7 +1502,8 @@ class AutoGrowingCascadeLayer(Layer):
     def __init__(self, batch_size=None, dtype=np.float32, name=None, task='classification', est_configs=None,
                  early_stopping_rounds=None, max_layers=0, look_index_cycle=None, data_save_rounds=0,
                  stop_by_test=True, n_classes=None, keep_in_mem=False, data_save_dir=None, model_save_dir=None,
-                 metrics=None, keep_test_result=False, seed=None, distribute=False, verbose_dis=False):
+                 metrics=None, keep_test_result=False, seed=None, distribute=False, verbose_dis=False,
+                 dis_level=1, num_workers=None):
         """AutoGrowingCascadeLayer
         An AutoGrowingCascadeLayer is a virtual layer that consists of many single cascade layers.
         `auto-growing` means this kind of layer can decide the depth of cascade forest,
@@ -1433,6 +1547,13 @@ class AutoGrowingCascadeLayer(Layer):
                            and write `ray.init(<redis-address>)` at the beginning of the main program.
         :param verbose_dis: boolean, whether print logging info that generated on different worker machines.
                             default = False.
+        :param dis_level: distributed level, or parallelization level, 0 / 1 / 2
+                           0 means lowest parallelization level, parallelization is len(self.est_configs).
+                           1 means we will split the forests in some condition to making more full use of
+                            cluster resources, so the parallelization may be larger than len(self.est_configs).
+                           2 means that anyway we must split forests.
+                           Now 2 is the HIGHEST_DISLEVEL
+        :param num_workers: number of workers in the cluster
         """
         self.est_configs = [] if est_configs is None else est_configs
         super(AutoGrowingCascadeLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
@@ -1461,6 +1582,11 @@ class AutoGrowingCascadeLayer(Layer):
         self.seed = seed
         self.distribute = distribute
         self.verbose_dis = verbose_dis
+        self.dis_level = dis_level
+        if num_workers is None and distribute is True:
+            self.init_num_workers()
+        else:
+            self.num_workers = num_workers
         # properties
         self.layer_fit_cascades = []
         self.n_layers = 0
@@ -1495,10 +1621,12 @@ class AutoGrowingCascadeLayer(Layer):
                             keep_in_mem=self.keep_in_mem,
                             data_save_dir=data_save_dir,
                             model_save_dir=model_save_dir,
+                            num_workers=self.num_workers,
                             metrics=metrics,
                             seed=seed,
                             distribute=self.distribute,
-                            verbose_dis=self.verbose_dis)
+                            verbose_dis=self.verbose_dis,
+                            dis_level=self.dis_level)
 
     def call(self, x_trains):
         pass
@@ -1558,8 +1686,8 @@ class AutoGrowingCascadeLayer(Layer):
         group_starts, group_ends, group_dims = [], [], []
         # train set
         for i, x_train in enumerate(x_trains):
-            assert x_train.shape[0] == n_trains, 'x_train.shape[0]={} not equal to' \
-                                                 ' n_trains={}'.format(x_train.shape[0], n_trains)
+            assert x_train.shape[0] == n_trains, ('x_train.shape[0]={} not equal to'
+                                                  ' n_trains={}'.format(x_train.shape[0], n_trains))
             x_train = x_train.reshape(n_trains, -1)
             group_dims.append(x_train.shape[1])
             group_starts.append(i if i == 0 else group_ends[i - 1])
@@ -1579,7 +1707,7 @@ class AutoGrowingCascadeLayer(Layer):
                 if np.max(look_index) >= n_groups_train or np.min(look_index) < 0 or len(look_index) == 0:
                     raise ValueError("look_index invalid! look_index={}".format(look_index))
         x_cur_train = None
-        x_proba_train = np.zeros((n_trains, 0), dtype=np.float32)
+        x_proba_train = np.zeros((n_trains, 0), dtype=self.dtype)
         layer_id = 0
         layer_metric_list = []
         opt_data = [None, None]
@@ -1588,7 +1716,7 @@ class AutoGrowingCascadeLayer(Layer):
                 if layer_id >= self.max_layers > 0:
                     break
                 # clear x_cur_train
-                x_cur_train = np.zeros((n_trains, 0), dtype=np.float32)
+                x_cur_train = np.zeros((n_trains, 0), dtype=self.dtype)
                 train_ids = self.look_index_cycle[layer_id % len(self.look_index_cycle)]
                 for gid in train_ids:
                     x_cur_train = np.hstack((x_cur_train, x_train_group[:, group_starts[gid]:group_ends[gid]]))
@@ -1709,8 +1837,8 @@ class AutoGrowingCascadeLayer(Layer):
                 if np.max(look_index) >= n_groups_train or np.min(look_index) < 0 or len(look_index) == 0:
                     raise ValueError("look_index invalid! look_index={}".format(look_index))
         x_cur_train, x_cur_test = None, None
-        x_proba_train = np.zeros((n_trains, 0), dtype=np.float32)
-        x_proba_test = np.zeros((n_tests, 0), dtype=np.float32)
+        x_proba_train = np.zeros((n_trains, 0), dtype=self.dtype)
+        x_proba_test = np.zeros((n_tests, 0), dtype=self.dtype)
         cascade = None  # for save test results
         layer_id = 0
         layer_train_metrics, layer_test_metrics = [], []
@@ -1719,8 +1847,8 @@ class AutoGrowingCascadeLayer(Layer):
             while True:
                 if layer_id >= self.max_layers > 0:
                     break
-                x_cur_train = np.zeros((n_trains, 0), dtype=np.float32)
-                x_cur_test = np.zeros((n_tests, 0), dtype=np.float32)
+                x_cur_train = np.zeros((n_trains, 0), dtype=self.dtype)
+                x_cur_test = np.zeros((n_tests, 0), dtype=self.dtype)
                 train_ids = self.look_index_cycle[layer_id % len(self.look_index_cycle)]
                 for gid in train_ids:
                     x_cur_train = np.hstack((x_cur_train, x_train_group[:, group_starts[gid]:group_ends[gid]]))
@@ -1852,12 +1980,12 @@ class AutoGrowingCascadeLayer(Layer):
 
         if self.look_index_cycle is None:
             self.look_index_cycle = [[i, ] for i in range(n_groups)]
-        x_proba_test = np.zeros((n_examples, 0), dtype=np.float32)
+        x_proba_test = np.zeros((n_examples, 0), dtype=self.dtype)
         layer_id = 0
         try:
             while layer_id <= self.opt_layer_id:
                 self.LOGGER.info('Transforming layer - {} / {}'.format(layer_id, self.n_layers))
-                x_cur_test = np.zeros((n_examples, 0), dtype=np.float32)
+                x_cur_test = np.zeros((n_examples, 0), dtype=self.dtype)
                 train_ids = self.look_index_cycle[layer_id % n_groups]
                 for gid in train_ids:
                     x_cur_test = np.hstack((x_cur_test, x_test_group[:, self.group_starts[gid]:self.group_ends[gid]]))
@@ -1897,7 +2025,7 @@ class AutoGrowingCascadeLayer(Layer):
         if not isinstance(X, (list, tuple)):
             X = [X]
         x_proba = self.transform(X)
-        total_proba = np.zeros((X[0].shape[0], self.n_classes), dtype=np.float32)
+        total_proba = np.zeros((X[0].shape[0], self.n_classes), dtype=self.dtype)
         for i in range(len(self.est_configs)):
             total_proba += x_proba[:, i * self.n_classes:i * self.n_classes + self.n_classes]
         return total_proba
@@ -1994,7 +2122,7 @@ class AutoGrowingCascadeLayer(Layer):
             if phase == 'train':
                 data = {"X": x_train, "y": y_train}
             else:
-                data = {"X": x_test, "y": y_test if y_test is not None else np.zeros((0,), dtype=np.float32)}
+                data = {"X": x_test, "y": y_test if y_test is not None else np.zeros((0,), dtype=self.dtype)}
             self.LOGGER.info("Saving {} Data in {} ... X.shape={}, y.shape={}".format(
                 phase, data_path, data["X"].shape, data["y"].shape))
             with open(data_path, "wb") as f:
@@ -2063,7 +2191,7 @@ def get_eval_metrics(metrics, task='classification', name=''):
             eval_metrics = [Accuracy(name)]
     elif isinstance(metrics, Metrics):
         eval_metrics = [metrics]
-    elif isinstance(metrics, str):
+    elif isinstance(metrics, basestring):
         if metrics == 'accuracy':
             eval_metrics = [Accuracy(name)]
         elif metrics == 'auc':

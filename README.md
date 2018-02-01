@@ -16,6 +16,7 @@ You can refer to [Deep Forest Paper](https://arxiv.org/abs/1702.08835), [Ray Pro
 
 ## News
 
+* [1 Feb] Forest Splitting mechanism are supported. Now ForestLayer can achieve 2.5x speedup to gcForest v1.0 with 8 nodes.
 * [10 Jan] You can now use ForestLayer for classification and regression task. And you can use it in your data science algorithm competitions! We recommend using small layer of cascade in regression task since it's easy to overfit the data.
 * [8 Jan] You can now use ForestLayer for classification task. See [examples](https://github.com/whatbeg/forestlayer/tree/master/examples)
 
@@ -140,26 +141,30 @@ Note that the models of all experiments contain the same structures, and have a 
 
 *Table. 1: Performance on UCI Adult dataset.*
 
-|  conf                   | test acc  | layer-best | avg time of 3 tries |
-| :---:                   | :-----:   |  :----:    | :------:     |
-| gcForest v1.0           | 86.143%    | 6-1        |  647s        |
-| ForestLayer             | 86.143%    | 6-1        |  646s        |
-| ForestLayer Standalone  | 86.143%    | 6-1        |  279s        |
-| ForestLayer 2 nodes     | 86.143%    | 6-1        |  190s        |
-| ForestLayer 4 nodes     | 86.143%    | 6-1        |  149s        |
-| ForestLayer 8 nodes     | 86.143%    | 6-1        |  116s        |
+|  conf                     | test acc   | layer-best | avg time of 3 tries |
+| :---:                     | :-----:    |  :----:    | :------:     |
+| gcForest v1.0             | 86.143%    | 6-1        |  647s        |
+| ForestLayer               | 86.143%    | 6-1        |  646s        |
+| ForestLayer Standalone    | 86.143%    | 6-1        |  279s        |
+| ForestLayer 2 nodes       | 86.143%    | 6-1        |  190s        |
+| ForestLayer 4 nodes       | 86.143%    | 6-1        |  149s        |
+| ForestLayer 8 nodes       | 86.143%    | 6-1        |  116s        |
+| ForestLayer 8 nodes Split | 86.143%    | 6-1        |  91s         |
 
 <div align="center">
     <img src="docs/imgs/mnist_perf.jpg" width="36%" height="24%"/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="docs/imgs/letter_perf.jpg" width="36%" height="24%"/>
-    <p><i>Figure 1. MNIST performance. (1.5x)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Fig. 2 UCI Letter performance. (5.5x)</i></p>
+    <p><i>Figure 1. MNIST performance. (2.5x)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Fig. 2 UCI Letter performance. (7.8x)</i></p>
 	<img src="docs/imgs/adult_perf.jpg" width="36%" height="24%"/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="docs/imgs/imdb_perf.jpg" width="36%" height="24%"/>
-	<p><i>Fig. 3 UCI Adult performance. (5.6x)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Fig. 4 IMDB performance. (2.1x)</i></p>
+	<p><i>Fig. 3 UCI Adult performance. (7.1x)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Fig. 4 IMDB performance. (2.1x)</i></p>
+    <img src="docs/imgs/mnist_perf_detail.jpg" width="36%" height="24%"/>
+    <p><i>Fig. 5 MNIST performance details of layers. (2.5x)</i></p>
 </div>
 
 From the first 2 lines of the table, we can conclude that ForestLayer has no loss of training speed of gcForest v1.0, but possess much simpler user-friendly API instead of configuring the model structure in the model json file.
 
 And from all of the lines of the table, we can see, even in the Standalone mode, ForestLayer is **2.3x** faster than single machine implementation.
 In cluster mode with 8 nodes, we obtain **5.6x** speedup, which drastically accelerates the research and engineering procedure. With more nodes, the speedup will be so much better.
+After we add splitting feature, we achieve **7.1x** speedup compared to gcForest v1.0 or ForestLayer single machine version.
 
 More benchmarks and performance evaluations will be given later.
 
@@ -210,7 +215,7 @@ ForestLayer is released under the Apache 2.0 license.
 * [ ] More layers, including lambda layer.
 * [ ] Add model save and load mechanism
 * [ ] Load balancing
-* [ ] Forest splitting
+* [x] Forest splitting
 * [x] model.summary()
 * [x] Distributed training
 * [x] Add data save and load mechanism
