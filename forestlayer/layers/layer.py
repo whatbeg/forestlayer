@@ -736,7 +736,6 @@ class PoolingLayer(Layer):
         if not self.cache_in_disk or not self.data_save_dir:
             return False
         data_path = self._get_disk_path(x_shape, phase)
-        print(data_path)
         if osp.exists(data_path):
             return data_path
         return False
@@ -1113,10 +1112,11 @@ class CascadeLayer(Layer):
         self.verbose_dis = verbose_dis
         self.dis_level = dis_level
         # initialize num_workers if not provided
-        if num_workers is None and distribute is True:
-            self.init_num_workers()
-        else:
-            self.num_workers = num_workers
+        if distribute is True:
+            if num_workers is None:
+                self.init_num_workers()
+            else:
+                self.num_workers = num_workers
         self.larger_better = True
         self.metrics = metrics
         self.eval_metrics = get_eval_metrics(self.metrics, self.task, self.name)
@@ -1583,10 +1583,11 @@ class AutoGrowingCascadeLayer(Layer):
         self.distribute = distribute
         self.verbose_dis = verbose_dis
         self.dis_level = dis_level
-        if num_workers is None and distribute is True:
-            self.init_num_workers()
-        else:
-            self.num_workers = num_workers
+        if distribute is True:
+            if num_workers is None:
+                self.init_num_workers()
+            else:
+                self.num_workers = num_workers
         # properties
         self.layer_fit_cascades = []
         self.n_layers = 0
