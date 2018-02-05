@@ -1,6 +1,7 @@
 # -*- coding:utf-8 -*-
 """
 Multi-grain scan windows.
+This code is partly borrowed from Ji.Feng.
 """
 
 # Copyright 2017 Authors NJU PASA BigData Laboratory.
