@@ -216,10 +216,11 @@ class MultiGrainScanLayer(Layer):
         self.dis_level = dis_level
         self.verbose_dis = verbose_dis
         # initialize num_workers if not provided
-        if num_workers is None and distribute is True:
-            self.init_num_workers()
-        else:
-            self.num_workers = num_workers
+        if distribute is True:
+            if num_workers is None:
+                self.init_num_workers()
+            else:
+                self.num_workers = num_workers
         self.keep_in_mem = keep_in_mem
         self.cache_in_disk = cache_in_disk
         self.data_save_dir = data_save_dir
@@ -793,7 +794,9 @@ class PoolingLayer(Layer):
             return self.fit(x_trains, y_trains), None
         # inputs shape: [[(60000, 10, 11, 11), (60000, 10, 11, 11)], [.., ..], ...]
         if len(self.pools) != len(x_trains):
-            raise ValueError('len(pools) does not equal to len(x_trains), you must set right pools!')
+            raise ValueError('len(pools) = {} does not equal to len(x_trains) = {}, you must set right pools!'.format(
+                len(self.pools), len(x_trains)
+            ))
         if len(self.pools) != len(x_tests):
             raise ValueError('len(pools) does not equal to len(x_tests), you must set right pools!')
         x_train_shape = x_trains[0][0].shape
@@ -1311,8 +1314,10 @@ class CascadeLayer(Layer):
             y_test_shape = (0,)
         else:
             y_test_shape = y_test.shape
-        self.LOGGER.info('X_train.shape={}, y_train.shape={}'.format(x_train.shape, y_train.shape))
-        self.LOGGER.info(' X_test.shape={},  y_test.shape={}'.format(x_test.shape, y_test_shape))
+        self.LOGGER.info('X_train.shape={}, y_train.shape={}, dtype={}'.format(x_train.shape, y_train.shape,
+                                                                               x_train.dtype))
+        self.LOGGER.info(' X_test.shape={},  y_test.shape={}, dtype={}'.format(x_test.shape, y_test_shape,
+                                                                               x_test.dtype))
         n_trains = x_train.shape[0]
         n_tests = x_test.shape[0]
         n_classes = self.n_classes  # if regression, n_classes = 1

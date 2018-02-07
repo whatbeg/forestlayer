@@ -94,6 +94,7 @@ if __name__ == '__main__':
     print(X_train.dtype)
     print(X_test.dtype)
     print(Y_train.dtype)
+    print(X_train.shape)
     print(Y_train.max())
     print(np.unique(Y_train))
 
