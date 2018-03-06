@@ -21,6 +21,7 @@ from ..utils.log_utils import get_logger
 from ..utils.storage_utils import name2path, getmbof
 from ..utils.metrics import Accuracy, MSE
 from collections import defaultdict
+import math
 MAX_RAND_SEED = np.iinfo(np.int32).max
 str2est_class = {
     'classification': {
@@ -757,15 +758,38 @@ class CascadeSplittingKFoldWrapper(object):
             if isinstance(est, EstimatorConfig):
                 self.estimators[ei] = est.get_est_args().copy()
 
-    def determine_split(self, num_estimators):
+    def determine_split(self, num_estimators, ests):
         if self.dis_level == 0:
-            return False
+            return False, []
         if self.dis_level == 1:
-            if self.num_workers >= num_estimators / 2:
-                return True
+            if 2 * self.num_workers >= num_estimators:
+                return True, [[num_trees / 2, num_trees - num_trees / 2]
+                              for num_trees in map(lambda x: x.get('n_estimators', 500), ests)]
         if self.dis_level == 2:
-            return True
-        return False
+            return True, [[num_trees / 2, num_trees - num_trees / 2]
+                          for num_trees in map(lambda x: x.get('n_estimators', 500), ests)]
+        if self.dis_level == 3:
+            num_trees = map(lambda x: x.get('n_estimators', 500), ests)
+            tree_sum = sum(num_trees)
+            # As every node generally capable of handling 2 forests simultaneously, we regard one node as two nodes.
+            # But when input data are large, one node may not be able to handle the concurrent training of two forests.
+            # So this parameter should be considered later.
+            # TODO: Consider when one node can handle two tasks.
+            avg_trees = int(math.ceil(tree_sum / float(self.num_workers * 2)))
+            splits = []
+            should_split = False
+            for i in range(num_estimators):
+                split_i = []
+                if not should_split and num_trees[i] > avg_trees:
+                    should_split = True
+                while num_trees[i] > avg_trees:
+                    split_i.append(avg_trees)
+                    num_trees[i] -= avg_trees
+                if num_trees[i] > 0:
+                    split_i.append(num_trees[i])
+                splits.append(split_i)
+            return should_split, splits
+        return False, None
 
     def splitting(self, ests):
         """
@@ -777,8 +801,9 @@ class CascadeSplittingKFoldWrapper(object):
         """
         assert isinstance(ests, list), 'estimators should be a list, but {}'.format(type(ests))
         num_ests = len(ests)
-        should_split = self.determine_split(num_ests)
+        should_split, split_scheme = self.determine_split(num_ests, ests)
         split_ests = []
+        split_ests_ratio = []
         split_group = []
         self.LOGGER.info('dis_level = {}, num_workers = {}, num_estimators = {}, should_split? {}'.format(
             self.dis_level, self.num_workers, num_ests, should_split))
@@ -790,31 +815,47 @@ class CascadeSplittingKFoldWrapper(object):
                 num_trees = est.get('n_estimators', 500)
                 est_name = 'layer - {} - estimator - {} - {}folds'.format(self.layer_id, ei,
                                                                           est.get('n_folds', 3))
+                split_ei = split_scheme[ei]
+                trees_sum = sum(split_ei)
+                total_split = len(split_ei)
+                cum_sum_split = split_ei[:]
+                for ci in range(1, total_split):
+                    cum_sum_split[ci] += cum_sum_split[ci - 1]
+                # assert len(split_ei) == 2, "Now we try 2-split first and then popularize to multi-split."
                 if self.seed is not None:
                     common_seed = (self.seed + hash("[estimator] {}".format(est_name))) % 1000000007
-                    seed = np.random.RandomState(common_seed)
-                    seed2 = np.random.RandomState(common_seed)
-                    seed2.randint(MAX_RAND_SEED, size=num_trees/2)
+                    seeds = [np.random.RandomState(common_seed) for _ in split_ei]
+                    for si in range(1, total_split):
+                        seeds[si].randint(MAX_RAND_SEED, size=cum_sum_split[si - 1])
+                    # seed = np.random.RandomState(common_seed)
+                    # seed2 = np.random.RandomState(common_seed)
+                    # seed2.randint(MAX_RAND_SEED, size=split_ei[0])
                 else:
-                    seed = np.random.mtrand._rand
-                    seed2 = np.random.mtrand._rand
-                    seed2.randint(MAX_RAND_SEED, size=num_trees/2)
-                self.LOGGER.debug('{} trees split to {} + {}'.format(num_trees, num_trees / 2, num_trees - num_trees/2))
+                    seeds = [np.random.mtrand._rand for _ in split_ei]
+                    for si in range(1, total_split):
+                        seeds[si].randint(MAX_RAND_SEED, size=cum_sum_split[si - 1])
+                    # seed = np.random.mtrand._rand
+                    # seed2 = np.random.mtrand._rand
+                    # seed2.randint(MAX_RAND_SEED, size=split_ei[0])
+                self.LOGGER.debug('{} trees split to {}'.format(num_trees, split_ei))
+                self.LOGGER.debug('seeds = {}'.format([seed.get_state()[-3] for seed in seeds]))
                 args = est.copy()
-                args['n_estimators'] = num_trees / 2
-                sub_est1 = self._init_estimators(args, self.layer_id, ei, seed, self.cv_seed, splitting=True)
-                args['n_estimators'] = num_trees - num_trees / 2
-                sub_est2 = self._init_estimators(args, self.layer_id, ei, seed2, self.cv_seed, splitting=True)
-                split_ests.append(sub_est1)
-                split_ests.append(sub_est2)
-                split_group.append([i, i + 1])
-                i += 2
+                ratio_i = []
+                for sei in range(total_split):
+                    args['n_estimators'] = split_ei[sei]
+                    sub_est = self._init_estimators(args, self.layer_id, ei, seeds[sei], self.cv_seed, splitting=True)
+                    split_ests.append(sub_est)
+                    ratio_i.append(split_ei[sei]/float(trees_sum))
+                split_ests_ratio.append(ratio_i)
+                split_group.append([li for li in range(i, i + total_split)])
+                i += total_split
         else:
             for ei, est in enumerate(ests):
                 gen_est = self._init_estimators(est.copy(), self.layer_id, ei, self.seed, self.cv_seed, splitting=False)
                 split_ests.append(gen_est)
+                split_ests_ratio.append(1.0)
             split_group = [[i, ] for i in range(len(ests))]
-        return split_ests, split_group
+        return split_ests, split_ests_ratio, split_group
 
     def _init_estimators(self, args, layer_id, ei, seed, cv_seed, splitting=False):
         """
@@ -858,29 +899,45 @@ class CascadeSplittingKFoldWrapper(object):
                                         cv_seed=cv_seed)
 
     def fit(self, x_train, y_train, y_stratify):
-        split_ests, split_group = self.splitting(self.estimators)
+        split_ests, split_ests_ratio, split_group = self.splitting(self.estimators)
         self.LOGGER.debug('split_group = {}'.format(split_group))
+        self.LOGGER.debug('split_ests_ratio = {}'.format(split_ests_ratio))
         x_train_obj_id = ray.put(x_train)
         y_train_obj_id = ray.put(y_train)
         y_stratify_obj_id = ray.put(y_stratify)
         # the base kfold_wrapper of SplittingKFoldWrapper must be DistributedKFoldWrapper,
         # so with the y_proba_train, y_proba_tests, there is a log info list will be return.
         # so, ests_output is like (y_proba_train, y_proba_tests, logs)
-        ests_output = [est.fit_transform.remote(x_train_obj_id, y_train_obj_id, y_stratify_obj_id, test_sets=None)
+        ests_output = [est.fit_transform.remote(x_train_obj_id, y_train_obj_id, y_stratify_obj_id,
+                                                test_sets=None)
                        for est in split_ests]
         est_group = []
-        for grp in split_group:
-            if len(grp) == 2:
-                # Tree reduce
-                est_group.append(merge.remote(ests_output[grp[0]], ests_output[grp[1]]))
+        for gi, grp in enumerate(split_group):
+            ests_ratio = split_ests_ratio[gi]
+            group = [ests_output[i] for i in grp[:]]
+            if len(grp) > 2:
+                while len(group) > 1:
+                    if len(group) == 2:
+                        dtype = self.dtype
+                    else:
+                        dtype = np.float64
+                    group = group[2:] + [merge.remote(group[0], ests_ratio[0],
+                                                      group[1], ests_ratio[1], dtype=dtype)]
+                    ests_ratio = ests_ratio[2:] + [1.0]
+                est_group.append(group[0])
+            elif len(grp) == 2:
+                # tree reduce
+                est_group.append(merge.remote(group[0], ests_ratio[0],
+                                              group[1], ests_ratio[1], dtype=self.dtype))
             else:
-                est_group.append(ests_output[grp[0]])
+                est_group.append(group[0])
         est_group_result = ray.get(est_group)
         return est_group_result, split_ests, split_group
 
     def fit_transform(self, x_train, y_train, y_stratify, test_sets=None):
-        split_ests, split_group = self.splitting(self.estimators)
+        split_ests, split_ests_ratio, split_group = self.splitting(self.estimators)
         self.LOGGER.debug('split_group = {}'.format(split_group))
+        self.LOGGER.debug('split_ests_ratio = {}'.format(split_ests_ratio))
         x_train_obj_id = ray.put(x_train)
         y_train_obj_id = ray.put(y_train)
         y_stratify_obj_id = ray.put(y_stratify)
@@ -892,18 +949,31 @@ class CascadeSplittingKFoldWrapper(object):
                                                 test_sets=test_sets_obj_id)
                        for est in split_ests]
         est_group = []
-        for grp in split_group:
-            if len(grp) == 2:
-                # Tree reduce
-                est_group.append(merge.remote(ests_output[grp[0]], ests_output[grp[1]], dtype=self.dtype))
+        for gi, grp in enumerate(split_group):
+            ests_ratio = split_ests_ratio[gi]
+            group = [ests_output[i] for i in grp[:]]
+            if len(grp) > 2:
+                while len(group) > 1:
+                    if len(group) == 2:
+                        dtype = self.dtype
+                    else:
+                        dtype = np.float64
+                    group = group[2:] + [merge.remote(group[0], ests_ratio[0],
+                                                      group[1], ests_ratio[1], dtype=dtype)]
+                    ests_ratio = ests_ratio[2:] + [1.0]
+                est_group.append(group[0])
+            elif len(grp) == 2:
+                # tree reduce
+                est_group.append(merge.remote(group[0], ests_ratio[0],
+                                              group[1], ests_ratio[1], dtype=self.dtype))
             else:
-                est_group.append(ests_output[grp[0]])
+                est_group.append(group[0])
         est_group_result = ray.get(est_group)
         return est_group_result, split_ests, split_group
 
 
 @ray.remote
-def merge(tup_1, tup_2, dtype=np.float32):
+def merge(tup_1, ratio1, tup_2, ratio2, dtype=np.float32):
     """
     Merge 2 tuple of (y_proba_train, y_proba_tests, logs).
     NOTE: Now in splitting mode, the logs will be approximate log, because we should calculate metrics after collect
@@ -912,7 +982,9 @@ def merge(tup_1, tup_2, dtype=np.float32):
      proba, so the final results is absolutely right!
 
     :param tup_1: tuple like (y_proba_train, y_proba_tests, logs)
+    :param ratio1: ratio occupied by tuple 1
     :param tup_2: tuple like (y_proba_train, y_proba_tests, logs)
+    :param ratio2: ratio occupied by tuple 2
     :param dtype: result data type. when we invoke merge, we must in splitting mode, in this mode, we will keep
                    origin float-point precision (may be float64), and when we combine result of small forests, we
                    should convert the data type to self.dtype (may be float32), which can reduce memory and
@@ -923,25 +995,25 @@ def merge(tup_1, tup_2, dtype=np.float32):
     """
     tests = []
     for i in range(len(tup_1[1])):
-        tests.append(((tup_1[1][i] + tup_2[1][i])/2.0).astype(dtype))
+        tests.append((tup_1[1][i] * ratio1 + tup_2[1][i] * ratio2).astype(dtype))
     mean_dict = defaultdict(float)
     logs = []
     for t1 in tup_1[2]:
         if t1[0] == 'INFO':
-            mean_dict[','.join(t1[:2])] += t1[2]
+            mean_dict[','.join(t1[:2])] += t1[2] * ratio1
         else:
             logs.append(t1)
     for t2 in tup_2[2]:
         if t2[0] == 'INFO':
-            mean_dict[','.join(t2[:2])] += t2[2]
+            mean_dict[','.join(t2[:2])] += t2[2] * ratio2
         else:
             logs.append(t2)
     for key in mean_dict.keys():
-        mean_dict[key] = mean_dict[key] / 2.0
+        mean_dict[key] = mean_dict[key]
         key_split = key.split(',')
         logs.append((key_split[0], "Approximate " + key_split[1], mean_dict[key]))
     logs.sort()
-    return ((tup_1[0] + tup_2[0])/2.0).astype(dtype), tests, logs
+    return (tup_1[0] * ratio1 + tup_2[0] * ratio2).astype(dtype), tests, logs
 
 
 def est_class_from_type(task, est_type):
