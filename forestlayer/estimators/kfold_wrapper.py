@@ -588,7 +588,7 @@ class SplittingKFoldWrapper(object):
                 ratio_i = []
                 for sei in range(total_split):
                     args['n_estimators'] = split_ei[sei]
-                    sub_est = self._init_estimators(args, wi, ei, seeds[sei], self.cv_seed, splitting=True)
+                    sub_est = self._init_estimators(args, wi, wei, seeds[sei], self.cv_seed, splitting=True)
                     split_ests.append(sub_est)
                     ratio_i.append(split_ei[sei] / float(trees_sum))
                     new_ei2wi[i + sei] = (wi, wei)
