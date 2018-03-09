@@ -793,14 +793,14 @@ class CascadeSplittingKFoldWrapper(object):
                     # seed2 = np.random.mtrand._rand
                     # seed2.randint(MAX_RAND_SEED, size=split_ei[0])
                 self.LOGGER.debug('{} trees split to {}'.format(num_trees, split_ei))
-                self.LOGGER.debug('seeds = {}'.format([seed.get_state()[-3] for seed in seeds]))
+                # self.LOGGER.debug('seeds = {}'.format([seed.get_state()[-3] for seed in seeds]))
                 args = est.copy()
                 ratio_i = []
                 for sei in range(total_split):
                     args['n_estimators'] = split_ei[sei]
                     sub_est = self._init_estimators(args, self.layer_id, ei, seeds[sei], self.cv_seed, splitting=True)
                     split_ests.append(sub_est)
-                    ratio_i.append(split_ei[sei]/float(trees_sum))
+                    ratio_i.append(split_ei[sei] / float(trees_sum))
                 split_ests_ratio.append(ratio_i)
                 split_group.append([li for li in range(i, i + total_split)])
                 i += total_split
@@ -928,7 +928,10 @@ def merge(tup_1, ratio1, tup_2, ratio2, dtype=np.float32):
     for key in mean_dict.keys():
         mean_dict[key] = mean_dict[key]
         key_split = key.split(',')
-        logs.append((key_split[0], "Approximate " + key_split[1], mean_dict[key]))
+        if "Approximate" in key_split[1]:
+            logs.append((key_split[0], key_split[1], mean_dict[key]))
+        else:
+            logs.append((key_split[0], "Approximate " + key_split[1], mean_dict[key]))
     logs.sort()
     return (tup_1[0] * ratio1 + tup_2[0] * ratio2).astype(dtype), tests, logs
 

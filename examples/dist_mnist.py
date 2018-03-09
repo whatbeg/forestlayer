@@ -32,15 +32,15 @@ x_train = x_train.reshape(60000, -1, 28, 28)
 x_test = x_test.reshape(10000, -1, 28, 28)
 
 # small data for example.
-x_train = x_train[:200, :, :, :]
-x_test = x_test[:100, :, :, :]
-y_train = y_train[:200]
-y_test = y_test[:100]
+x_train = x_train[:600, :, :, :]
+x_test = x_test[:300, :, :, :]
+y_train = y_train[:600]
+y_test = y_test[:300]
 
 print(x_train.shape, 'train', x_train.dtype, getmbof(x_train))
 print(x_test.shape, 'test', x_test.dtype, getmbof(x_test))
 
-rf1 = ExtraRandomForestConfig(n_jobs=-1, min_samples_leaf=10)
+rf1 = ExtraRandomForestConfig(n_jobs=-1, min_samples_leaf=10, max_features="auto")
 rf2 = RandomForestConfig(n_jobs=-1, min_samples_leaf=10)
 
 windows = [Window(win_x=7, win_y=7, stride_x=2, stride_y=2, pad_x=0, pad_y=0),
@@ -55,6 +55,7 @@ mgs = MultiGrainScanLayer(windows=windows,
                           est_for_windows=est_for_windows,
                           n_class=10,
                           distribute=True,
+                          dis_level=2,
                           keep_in_mem=False)
 
 pools = [[MeanPooling(2, 2), MeanPooling(2, 2)],
@@ -86,7 +87,8 @@ auto_cascade = AutoGrowingCascadeLayer(name='auto-cascade',
                                        n_classes=10,
                                        data_save_dir=data_save_dir,
                                        model_save_dir=model_save_dir,
-                                       distribute=True)
+                                       distribute=True,
+                                       dis_level=2)
 
 model = Graph()
 model.add(mgs)
