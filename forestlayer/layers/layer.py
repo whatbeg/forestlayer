@@ -212,7 +212,6 @@ class MultiGrainScanLayer(Layer):
         self.seed = seed
         assert isinstance(distribute, bool), 'distribute variable should be Boolean, but {}'.format(type(distribute))
         self.distribute = distribute
-        assert dis_level in [0, 1, 2], 'dis_level should be 0 or 1, but {}'.format(dis_level)
         self.dis_level = dis_level
         self.verbose_dis = verbose_dis
         # initialize num_workers if not provided

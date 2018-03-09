@@ -537,16 +537,10 @@ class SplittingKFoldWrapper(object):
         self.eval_metrics = eval_metrics
         self.keep_in_mem = keep_in_mem
         self.cv_seed = cv_seed
-
-    def determine_split(self, num_estimators):
-        if self.dis_level == 0:
-            return False
-        if self.dis_level == 1:
-            if self.num_workers >= num_estimators / 2:
-                return True
-        if self.dis_level == 2:
-            return True
-        return False
+        for ei, est in enumerate(self.estimators):
+            # convert estimators from EstimatorConfig to dictionary.
+            if isinstance(est, EstimatorConfig):
+                self.estimators[ei] = est.get_est_args().copy()
 
     def splitting(self, ests):
         """
@@ -558,15 +552,11 @@ class SplittingKFoldWrapper(object):
         """
         assert isinstance(ests, list), 'estimators should be a list, but {}'.format(type(ests))
         num_ests = len(ests)
-        # should_split = False
-        # if self.num_workers >= num_ests / 2:
-        #     should_split = True
-        # # if user do not want to split, and pass an argument split which is False, we don't split!
-        # if self.split is False:
-        #     should_split = False
-        should_split = self.determine_split(num_ests)
+        should_split, split_scheme = determine_split(dis_level=self.dis_level, num_estimators=num_ests,
+                                                     num_workers=self.num_workers, ests=ests)
         split_ests = []
         split_group = []
+        split_ests_ratio = []
         self.LOGGER.info('dis_level = {}, num_workers = {}, num_estimators = {}, should_split? {}'.format(
             self.dis_level, self.num_workers, num_ests, should_split))
         if self.cv_seed is None:
@@ -576,38 +566,45 @@ class SplittingKFoldWrapper(object):
             new_ei2wi = dict()
             for ei, est in enumerate(ests):
                 wi, wei = self.ei2wi[ei]
-                num_trees = est.get_est_args().get('n_estimators', 500)
-                est_name = 'win - {} - estimator - {} - {}folds'.format(wi, wei, est.get_est_args().get('n_folds', 3))
+                num_trees = est.get('n_estimators', 500)
+                est_name = 'win - {} - estimator - {} - {}folds'.format(wi, wei, est.get('n_folds', 3))
+                split_ei = split_scheme[ei]
+                trees_sum = sum(split_ei)
+                total_split = len(split_ei)
+                cum_sum_split = split_ei[:]
+                for ci in range(1, total_split):
+                    cum_sum_split[ci] += cum_sum_split[ci - 1]
                 if self.seed is not None:
                     common_seed = (self.seed + hash("[estimator] {}".format(est_name))) % 1000000007
-                    seed = np.random.RandomState(common_seed)
-                    seed2 = np.random.RandomState(common_seed)
-                    seed2.randint(MAX_RAND_SEED, size=num_trees/2)
+                    seeds = [np.random.RandomState(common_seed) for _ in split_ei]
+                    for si in range(1, total_split):
+                        seeds[si].randint(MAX_RAND_SEED, size=cum_sum_split[si - 1])
                 else:
-                    seed = np.random.mtrand._rand
-                    seed2 = np.random.mtrand._rand
-                    seed2.randint(MAX_RAND_SEED, size=num_trees/2)
-                self.LOGGER.debug('{} trees split to {} + {}'.format(num_trees, num_trees / 2, num_trees - num_trees/2))
-                args = est.get_est_args().copy()
-                args['n_estimators'] = num_trees / 2
-                sub_est1 = self._init_estimators(args, wi, wei, seed, self.cv_seed, splitting=True)
-                args['n_estimators'] = num_trees - num_trees / 2
-                sub_est2 = self._init_estimators(args, wi, wei, seed2, self.cv_seed, splitting=True)
-                split_ests.append(sub_est1)
-                split_ests.append(sub_est2)
-                split_group.append([i, i + 1])
-                new_ei2wi[i] = (wi, wei)
-                new_ei2wi[i + 1] = (wi, wei)
-                i += 2
+                    seeds = [np.random.mtrand._rand for _ in split_ei]
+                    for si in range(1, total_split):
+                        seeds[si].randint(MAX_RAND_SEED, size=cum_sum_split[si - 1])
+                self.LOGGER.debug('{} trees split to {}'.format(num_trees, split_ei))
+                args = est.copy()
+                ratio_i = []
+                for sei in range(total_split):
+                    args['n_estimators'] = split_ei[sei]
+                    sub_est = self._init_estimators(args, wi, ei, seeds[sei], self.cv_seed, splitting=True)
+                    split_ests.append(sub_est)
+                    ratio_i.append(split_ei[sei] / float(trees_sum))
+                    new_ei2wi[i + sei] = (wi, wei)
+                split_ests_ratio.append(ratio_i)
+                split_group.append([li for li in range(i, i + total_split)])
+                i += total_split
             self.ei2wi = new_ei2wi
         else:
             for ei, est in enumerate(ests):
                 wi, wei = self.ei2wi[ei]
-                gen_est = self._init_estimators(est.get_est_args().copy(),
+                gen_est = self._init_estimators(est.copy(),
                                                 wi, wei, self.seed, self.cv_seed, splitting=False)
                 split_ests.append(gen_est)
+                split_ests_ratio.append(1.0)
             split_group = [[i, ] for i in range(len(ests))]
-        return split_ests, split_group
+        return split_ests, split_ests_ratio, split_group
 
     def _init_estimators(self, args, wi, ei, seed, cv_seed, splitting=False):
         """
@@ -658,8 +655,9 @@ class SplittingKFoldWrapper(object):
         :param y_win:
         :return:
         """
-        split_ests, split_group = self.splitting(self.estimators)
+        split_ests, split_ests_ratio, split_group = self.splitting(self.estimators)
         self.LOGGER.debug('split_group = {}'.format(split_group))
+        self.LOGGER.debug('split_ests_ratio = {}'.format(split_ests_ratio))
         self.LOGGER.debug('ei2wi = {}'.format(self.ei2wi))
         x_wins_train_obj_ids = [ray.put(x_wins_train[wi]) for wi in range(len(x_wins_train))]
         y_win_obj_ids = [ray.put(y_win[wi]) for wi in range(len(y_win))]
@@ -670,13 +668,7 @@ class SplittingKFoldWrapper(object):
         ests_output = [est.fit_transform.remote(x_wins_train_obj_ids[self.ei2wi[ei][0]],
                                                 y_win_obj_ids[self.ei2wi[ei][0]],
                        y_stratify[self.ei2wi[ei][0]]) for ei, est in enumerate(split_ests)]
-        est_group = []
-        for grp in split_group:
-            if len(grp) == 2:
-                # Tree reduce
-                est_group.append(merge.remote(ests_output[grp[0]], ests_output[grp[1]]))
-            else:
-                est_group.append(ests_output[grp[0]])
+        est_group = merge_group(split_group, split_ests_ratio, ests_output, self.dtype)
         est_group_result = ray.get(est_group)
         return est_group_result
 
@@ -689,8 +681,9 @@ class SplittingKFoldWrapper(object):
         :param test_sets:
         :return:
         """
-        split_ests, split_group = self.splitting(self.estimators)
+        split_ests, split_ests_ratio, split_group = self.splitting(self.estimators)
         self.LOGGER.debug('split_group = {}'.format(split_group))
+        self.LOGGER.debug('split_ests_ratio = {}'.format(split_ests_ratio))
         self.LOGGER.debug('new ei2wi = {}'.format(self.ei2wi))
         x_wins_train_obj_ids = [ray.put(x_wins_train[wi]) for wi in range(len(x_wins_train))]
         y_win_obj_ids = [ray.put(y_win[wi]) for wi in range(len(y_win))]
@@ -703,13 +696,7 @@ class SplittingKFoldWrapper(object):
                                                 y_win_obj_ids[self.ei2wi[ei][0]], y_stratify[self.ei2wi[ei][0]],
                                                 test_sets=test_sets_obj_ids[self.ei2wi[ei][0]])
                        for ei, est in enumerate(split_ests)]
-        est_group = []
-        for grp in split_group:
-            if len(grp) == 2:
-                # Tree reduce
-                est_group.append(merge.remote(ests_output[grp[0]], ests_output[grp[1]]))
-            else:
-                est_group.append(ests_output[grp[0]])
+        est_group = merge_group(split_group, split_ests_ratio, ests_output, self.dtype)
         est_group_result = ray.get(est_group)
         return est_group_result
 
@@ -758,39 +745,6 @@ class CascadeSplittingKFoldWrapper(object):
             if isinstance(est, EstimatorConfig):
                 self.estimators[ei] = est.get_est_args().copy()
 
-    def determine_split(self, num_estimators, ests):
-        if self.dis_level == 0:
-            return False, []
-        if self.dis_level == 1:
-            if 2 * self.num_workers >= num_estimators:
-                return True, [[num_trees / 2, num_trees - num_trees / 2]
-                              for num_trees in map(lambda x: x.get('n_estimators', 500), ests)]
-        if self.dis_level == 2:
-            return True, [[num_trees / 2, num_trees - num_trees / 2]
-                          for num_trees in map(lambda x: x.get('n_estimators', 500), ests)]
-        if self.dis_level == 3:
-            num_trees = map(lambda x: x.get('n_estimators', 500), ests)
-            tree_sum = sum(num_trees)
-            # As every node generally capable of handling 2 forests simultaneously, we regard one node as two nodes.
-            # But when input data are large, one node may not be able to handle the concurrent training of two forests.
-            # So this parameter should be considered later.
-            # TODO: Consider when one node can handle two tasks.
-            avg_trees = int(math.ceil(tree_sum / float(self.num_workers * 2)))
-            splits = []
-            should_split = False
-            for i in range(num_estimators):
-                split_i = []
-                if not should_split and num_trees[i] > avg_trees:
-                    should_split = True
-                while num_trees[i] > avg_trees:
-                    split_i.append(avg_trees)
-                    num_trees[i] -= avg_trees
-                if num_trees[i] > 0:
-                    split_i.append(num_trees[i])
-                splits.append(split_i)
-            return should_split, splits
-        return False, None
-
     def splitting(self, ests):
         """
         Splitting method.
@@ -801,7 +755,8 @@ class CascadeSplittingKFoldWrapper(object):
         """
         assert isinstance(ests, list), 'estimators should be a list, but {}'.format(type(ests))
         num_ests = len(ests)
-        should_split, split_scheme = self.determine_split(num_ests, ests)
+        should_split, split_scheme = determine_split(dis_level=self.dis_level, num_estimators=num_ests,
+                                                     num_workers=self.num_workers, ests=ests)
         split_ests = []
         split_ests_ratio = []
         split_group = []
@@ -911,26 +866,7 @@ class CascadeSplittingKFoldWrapper(object):
         ests_output = [est.fit_transform.remote(x_train_obj_id, y_train_obj_id, y_stratify_obj_id,
                                                 test_sets=None)
                        for est in split_ests]
-        est_group = []
-        for gi, grp in enumerate(split_group):
-            ests_ratio = split_ests_ratio[gi]
-            group = [ests_output[i] for i in grp[:]]
-            if len(grp) > 2:
-                while len(group) > 1:
-                    if len(group) == 2:
-                        dtype = self.dtype
-                    else:
-                        dtype = np.float64
-                    group = group[2:] + [merge.remote(group[0], ests_ratio[0],
-                                                      group[1], ests_ratio[1], dtype=dtype)]
-                    ests_ratio = ests_ratio[2:] + [1.0]
-                est_group.append(group[0])
-            elif len(grp) == 2:
-                # tree reduce
-                est_group.append(merge.remote(group[0], ests_ratio[0],
-                                              group[1], ests_ratio[1], dtype=self.dtype))
-            else:
-                est_group.append(group[0])
+        est_group = merge_group(split_group, split_ests_ratio, ests_output, self.dtype)
         est_group_result = ray.get(est_group)
         return est_group_result, split_ests, split_group
 
@@ -948,26 +884,7 @@ class CascadeSplittingKFoldWrapper(object):
         ests_output = [est.fit_transform.remote(x_train_obj_id, y_train_obj_id, y_stratify_obj_id,
                                                 test_sets=test_sets_obj_id)
                        for est in split_ests]
-        est_group = []
-        for gi, grp in enumerate(split_group):
-            ests_ratio = split_ests_ratio[gi]
-            group = [ests_output[i] for i in grp[:]]
-            if len(grp) > 2:
-                while len(group) > 1:
-                    if len(group) == 2:
-                        dtype = self.dtype
-                    else:
-                        dtype = np.float64
-                    group = group[2:] + [merge.remote(group[0], ests_ratio[0],
-                                                      group[1], ests_ratio[1], dtype=dtype)]
-                    ests_ratio = ests_ratio[2:] + [1.0]
-                est_group.append(group[0])
-            elif len(grp) == 2:
-                # tree reduce
-                est_group.append(merge.remote(group[0], ests_ratio[0],
-                                              group[1], ests_ratio[1], dtype=self.dtype))
-            else:
-                est_group.append(group[0])
+        est_group = merge_group(split_group, split_ests_ratio, ests_output, self.dtype)
         est_group_result = ray.get(est_group)
         return est_group_result, split_ests, split_group
 
@@ -1115,3 +1032,60 @@ def get_dist_estimator_kfold(name, n_folds=3, task='classification', est_type='F
                                           est_args=est_args,
                                           cv_seed=cv_seed)
 
+
+def determine_split(dis_level, num_estimators, num_workers, ests):
+    if dis_level == 0:
+        return False, []
+    if dis_level == 1:
+        if 2 * num_workers >= num_estimators:
+            return True, [[num_trees / 2, num_trees - num_trees / 2]
+                          for num_trees in map(lambda x: x.get('n_estimators', 500), ests)]
+    if dis_level == 2:
+        return True, [[num_trees / 2, num_trees - num_trees / 2]
+                      for num_trees in map(lambda x: x.get('n_estimators', 500), ests)]
+    if dis_level == 3:
+        num_trees = map(lambda x: x.get('n_estimators', 500), ests)
+        tree_sum = sum(num_trees)
+        # As every node generally capable of handling 2 forests simultaneously, we regard one node as two nodes.
+        # But when input data are large, one node may not be able to handle the concurrent training of two forests.
+        # So this parameter should be considered later.
+        # TODO: Consider when one node can handle two tasks.
+        avg_trees = int(math.ceil(tree_sum / float(num_workers * 2)))
+        splits = []
+        should_split = False
+        for i in range(num_estimators):
+            split_i = []
+            if not should_split and num_trees[i] > avg_trees:
+                should_split = True
+            while num_trees[i] > avg_trees:
+                split_i.append(avg_trees)
+                num_trees[i] -= avg_trees
+            if num_trees[i] > 0:
+                split_i.append(num_trees[i])
+            splits.append(split_i)
+        return should_split, splits
+    return False, None
+
+
+def merge_group(split_group, split_ests_ratio, ests_output, self_dtype):
+    est_group = []
+    for gi, grp in enumerate(split_group):
+        ests_ratio = split_ests_ratio[gi]
+        group = [ests_output[i] for i in grp[:]]
+        if len(grp) > 2:
+            while len(group) > 1:
+                if len(group) == 2:
+                    dtype = self_dtype
+                else:
+                    dtype = np.float64
+                group = group[2:] + [merge.remote(group[0], ests_ratio[0],
+                                                  group[1], ests_ratio[1], dtype=dtype)]
+                ests_ratio = ests_ratio[2:] + [1.0]
+            est_group.append(group[0])
+        elif len(grp) == 2:
+            # tree reduce
+            est_group.append(merge.remote(group[0], ests_ratio[0],
+                                          group[1], ests_ratio[1], dtype=self_dtype))
+        else:
+            est_group.append(group[0])
+    return est_group
