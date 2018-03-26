@@ -67,7 +67,7 @@ class SKLearnBaseEstimator(BaseEstimator):
         :param cache_path: cache path
         :return: None
         """
-        joblib.dump(est, cache_path)
+        joblib.dump(est, cache_path, compress=True)
 
     def _load_model_from_disk(self, cache_path):
         """
