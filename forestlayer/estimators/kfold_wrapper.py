@@ -42,14 +42,15 @@ str2est_class = {
 
 
 class KFoldWrapper(object):
-    def __init__(self, name, n_folds, est_class, seed=None, dtype=np.float32,
+    def __init__(self, name, n_folds, task, est_type, seed=None, dtype=np.float32,
                  eval_metrics=None, cache_dir=None, keep_in_mem=None, est_args=None, cv_seed=None):
         """
         Initialize a KFoldWrapper.
 
         :param name:
         :param n_folds:
-        :param est_class:
+        :param task:
+        :param est_type:
         :param seed:
         :param eval_metrics:
         :param cache_dir:
@@ -59,7 +60,8 @@ class KFoldWrapper(object):
         self.LOGGER = get_logger('estimators.kfold_wrapper')
         self.name = name
         self.n_folds = n_folds
-        self.est_class = est_class
+        self.task = task
+        self.est_type = est_type
         self.est_args = est_args if est_args is not None else {}
         self.seed = seed
         self.dtype = dtype
@@ -91,12 +93,14 @@ class KFoldWrapper(object):
         # TODO: consider if add a random_state, actually random_state of each estimator can be set in est_configs in
         # main program by users, so we need not to set random_state there.
         # More importantly, if some estimators have no random_state parameter, this assignment can throw problems.
-        if isinstance(self.est_class, (XGBClassifier, XGBRegressor)):
+        if self.est_type in ['FLXGB']:
             if est_args.get('seed', None) is None:
                 est_args['seed'] = copy.deepcopy(self.seed)
-        elif est_args.get('random_state', None) is None:
-            est_args['random_state'] = copy.deepcopy(self.seed)
-        return self.est_class(est_name, est_args)
+        elif self.est_type in ['FLCRF', 'FLRF', 'FLGBDT', 'FLLGBM']:
+            if est_args.get('random_state', None) is None:
+                est_args['random_state'] = copy.deepcopy(self.seed)
+        est_class = est_class_from_type(self.task, self.est_type)
+        return est_class(est_name, est_args)
 
     def fit_transform(self, X, y, y_stratify=None, test_sets=None):
         """
@@ -262,14 +266,15 @@ class KFoldWrapper(object):
 
 @ray.remote
 class DistributedKFoldWrapper(object):
-    def __init__(self, name, n_folds, est_class, seed=None, dtype=np.float32, splitting=False,
+    def __init__(self, name, n_folds, task, est_type, seed=None, dtype=np.float32, splitting=False,
                  eval_metrics=None, cache_dir=None, keep_in_mem=None, est_args=None, cv_seed=None):
         """
         Initialize a KFoldWrapper.
 
         :param name:
         :param n_folds:
-        :param est_class:
+        :param task:
+        :param est_type:
         :param seed:
         :param dtype:
         :param splitting: whether is in splitting, if true, we do not transfer proba results to self.dtype
@@ -287,7 +292,8 @@ class DistributedKFoldWrapper(object):
         self.logs = []
         self.name = name
         self.n_folds = n_folds
-        self.est_class = est_class
+        self.task = task
+        self.est_type = est_type
         self.est_args = est_args if est_args is not None else {}
         self.seed = seed
         if isinstance(seed, basestring):
@@ -318,14 +324,14 @@ class DistributedKFoldWrapper(object):
         """
         est_args = self.est_args.copy()
         est_name = '{}/{}'.format(self.name, k)
-        if isinstance(self.est_class, (XGBClassifier, XGBRegressor)):
+        if self.est_type in ['FLXGB']:
             if est_args.get('seed', None) is None:
                 est_args['seed'] = copy.deepcopy(self.seed)
-        # TODO: thus user cannot define their single forest with random_state=None, because it will be ignored if
-        # layer seed is not None.
-        elif est_args.get('random_state', None) is None:
-            est_args['random_state'] = copy.deepcopy(self.seed)
-        return self.est_class(est_name, est_args)
+        elif self.est_type in ['FLCRF', 'FLRF', 'FLGBDT', 'FLLGBM']:
+            if est_args.get('random_state', None) is None:
+                est_args['random_state'] = copy.deepcopy(self.seed)
+        est_class = est_class_from_type(self.task, self.est_type)
+        return est_class(est_name, est_args)
 
     def fit_transform(self, X, y, y_stratify=None, test_sets=None):
         """
@@ -559,6 +565,7 @@ class SplittingKFoldWrapper(object):
         split_ests_ratio = []
         self.LOGGER.info('dis_level = {}, num_workers = {}, num_estimators = {}, should_split? {}'.format(
             self.dis_level, self.num_workers, num_ests, should_split))
+        # TODO: what if self.seed is an object of RandomState?
         if self.cv_seed is None:
             self.cv_seed = self.seed
         if should_split:
@@ -575,6 +582,7 @@ class SplittingKFoldWrapper(object):
                 for ci in range(1, total_split):
                     cum_sum_split[ci] += cum_sum_split[ci - 1]
                 if self.seed is not None:
+                    # TODO: what if self.seed is an object of RandomState?
                     common_seed = (self.seed + hash("[estimator] {}".format(est_name))) % 1000000007
                     seeds = [np.random.RandomState(common_seed) for _ in split_ei]
                     for si in range(1, total_split):
@@ -979,7 +987,7 @@ def get_estimator_kfold(name, n_folds=3, task='classification', est_type='FLRF',
     :param cv_seed: random seed for cross validation
     :return: a KFoldWrapper instance of concrete estimator
     """
-    est_class = est_class_from_type(task, est_type)
+    # est_class = est_class_from_type(task, est_type)
     if eval_metrics is None:
         if task == 'classification':
             eval_metrics = [Accuracy('accuracy')]
@@ -987,7 +995,8 @@ def get_estimator_kfold(name, n_folds=3, task='classification', est_type='FLRF',
             eval_metrics = [MSE('MSE')]
     return KFoldWrapper(name,
                         n_folds,
-                        est_class,
+                        task,
+                        est_type,
                         seed=seed,
                         dtype=dtype,
                         eval_metrics=eval_metrics,
@@ -1017,7 +1026,8 @@ def get_dist_estimator_kfold(name, n_folds=3, task='classification', est_type='F
     :param cv_seed: random seed for cross validation
     :return: a KFoldWrapper instance of concrete estimator
     """
-    est_class = est_class_from_type(task, est_type)
+    # est_class = est_class_from_type(task, est_type)
+    # print("Now I am ", est_class.__class__)
     if eval_metrics is None:
         if task == 'classification':
             eval_metrics = [Accuracy('accuracy')]
@@ -1025,7 +1035,8 @@ def get_dist_estimator_kfold(name, n_folds=3, task='classification', est_type='F
             eval_metrics = [MSE('MSE')]
     return DistributedKFoldWrapper.remote(name,
                                           n_folds,
-                                          est_class,
+                                          task,
+                                          est_type,
                                           seed=seed,
                                           dtype=dtype,
                                           splitting=splitting,
