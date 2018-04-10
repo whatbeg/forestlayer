@@ -511,6 +511,10 @@ class MultiGrainScanLayer(Layer):
             save_disk_cache(test_path, x_win_est_test)
             self.LOGGER.info("[dis] Saving data x_win_est_train to {}".format(train_path))
             self.LOGGER.info("[dis] Saving data x_win_est_test to {}".format(test_path))
+        # xxx = x_win_est_train[0][0][:300].reshape(-1)
+        # for num in xxx[:300]:
+        #     print(num, end='')
+        # print()
         return x_win_est_train, x_win_est_test
 
     def fit_transform(self, x_train, y_train, x_test=None, y_test=None):
@@ -616,6 +620,10 @@ class MultiGrainScanLayer(Layer):
             save_disk_cache(test_path, x_win_est_test)
             self.LOGGER.info("Saving data x_win_est_train to {}".format(train_path))
             self.LOGGER.info("Saving data x_win_est_test to {}".format(test_path))
+        # xxx = x_win_est_train[0][0][:300].reshape(-1)
+        # for num in xxx[:300]:
+        #     print(num, end='')
+        # print()
         return x_win_est_train, x_win_est_test
 
     def transform(self, x_train):
@@ -1135,59 +1143,6 @@ class CascadeLayer(Layer):
     def __call__(self, inputs, **kwargs):
         self.call(inputs, **kwargs)
 
-    @staticmethod
-    def _concat(x, depth):
-        """
-        Concatenation inner method, to make multiple inputs to be single input, so that to feed it into classifiers.
-
-        :param x: input data, single ndarray(depth=0) or list(depth=1) or 2D list (depth=2), at most 2D.
-        :param depth: as stated above, single ndarray(depth=0) or list(depth=1) or 2D list (depth=2)
-        :return: concatenated data
-        """
-        if depth == 0:
-            return x
-        elif depth == 1:
-            for i, bottom in enumerate(x):
-                x[i] = bottom.reshape((bottom.shape[0], -1))
-            x = np.concatenate(x, 1)
-        elif depth == 2:
-            for i, bottoms in enumerate(x):
-                for j, bot in enumerate(bottoms):
-                    bottoms[j] = bot.reshape((bot.shape[0], -1))
-                x[i] = np.concatenate(bottoms, 1)
-            for i, bottom in enumerate(x):
-                x[i] = bottom.reshape((bottom.shape[0], -1))
-            x = np.concatenate(x, 1)
-        else:
-            raise ValueError('_concat failed. depth should be less than 2!')
-        return x
-
-    def _validate_input(self, x_train, y_train, x_test=None, y_test=None):
-        """
-        Validate input, check if x_train / x_test s' depth, and do some necessary transform like concatenation.
-
-        :param x_train:
-        :param y_train:
-        :param x_test:
-        :param y_test:
-        :return:
-        """
-        assert x_train is not None and y_train is not None, 'x_train is None or y_train should not be None'
-        train_depth = 0
-        if isinstance(x_train, (list, tuple)):
-            train_depth = check_list_depth(x_train)
-        x_train = self._concat(x_train, train_depth)
-        if x_test is not None:
-            test_depth = 0
-            if isinstance(x_test, (list, tuple)):
-                test_depth = check_list_depth(x_test)
-            x_test = self._concat(x_test, test_depth)
-        if isinstance(y_train, (list, tuple)) and y_train is not None:
-            y_train = None if len(y_train) == 0 else y_train[0]
-        if isinstance(y_test, (list, tuple)) and y_test is not None:
-            y_test = None if len(y_test) == 0 else y_test[0]
-        return x_train, y_train, x_test, y_test
-
     def _init_estimators(self, layer_id, est_id):
         """
         Initialize a k_fold estimator.
@@ -1231,7 +1186,7 @@ class CascadeLayer(Layer):
         :param y_train: train labels
         :return: train_output
         """
-        x_train, y_train, _, _ = self._validate_input(x_train, y_train)
+        x_train, y_train, _, _ = _validate_input(x_train, y_train)
         assert x_train.shape[0] == y_train.shape[0], ('x_train.shape[0] = {} not equal to y_train.shape[0]'
                                                       ' = {}'.format(x_train.shape[0], y_train.shape[0]))
         self.LOGGER.info('X_train.shape={}, y_train.shape={}'.format(x_train.shape, y_train.shape))
@@ -1277,7 +1232,7 @@ class CascadeLayer(Layer):
             if y_proba_train is None:
                 raise RuntimeError("layer - {} - estimator - {} fit FAILED!,"
                                    " y_proba_train is None!".format(self.layer_id, ei))
-            self.check_shape(y_proba_train, n_trains, n_classes)
+            check_shape(y_proba_train, n_trains, n_classes)
             x_proba_train[:, ei * n_classes:ei * n_classes + n_classes] = y_proba_train
             eval_proba_train += y_proba_train
         if self.keep_in_mem:
@@ -1308,7 +1263,7 @@ class CascadeLayer(Layer):
         """
         if x_test is None:
             return self.fit(x_train, y_train), None
-        x_train, y_train, x_test, y_test = self._validate_input(x_train, y_train, x_test, y_test)
+        x_train, y_train, x_test, y_test = _validate_input(x_train, y_train, x_test, y_test)
         if y_test is None:
             y_test_shape = (0,)
         else:
@@ -1368,9 +1323,9 @@ class CascadeLayer(Layer):
             if y_proba_train is None:
                 raise RuntimeError("layer - {} - estimator - {} fit FAILED!,"
                                    " y_proba_train is None".format(self.layer_id, ei))
-            self.check_shape(y_proba_train, n_trains, n_classes)
+            check_shape(y_proba_train, n_trains, n_classes)
             if y_proba_test is not None:
-                self.check_shape(y_proba_test, n_tests, n_classes)
+                check_shape(y_proba_test, n_tests, n_classes)
             x_proba_train[:, ei*n_classes:ei*n_classes + n_classes] = y_proba_train
             x_proba_test[:, ei*n_classes:ei*n_classes + n_classes] = y_proba_test
             eval_proba_train += y_proba_train
@@ -1384,7 +1339,7 @@ class CascadeLayer(Layer):
         eval_proba_test /= self.n_estimators
         metric = self.eval_metrics[0]
         train_avg_metric = metric.calc_proba(y_train, eval_proba_train,
-                                             'layer - {} - [train] average'.format(self.layer_id, metric.name),
+                                             'layer - {} - [train] average'.format(self.layer_id),
                                              logger=self.LOGGER)
         self.train_avg_metric = train_avg_metric
         # judge whether y_test is None, which means users are to predict test probas
@@ -1396,12 +1351,6 @@ class CascadeLayer(Layer):
         if y_test is None:
             self.eval_proba_test = eval_proba_test
         return x_proba_train, x_proba_test
-
-    @staticmethod
-    def check_shape(y_proba, n, n_classes):
-        if y_proba.shape != (n, n_classes):
-            raise ValueError('output shape incorrect!,'
-                             ' should be {}, but {}'.format((n, n_classes), y_proba.shape))
 
     @property
     def n_estimators(self):
@@ -1431,7 +1380,7 @@ class CascadeLayer(Layer):
             y_proba = est.transform(X)
             if y_proba is None:
                 raise RuntimeError("layer - {} - estimator - {} transform FAILED!".format(self.layer_id, ei))
-            self.check_shape(y_proba, n_trains, n_classes)
+            check_shape(y_proba, n_trains, n_classes)
             x_proba[:, ei * n_classes:ei * n_classes + n_classes] = y_proba
         return x_proba
 
@@ -1469,7 +1418,7 @@ class CascadeLayer(Layer):
             y_proba_train = est.transform(X)
             if y_proba_train is None:
                 raise RuntimeError("layer - {} - estimator - {} transform FAILED!".format(self.layer_id, ei))
-            self.check_shape(y_proba_train, n_trains, n_classes)
+            check_shape(y_proba_train, n_trains, n_classes)
             proba_sum += y_proba_train
         return proba_sum
 
@@ -1756,17 +1705,17 @@ class AutoGrowingCascadeLayer(Layer):
                                      ' {}_train={:.4f}{},'.format(self.metrics,
                                                                   layer_metric_list[opt_layer_id], self._percent))
                     self.n_layers = layer_id + 1
-                    self._save_data(opt_layer_id, *opt_data)
+                    self.save_data(opt_layer_id, True, *opt_data)
                     # wash the fit cascades after optimal layer id to save memory
                     if self.keep_in_mem:
                         for li in range(opt_layer_id + 1, layer_id + 1):
                             self.layer_fit_cascades[li] = None
                     return x_cur_train
                 if self.data_save_rounds > 0 and (layer_id + 1) % self.data_save_rounds == 0:
-                    self._save_data(layer_id, *opt_data)
+                    self.save_data(layer_id, False, *opt_data)
                 layer_id += 1
             # Max Layer Reached
-            opt_data = [x_cur_train, y_train]
+            # opt_data = [x_cur_train, y_train]
             opt_layer_id = get_opt_layer_id(layer_metric_list, larger_better=self.larger_better)
             self.opt_layer_id = opt_layer_id
             self.opt_train_metric = layer_metric_list[opt_layer_id]
@@ -1775,7 +1724,7 @@ class AutoGrowingCascadeLayer(Layer):
                                 self.max_layers,
                                 self.metrics, layer_metric_list[-1], self._percent, opt_layer_id,
                                 self.metrics, layer_metric_list[opt_layer_id], self._percent))
-            self._save_data(layer_id, *opt_data)
+            self.save_data(opt_layer_id, True, *opt_data)
             self.n_layers = layer_id + 1
             # wash the fit cascades after optimal layer id to save memory
             if self.keep_in_mem:
@@ -1910,17 +1859,19 @@ class AutoGrowingCascadeLayer(Layer):
                                                                      layer_train_metrics[opt_layer_id],
                                                                      self._percent))
                     self.n_layers = layer_id + 1
-                    self.save_data(opt_layer_id, *opt_data)
+                    self.save_data(opt_layer_id, True, *opt_data)
                     # wash the fit cascades after optimal layer id to save memory
                     if self.keep_in_mem:  # if not keep_in_mem, self.layer_fit_cascades is None originally
                         for li in range(opt_layer_id + 1, layer_id + 1):
                             self.layer_fit_cascades[li] = None
-                    return x_cur_train, x_cur_test
+                    # return x_cur_train, x_cur_test
+                    # return the best layer
+                    return opt_data[0], opt_data[2]
                 if self.data_save_rounds > 0 and (layer_id + 1) % self.data_save_rounds == 0:
-                    self.save_data(layer_id, *opt_data)
+                    self.save_data(layer_id, False, *opt_data)
                 layer_id += 1
             # Max Layer Reached
-            opt_data = [x_cur_train, y_train, x_cur_test, y_test]
+            # opt_data = [x_cur_train, y_train, x_cur_test, y_test]
             # detect best layer id
             if self.stop_by_test:
                 opt_layer_id = get_opt_layer_id(layer_test_metrics, larger_better=self.larger_better)
@@ -1943,7 +1894,7 @@ class AutoGrowingCascadeLayer(Layer):
                                   self.max_layers,
                                   self.metrics, layer_train_metrics[-1], self._percent, opt_layer_id,
                                   self.metrics, layer_train_metrics[opt_layer_id], self._percent))
-            self.save_data(layer_id, *opt_data)
+            self.save_data(opt_layer_id, True, *opt_data)
             self.n_layers = layer_id + 1
             # if y_test is None, we predict x_test and save its predictions
             if y_test is None and cascade is not None:
@@ -2089,30 +2040,12 @@ class AutoGrowingCascadeLayer(Layer):
         """
         return self.n_layers
 
-    def _save_data(self, layer_id, x_train, y_train):
-        """
-        Save the intermediate training data of the layer.
-
-        :param layer_id:
-        :param x_train:
-        :param y_train:
-        :return:
-        """
-        if self.data_save_dir is None:
-            return
-        data_path = osp.join(self.data_save_dir, "layer_{}-{}.pkl".format(layer_id, 'train'))
-        check_dir(data_path)
-        data = {"X": x_train, "y": y_train}
-        self.LOGGER.info("Saving Data in {} ... X.shape={}, y.shape={}".format(
-            data_path, data["X"].shape, data["y"].shape))
-        with open(data_path, "wb") as f:
-            pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
-
-    def save_data(self, layer_id, x_train, y_train, x_test, y_test):
+    def save_data(self, layer_id, opt, x_train, y_train, x_test=None, y_test=None):
         """
         Save the intermediate training data and testing data in this layer.
 
         :param layer_id:
+        :param opt:
         :param x_train:
         :param y_train:
         :param x_test:
@@ -2122,7 +2055,9 @@ class AutoGrowingCascadeLayer(Layer):
         if self.data_save_dir is None:
             return
         for phase in ['train', 'test']:
-            data_path = osp.join(self.data_save_dir, "layer_{}-{}.pkl".format(layer_id, phase))
+            if phase == 'test' and x_test is None:
+                return
+            data_path = osp.join(self.data_save_dir, "{}{}.pkl".format("opt-" if opt else "", phase))
             check_dir(data_path)
             if phase == 'train':
                 data = {"X": x_train, "y": y_train}
@@ -2168,6 +2103,179 @@ class AutoGrowingCascadeLayer(Layer):
         return info_str
 
 
+class FinalLayer(Layer):
+    def __init__(self, batch_size=None, dtype=np.float32, name=None, task='classification', est_configs=None,
+                 n_classes=None, keep_in_mem=False, data_save_dir=None, model_save_dir=None,
+                 metrics=None, keep_test_result=False, seed=None, distribute=False, verbose_dis=False,
+                 dis_level=1, num_workers=None):
+        """
+        The final classification layer.
+        The estimator(s) of this layer commonly is/are estimator(s) with low bias.
+
+        :param batch_size:
+        :param dtype:
+        :param name:
+        :param est_configs:
+        :param n_classes:
+        :param keep_in_mem:
+        :param data_save_dir:
+        :param model_save_dir:
+        :param metrics:
+        :param keep_test_result:
+        :param seed:
+        :param distribute:
+        :param verbose_dis:
+        :param dis_level:
+        :param num_workers:
+        """
+        self.est_configs = [] if est_configs is None else est_configs
+        super(FinalLayer, self).__init__(batch_size=batch_size, dtype=dtype, name=name)
+        self.task = task
+        self.n_classes = n_classes
+        if self.task == 'regression':
+            self.n_classes = 1
+        self.keep_in_mem = keep_in_mem
+        self.data_save_dir = data_save_dir
+        check_dir(self.data_save_dir)   # check data save dir, if not exists, create the dir
+        self.model_save_dir = model_save_dir
+        check_dir(self.model_save_dir)  # check model save dir, if not exists, create the dir
+        self.metrics = metrics
+        if self.metrics is None:
+            if task == 'regression':
+                self.metrics = 'mse'
+            else:
+                self.metrics = 'accuracy'
+        self.eval_metrics = get_eval_metrics(self.metrics, self.task)
+        self.keep_test_result = keep_test_result
+        self.seed = seed
+        self.distribute = distribute
+        self.dis_level = dis_level
+        if distribute is True:
+            if num_workers is None:
+                self.init_num_workers()
+            else:
+                self.num_workers = num_workers
+        self.verbose_dis = verbose_dis
+        self.est_args = []
+        for est_conf in self.est_configs:
+            if isinstance(est_conf, EstimatorConfig):
+                self.est_args.append(est_conf.get_est_args().copy())
+
+    def call(self, x_trains):
+        raise NotImplementedError
+
+    def __call__(self, x_trains):
+        raise NotImplementedError
+
+    def _init_estimator(self, est_id):
+        """
+        Initialize a k_fold estimator.
+
+        :return:
+        """
+        est_args = self.est_args[est_id].copy()
+        est_name = 'final - estimator - {} - {}folds'.format(est_id, est_args['n_folds'])
+        n_folds = int(est_args['n_folds'])
+        est_args.pop('n_folds')
+        est_type = est_args['est_type']
+        est_args.pop('est_type')
+        # seed
+        if self.seed is not None:
+            seed = (self.seed + hash("[estimator] {}".format(est_name))) % 1000000007
+        else:
+            seed = None
+        if self.distribute:
+            get_est_func = get_dist_estimator_kfold
+        else:
+            get_est_func = get_estimator_kfold
+        return get_est_func(name=est_name,
+                            n_folds=n_folds,
+                            task=self.task,
+                            est_type=est_type,
+                            eval_metrics=self.eval_metrics,
+                            seed=seed,
+                            dtype=self.dtype,
+                            keep_in_mem=self.keep_in_mem,
+                            est_args=est_args,
+                            cv_seed=seed)
+
+    def fit(self, x_trains, y_trains):
+        raise NotImplementedError
+
+    def fit_transform_with_file(self, train_file, test_file):
+        with open(train_file) as train:
+            train_data = pickle.load(train)
+        with open(test_file) as test:
+            test_data = pickle.load(test)
+        x_train, y_train, x_test, y_test = train_data['X'], train_data['y'], test_data['X'], test_data['y']
+        return self.fit_transform(x_train, y_train, x_test, y_test)
+
+    def fit_transform(self, x_train, y_train, x_test=None, y_test=None):
+        x_train, y_train, x_test, y_test = _validate_input(x_train, y_train, x_test, y_test)
+        if y_test is None:
+            y_test_shape = (0,)
+        else:
+            y_test_shape = y_test.shape
+        self.LOGGER.info('X_train.shape={}, y_train.shape={}, dtype={}'.format(x_train.shape, y_train.shape,
+                                                                               x_train.dtype))
+        self.LOGGER.info(' X_test.shape={},  y_test.shape={}, dtype={}'.format(x_test.shape, y_test_shape,
+                                                                               x_test.dtype))
+        n_trains = x_train.shape[0]
+        n_tests = x_test.shape[0]
+        n_classes = self.n_classes  # if regression, n_classes = 1
+        if self.task == 'classification' and n_classes is None:
+            n_classes = np.unique(y_train)
+        if self.task == 'regression' and n_classes is None:
+            n_classes = 1
+        y_stratify = y_train if self.task == 'classification' else None
+        est = self._init_estimator(0)
+        y_probas = est.fit_transform(x_train, y_train, y_stratify, test_sets=[('test', x_test, y_test)])
+        y_proba_train, y_proba_test = y_probas[0], y_probas[1]
+        metric = self.eval_metrics[0]
+        train_avg_metric = metric.calc_proba(y_train, y_proba_train,
+                                             'Final Layer - [train] average'.format(metric.name),
+                                             logger=self.LOGGER)
+        self.train_avg_metric = train_avg_metric
+        # if only one element on test_sets, return one test result like y_proba_train
+        if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
+            y_proba_test = y_proba_test[0]
+        if y_proba_train is None:
+            raise RuntimeError("Final Layer - estimator - {} fit FAILED!,"
+                               " y_proba_train is None".format(0))
+        check_shape(y_proba_train, n_trains, n_classes)
+        if y_proba_test is not None:
+            check_shape(y_proba_test, n_tests, n_classes)
+            # judge whether y_test is None, which means users are to predict test probas
+            if y_test is not None:
+                test_avg_metric = metric.calc_proba(y_test, y_proba_test,
+                                                    'Final Layer - [ test] average',
+                                                    logger=self.LOGGER)
+                self.test_avg_metric = test_avg_metric
+            # if y_test is None, we need to generate test prediction, so keep eval_proba_test
+            if y_test is None:
+                self.eval_proba_test = y_proba_test
+        return y_proba_train, y_proba_test
+
+    def transform(self, inputs):
+        raise NotImplementedError
+
+    def predict(self, inputs):
+        raise NotImplementedError
+
+    def predict_proba(self, inputs):
+        raise NotImplementedError
+
+    def evaluate(self, inputs, labels):
+        raise NotImplementedError
+
+    def __str__(self):
+        return self.__class__.__name__
+
+    @property
+    def summary_info(self):
+        return self.__str__()
+
+
 def _to_snake_case(name):
     import re
     intermediate = re.sub('(.)([A-Z][a-z0-9]+)', r'\1_\2', name)
@@ -2210,3 +2318,63 @@ def get_eval_metrics(metrics, task='classification', name=''):
     else:
         raise ValueError('Unknown metrics {} of type {}'.format(metrics, type(metrics)))
     return eval_metrics
+
+
+def check_shape(y_proba, n, n_classes):
+    if y_proba.shape != (n, n_classes):
+        raise ValueError('output shape incorrect!,'
+                         ' should be {}, but {}'.format((n, n_classes), y_proba.shape))
+
+
+def _concat(x, depth):
+    """
+    Concatenation inner method, to make multiple inputs to be single input, so that to feed it into classifiers.
+
+    :param x: input data, single ndarray(depth=0) or list(depth=1) or 2D list (depth=2), at most 2D.
+    :param depth: as stated above, single ndarray(depth=0) or list(depth=1) or 2D list (depth=2)
+    :return: concatenated data
+    """
+    if depth == 0:
+        return x
+    elif depth == 1:
+        for i, bottom in enumerate(x):
+            x[i] = bottom.reshape((bottom.shape[0], -1))
+        x = np.concatenate(x, 1)
+    elif depth == 2:
+        for i, bottoms in enumerate(x):
+            for j, bot in enumerate(bottoms):
+                bottoms[j] = bot.reshape((bot.shape[0], -1))
+            x[i] = np.concatenate(bottoms, 1)
+        for i, bottom in enumerate(x):
+            x[i] = bottom.reshape((bottom.shape[0], -1))
+        x = np.concatenate(x, 1)
+    else:
+        raise ValueError('_concat failed. depth should be less than 2!')
+    return x
+
+
+def _validate_input(x_train, y_train, x_test=None, y_test=None):
+    """
+    Validate input, check if x_train / x_test s' depth, and do some necessary transform like concatenation.
+
+    :param x_train:
+    :param y_train:
+    :param x_test:
+    :param y_test:
+    :return:
+    """
+    assert x_train is not None and y_train is not None, 'x_train is None or y_train should not be None'
+    train_depth = 0
+    if isinstance(x_train, (list, tuple)):
+        train_depth = check_list_depth(x_train)
+    x_train = _concat(x_train, train_depth)
+    if x_test is not None:
+        test_depth = 0
+        if isinstance(x_test, (list, tuple)):
+            test_depth = check_list_depth(x_test)
+        x_test = _concat(x_test, test_depth)
+    if isinstance(y_train, (list, tuple)) and y_train is not None:
+        y_train = None if len(y_train) == 0 else y_train[0]
+    if isinstance(y_test, (list, tuple)) and y_test is not None:
+        y_test = None if len(y_test) == 0 else y_test[0]
+    return x_train, y_train, x_test, y_test

@@ -24,7 +24,7 @@ install_requires = [
 
 setup(
     name="forestlayer",
-    version="0.1.4",
+    version="0.1.5",
     include_package_data=True,
     author="ForestLayer Contributors",
     author_email="huqiu00@163.com",
