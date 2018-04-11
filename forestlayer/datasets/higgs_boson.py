@@ -36,7 +36,7 @@ def load_data(size='1K'):
     data = np.loadtxt(data_path, delimiter=',')
     y = data[:, 0]
     X = data[:, 1:]
-    x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
+    x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
     return x_train, y_train, x_test, y_test
 
 

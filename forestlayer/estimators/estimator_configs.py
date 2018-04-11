@@ -138,15 +138,19 @@ class RandomForestConfig(EstimatorConfig):
     Random Forest Argument.
     """
     def __init__(self, n_folds=3, n_estimators=500, max_depth=100, n_jobs=-1, max_features='sqrt',
+                 criterion="gini", min_samples_split=2, min_impurity_decrease=0.,
                  min_samples_leaf=1, random_state=None):
         """
-        Random Forest Argument.
+        Random Forest Arguments.
 
         :param n_folds:
         :param n_estimators:
         :param max_depth:
         :param n_jobs:
         :param max_features:
+        :param criterion:
+        :param min_samples_split:
+        :param min_impurity_decrease:
         :param min_samples_leaf:
         :param random_state:
         """
@@ -158,6 +162,9 @@ class RandomForestConfig(EstimatorConfig):
             'max_depth': max_depth,
             'n_jobs': n_jobs,
             'max_features': max_features,
+            'criterion': criterion,
+            'min_samples_split': min_samples_split,
+            'min_impurity_decrease': min_impurity_decrease,
             'min_samples_leaf': min_samples_leaf,
             'random_state': random_state
         }
@@ -168,15 +175,19 @@ class ExtraRandomForestConfig(EstimatorConfig):
     Extremely Random Forest Argument.
     """
     def __init__(self, n_folds=3, n_estimators=500, max_depth=100, n_jobs=-1, max_features=1,
+                 criterion="gini", min_samples_split=2, min_impurity_decrease=0.,
                  min_samples_leaf=1, random_state=None):
         """
-        Completely Random Forest Argument, also called Extremely Random Forest.
+        Completely Random Forest Arguments, also called Extremely Random Forest.
 
-        :param n_folds: number of folds for cross validation
-        :param n_estimators: number of tree estimators
-        :param max_depth: max depth of a tree
+        :param n_folds:
+        :param n_estimators:
+        :param max_depth:
         :param n_jobs:
         :param max_features:
+        :param criterion:
+        :param min_samples_split:
+        :param min_impurity_decrease:
         :param min_samples_leaf:
         :param random_state:
         """
@@ -188,6 +199,9 @@ class ExtraRandomForestConfig(EstimatorConfig):
             'max_depth': max_depth,
             'n_jobs': n_jobs,
             'max_features': max_features,
+            'criterion': criterion,
+            'min_samples_split': min_samples_split,
+            'min_impurity_decrease': min_impurity_decrease,
             'min_samples_leaf': min_samples_leaf,
             'random_state': random_state
         }
