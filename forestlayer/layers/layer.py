@@ -18,7 +18,7 @@ except ImportError:
 import ray
 from ..utils.log_utils import get_logger, list2str
 from ..utils.layer_utils import check_list_depth
-from ..utils.storage_utils import check_dir, getmbof, output_disk_path, load_disk_cache, save_disk_cache, save_model
+from ..utils.storage_utils import check_dir, getmbof, output_disk_path, load_disk_cache, save_disk_cache
 from ..utils.metrics import Metrics, Accuracy, AUC, MSE, RMSE
 from ..estimators import get_estimator_kfold, get_dist_estimator_kfold, EstimatorConfig
 from ..estimators.kfold_wrapper import SplittingKFoldWrapper, CascadeSplittingKFoldWrapper

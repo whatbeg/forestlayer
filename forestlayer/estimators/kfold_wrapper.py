@@ -14,11 +14,10 @@ try:
 except ImportError:
     import pickle
 from sklearn.model_selection import KFold, StratifiedKFold
-from xgboost.sklearn import XGBClassifier, XGBRegressor
 from .sklearn_estimator import *
 from .estimator_configs import EstimatorConfig
 from ..utils.log_utils import get_logger
-from ..utils.storage_utils import name2path, getmbof
+from ..utils.storage_utils import name2path
 from ..utils.metrics import Accuracy, MSE
 from collections import defaultdict
 import math
@@ -558,7 +557,7 @@ class SplittingKFoldWrapper(object):
         """
         assert isinstance(ests, list), 'estimators should be a list, but {}'.format(type(ests))
         num_ests = len(ests)
-        should_split, split_scheme = determine_split(dis_level=self.dis_level, num_estimators=num_ests,
+        should_split, split_scheme = determine_split(dis_level=self.dis_level,
                                                      num_workers=self.num_workers, ests=ests)
         split_ests = []
         split_group = []
@@ -762,14 +761,13 @@ class CascadeSplittingKFoldWrapper(object):
         :return:
         """
         assert isinstance(ests, list), 'estimators should be a list, but {}'.format(type(ests))
-        num_ests = len(ests)
-        should_split, split_scheme = determine_split(dis_level=self.dis_level, num_estimators=num_ests,
+        should_split, split_scheme = determine_split(dis_level=self.dis_level,
                                                      num_workers=self.num_workers, ests=ests)
         split_ests = []
         split_ests_ratio = []
         split_group = []
         self.LOGGER.info('dis_level = {}, num_workers = {}, num_estimators = {}, should_split? {}'.format(
-            self.dis_level, self.num_workers, num_ests, should_split))
+            self.dis_level, self.num_workers, len(ests), should_split))
         if self.cv_seed is None:
             self.cv_seed = self.seed
         if should_split:
@@ -779,6 +777,14 @@ class CascadeSplittingKFoldWrapper(object):
                 est_name = 'layer - {} - estimator - {} - {}folds'.format(self.layer_id, ei,
                                                                           est.get('n_folds', 3))
                 split_ei = split_scheme[ei]
+                if split_ei[0] == -1:
+                    gen_est = self._init_estimators(est.copy(), self.layer_id, ei, self.seed, self.cv_seed,
+                                                    splitting=False)
+                    split_ests.append(gen_est)
+                    split_ests_ratio.append(1.0)
+                    split_group.append([i, ])
+                    i += 1
+                    continue
                 trees_sum = sum(split_ei)
                 total_split = len(split_ei)
                 cum_sum_split = split_ei[:]
@@ -790,16 +796,10 @@ class CascadeSplittingKFoldWrapper(object):
                     seeds = [np.random.RandomState(common_seed) for _ in split_ei]
                     for si in range(1, total_split):
                         seeds[si].randint(MAX_RAND_SEED, size=cum_sum_split[si - 1])
-                    # seed = np.random.RandomState(common_seed)
-                    # seed2 = np.random.RandomState(common_seed)
-                    # seed2.randint(MAX_RAND_SEED, size=split_ei[0])
                 else:
                     seeds = [np.random.mtrand._rand for _ in split_ei]
                     for si in range(1, total_split):
                         seeds[si].randint(MAX_RAND_SEED, size=cum_sum_split[si - 1])
-                    # seed = np.random.mtrand._rand
-                    # seed2 = np.random.mtrand._rand
-                    # seed2.randint(MAX_RAND_SEED, size=split_ei[0])
                 self.LOGGER.debug('{} trees split to {}'.format(num_trees, split_ei))
                 # self.LOGGER.debug('seeds = {}'.format([seed.get_state()[-3] for seed in seeds]))
                 args = est.copy()
@@ -1047,19 +1047,35 @@ def get_dist_estimator_kfold(name, n_folds=3, task='classification', est_type='F
                                           cv_seed=cv_seed)
 
 
-def determine_split(dis_level, num_estimators, num_workers, ests):
+def determine_split(dis_level, num_workers, ests):
+    forest_ests_idx = [i for i, est in enumerate(ests) if est.get('est_type') in ['FLRF', 'FLCRF']]
+    num_forest_estimators = len(forest_ests_idx)
     if dis_level == 0:
         return False, []
     if dis_level == 1:
-        if 2 * num_workers >= num_estimators:
-            return True, [[num_trees / 2, num_trees - num_trees / 2]
-                          for num_trees in map(lambda x: x.get('n_estimators', 500), ests)]
+        if 2 * num_workers >= num_forest_estimators:
+            splits = []
+            for i, est in enumerate(ests):
+                num_trees = est.get('n_estimators', 500)
+                if est.get('est_type') in ['FLRF', 'FLCRF']:
+                    splits.append([num_trees / 2, num_trees - num_trees / 2])
+                else:
+                    splits.append([-1])
+            return True, splits
     if dis_level == 2:
-        return True, [[num_trees / 2, num_trees - num_trees / 2]
-                      for num_trees in map(lambda x: x.get('n_estimators', 500), ests)]
+        splits = []
+        for i, est in enumerate(ests):
+            num_trees = est.get('n_estimators', 500)
+            if est.get('est_type') in ['FLRF', 'FLCRF']:
+                splits.append([num_trees / 2, num_trees - num_trees / 2])
+            else:
+                splits.append([-1])
+        return True, splits
     if dis_level == 3:
         num_trees = map(lambda x: x.get('n_estimators', 500), ests)
         tree_sum = sum(num_trees)
+        if tree_sum <= 0:
+            return False, []
         # As every node generally capable of handling 2 forests simultaneously, we regard one node as two nodes.
         # But when input data are large, one node may not be able to handle the concurrent training of two forests.
         # So this parameter should be considered later.
@@ -1067,8 +1083,12 @@ def determine_split(dis_level, num_estimators, num_workers, ests):
         avg_trees = int(math.ceil(tree_sum / float(num_workers * 2)))
         splits = []
         should_split = False
-        for i in range(num_estimators):
+        for i, est in enumerate(ests):
             split_i = []
+            if est.get('est_type') not in ['FLRF', 'FLCRF']:
+                split_i.append(-1)
+                splits.append(split_i)
+                continue
             if not should_split and num_trees[i] > avg_trees:
                 should_split = True
             while num_trees[i] > avg_trees:
