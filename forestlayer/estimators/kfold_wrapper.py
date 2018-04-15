@@ -9,6 +9,7 @@ import os.path as osp
 import numpy as np
 import ray
 import copy
+import time
 try:
     import cPickle as pickle
 except ImportError:
@@ -254,7 +255,8 @@ class KFoldWrapper(object):
         """
         return KFoldWrapper(name=self.name,
                             n_folds=self.n_folds,
-                            est_class=self.est_class,
+                            task=self.task,
+                            est_type=self.est_type,
                             seed=self.seed,
                             eval_metrics=self.eval_metrics,
                             cache_dir=self.cache_dir,
@@ -493,7 +495,8 @@ class DistributedKFoldWrapper(object):
         """
         return DistributedKFoldWrapper.remote(name=self.name,
                                               n_folds=self.n_folds,
-                                              est_class=self.est_class,
+                                              task=self.task,
+                                              est_type=self.est_type,
                                               seed=self.seed,
                                               dtype=self.dtype,
                                               splitting=self.splitting,
@@ -556,17 +559,16 @@ class SplittingKFoldWrapper(object):
         :return:
         """
         assert isinstance(ests, list), 'estimators should be a list, but {}'.format(type(ests))
-        num_ests = len(ests)
         should_split, split_scheme = determine_split(dis_level=self.dis_level,
                                                      num_workers=self.num_workers, ests=ests)
         split_ests = []
-        split_group = []
         split_ests_ratio = []
+        split_group = []
         self.LOGGER.info('dis_level = {}, num_workers = {}, num_estimators = {}, should_split? {}'.format(
-            self.dis_level, self.num_workers, num_ests, should_split))
+            self.dis_level, self.num_workers, len(ests), should_split))
         # TODO: what if self.seed is an object of RandomState?
         if self.cv_seed is None:
-            self.cv_seed = self.seed
+            self.cv_seed = copy.deepcopy(self.seed)
         if should_split:
             i = 0
             new_ei2wi = dict()
@@ -575,6 +577,14 @@ class SplittingKFoldWrapper(object):
                 num_trees = est.get('n_estimators', 500)
                 est_name = 'win - {} - estimator - {} - {}folds'.format(wi, wei, est.get('n_folds', 3))
                 split_ei = split_scheme[ei]
+                if split_ei[0] == -1:
+                    gen_est = self._init_estimators(est.copy(), self.layer_id, ei, self.seed, self.cv_seed,
+                                                    splitting=False)
+                    split_ests.append(gen_est)
+                    split_ests_ratio.append(1.0)
+                    split_group.append([i, ])
+                    i += 1
+                    continue
                 trees_sum = sum(split_ei)
                 total_split = len(split_ei)
                 cum_sum_split = split_ei[:]
@@ -769,7 +779,7 @@ class CascadeSplittingKFoldWrapper(object):
         self.LOGGER.info('dis_level = {}, num_workers = {}, num_estimators = {}, should_split? {}'.format(
             self.dis_level, self.num_workers, len(ests), should_split))
         if self.cv_seed is None:
-            self.cv_seed = self.seed
+            self.cv_seed = copy.deepcopy(self.seed)
         if should_split:
             i = 0
             for ei, est in enumerate(ests):
@@ -790,7 +800,6 @@ class CascadeSplittingKFoldWrapper(object):
                 cum_sum_split = split_ei[:]
                 for ci in range(1, total_split):
                     cum_sum_split[ci] += cum_sum_split[ci - 1]
-                # assert len(split_ei) == 2, "Now we try 2-split first and then popularize to multi-split."
                 if self.seed is not None:
                     common_seed = (self.seed + hash("[estimator] {}".format(est_name))) % 1000000007
                     seeds = [np.random.RandomState(common_seed) for _ in split_ei]
@@ -882,18 +891,26 @@ class CascadeSplittingKFoldWrapper(object):
         split_ests, split_ests_ratio, split_group = self.splitting(self.estimators)
         self.LOGGER.debug('split_group = {}'.format(split_group))
         self.LOGGER.debug('split_ests_ratio = {}'.format(split_ests_ratio))
+        start_time = time.time()
         x_train_obj_id = ray.put(x_train)
         y_train_obj_id = ray.put(y_train)
         y_stratify_obj_id = ray.put(y_stratify)
         test_sets_obj_id = ray.put(test_sets)
+        self.LOGGER.info("put time: {}".format(time.time()-start_time))
+        start_time = time.time()
         # the base kfold_wrapper of SplittingKFoldWrapper must be DistributedKFoldWrapper,
         # so with the y_proba_train, y_proba_tests, there is a log info list will be return.
         # so, ests_output is like (y_proba_train, y_proba_tests, logs)
         ests_output = [est.fit_transform.remote(x_train_obj_id, y_train_obj_id, y_stratify_obj_id,
                                                 test_sets=test_sets_obj_id)
                        for est in split_ests]
+        self.LOGGER.info("remote fit_transform time: {}".format(time.time()-start_time))
+        start_time = time.time()
         est_group = merge_group(split_group, split_ests_ratio, ests_output, self.dtype)
+        self.LOGGER.info("merge_group_time: {}".format(time.time()-start_time))
+        start_time = time.time()
         est_group_result = ray.get(est_group)
+        self.LOGGER.info("ray.get(est_group) time: {}".format(time.time()-start_time))
         return est_group_result, split_ests, split_group
 
 
@@ -1033,10 +1050,10 @@ def get_dist_estimator_kfold(name, n_folds=3, task='classification', est_type='F
             eval_metrics = [Accuracy('accuracy')]
         else:
             eval_metrics = [MSE('MSE')]
-    return DistributedKFoldWrapper.remote(name,
-                                          n_folds,
-                                          task,
-                                          est_type,
+    return DistributedKFoldWrapper.remote(name=name,
+                                          n_folds=n_folds,
+                                          task=task,
+                                          est_type=est_type,
                                           seed=seed,
                                           dtype=dtype,
                                           splitting=splitting,

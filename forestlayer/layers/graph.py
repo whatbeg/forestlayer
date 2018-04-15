@@ -155,15 +155,20 @@ class Graph(object):
             x_tests = [x_tests]
         if y_tests is not None and not isinstance(y_tests, (list, tuple)):
             y_tests = [y_tests]
+        time_cost_kv = []
         for li, layer in enumerate(self.layers):
             self.LOGGER.info(" -------------- Now fit_transforming - [{}] [{}] --------------".format(li, layer))
             layer_start_time = time.time()
             if layer.distribute is True and layer.num_workers is None:
                 layer.num_workers = self.get_num_workers()
             x_trains, x_tests = layer.fit_transform(x_trains, y_trains, x_tests, y_tests)
-            self.LOGGER.info('{} time cost: {:.6f} s'.format(layer, time.time() - layer_start_time))
+            time_cost = time.time() - layer_start_time
+            self.LOGGER.info('{} time cost: {:.6f} s'.format(layer, time_cost))
+            time_cost_kv.append(("{}".format(layer), time_cost))
         time_cost = time.time() - start_time
         self.LOGGER.info("graph fit_transform finished! Time Cost: {:.6f} s".format(time_cost))
+        for tckv in time_cost_kv:
+            self.LOGGER.info("{} cost {}".format(tckv[0], tckv[1]))
         self.FIT = True
         return x_trains, x_tests
 

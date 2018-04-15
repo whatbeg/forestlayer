@@ -10,6 +10,7 @@ Base layers definition.
 from __future__ import print_function
 import numpy as np
 import datetime
+import time
 import os.path as osp
 try:
     import cPickle as pickle
@@ -427,6 +428,8 @@ class MultiGrainScanLayer(Layer):
         """
         x_train, y_train = self._check_input(x_train, y_train)
         x_test, y_test = self._check_input(x_test, y_test)
+        self.LOGGER.debug('x_train size={}, dtype={}'.format(getmbof(x_train), x_train.dtype))
+        self.LOGGER.debug(' x_test size={}, dtype={}'.format(getmbof(x_test), x_test.dtype))
         # Construct test sets
         x_wins_train = []
         x_wins_test = []
@@ -1799,6 +1802,7 @@ class AutoGrowingCascadeLayer(Layer):
         opt_data = [None, None]
         try:
             while True:
+                start_time = time.time()
                 if layer_id >= self.max_layers > 0:
                     break
                 x_cur_train = np.zeros((n_trains, 0), dtype=self.dtype)
@@ -1869,6 +1873,8 @@ class AutoGrowingCascadeLayer(Layer):
                     return opt_data[0], opt_data[2]
                 if self.data_save_rounds > 0 and (layer_id + 1) % self.data_save_rounds == 0:
                     self.save_data(layer_id, False, *opt_data)
+                time_cost = time.time() - start_time
+                self.LOGGER.info("Layer {} time cost: {}".format(layer_id, time_cost))
                 layer_id += 1
             # Max Layer Reached
             # opt_data = [x_cur_train, y_train, x_cur_test, y_test]
