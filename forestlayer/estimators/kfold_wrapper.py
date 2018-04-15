@@ -267,8 +267,8 @@ class KFoldWrapper(object):
 
 @ray.remote
 class DistributedKFoldWrapper(object):
-    def __init__(self, name, n_folds, task, est_type, seed=None, dtype=np.float32, splitting=False,
-                 eval_metrics=None, cache_dir=None, keep_in_mem=None, est_args=None, cv_seed=None):
+    def __init__(self, name=None, n_folds=3, task='classification', est_type=None, seed=None, dtype=np.float32,
+                 splitting=False, eval_metrics=None, cache_dir=None, keep_in_mem=None, est_args=None, cv_seed=None):
         """
         Initialize a KFoldWrapper.
 
@@ -333,6 +333,19 @@ class DistributedKFoldWrapper(object):
                 est_args['random_state'] = copy.deepcopy(self.seed)
         est_class = est_class_from_type(self.task, self.est_type)
         return est_class(est_name, est_args)
+
+    def fit_transform_lazyscan(self, x_train, y_train, x_test, y_test, win):
+        x_wins_train = win.fit_transform(x_train)
+        x_wins_test = win.fit_transform(x_test)
+        # print('[lazy] X_wins of train: {}'.format(x_wins_train.shape))
+        # print('[lazy] X_wins of  test: {}'.format(x_wins_test.shape))
+        x_wins_train = x_wins_train.reshape((x_wins_train.shape[0], -1, x_wins_train.shape[-1]))
+        x_wins_test = x_wins_test.reshape((x_wins_test.shape[0], -1, x_wins_test.shape[-1]))
+        y_win = y_train[:, np.newaxis].repeat(x_wins_train.shape[1], axis=1)
+        y_stratify = y_win[:, 0]
+        y_win_test = None if y_test is None else y_test[:, np.newaxis].repeat(x_wins_test.shape[1], axis=1)
+        test_sets = [('testOfWin{}x{}'.format(win.win_x, win.win_y), x_wins_test, y_win_test)]
+        return self.fit_transform(x_wins_train, y_win, y_stratify, test_sets)
 
     def fit_transform(self, X, y, y_stratify=None, test_sets=None):
         """
@@ -512,7 +525,8 @@ class SplittingKFoldWrapper(object):
     Wrapper for splitting forests to smaller forests.
     TODO: support intelligent load-aware splitting method.
     """
-    def __init__(self, dis_level=0, estimators=None, ei2wi=None, num_workers=None, seed=None, task='classification',
+    def __init__(self, dis_level=0, estimators=None, ei2wi=None, num_workers=None, seed=None,
+                 windows=None, task='classification',
                  eval_metrics=None, keep_in_mem=False, cv_seed=None, dtype=np.float32):
         """
         Initialize SplittingKFoldWrapper.
@@ -540,6 +554,7 @@ class SplittingKFoldWrapper(object):
         self.ei2wi = ei2wi
         self.num_workers = num_workers
         self.seed = seed
+        self.windows = windows
         self.task = task
         self.dtype = dtype
         self.eval_metrics = eval_metrics
@@ -578,7 +593,7 @@ class SplittingKFoldWrapper(object):
                 est_name = 'win - {} - estimator - {} - {}folds'.format(wi, wei, est.get('n_folds', 3))
                 split_ei = split_scheme[ei]
                 if split_ei[0] == -1:
-                    gen_est = self._init_estimators(est.copy(), self.layer_id, ei, self.seed, self.cv_seed,
+                    gen_est = self._init_estimators(est.copy(), wi, wei, self.seed, self.cv_seed,
                                                     splitting=False)
                     split_ests.append(gen_est)
                     split_ests_ratio.append(1.0)
@@ -689,29 +704,33 @@ class SplittingKFoldWrapper(object):
         est_group_result = ray.get(est_group)
         return est_group_result
 
-    def fit_transform(self, x_wins_train, y_win, test_sets):
+    def fit_transform(self, x_train, y_train, x_test, y_test):
         """
         Fit and transform. This method do splitting fit and collect/merge results of distributed forests.
 
-        :param x_wins_train:
-        :param y_win:
-        :param test_sets:
+        :param x_train:
+        :param y_train:
+        :param x_test:
+        :param y_test:
         :return:
         """
         split_ests, split_ests_ratio, split_group = self.splitting(self.estimators)
         self.LOGGER.debug('split_group = {}'.format(split_group))
         self.LOGGER.debug('split_ests_ratio = {}'.format(split_ests_ratio))
         self.LOGGER.debug('new ei2wi = {}'.format(self.ei2wi))
-        x_wins_train_obj_ids = [ray.put(x_wins_train[wi]) for wi in range(len(x_wins_train))]
-        y_win_obj_ids = [ray.put(y_win[wi]) for wi in range(len(y_win))]
-        y_stratify = [ray.put(y_win[wi][:, 0]) for wi in range(len(y_win))]
-        test_sets_obj_ids = [ray.put(test_sets[wi]) for wi in range(len(test_sets))]
+        # x_wins_train_obj_ids = [ray.put(x_wins_train[wi]) for wi in range(len(x_wins_train))]
+        # y_win_obj_ids = [ray.put(y_win[wi]) for wi in range(len(y_win))]
+        # y_stratify = [ray.put(y_win[wi][:, 0]) for wi in range(len(y_win))]
+        # test_sets_obj_ids = [ray.put(test_sets[wi]) for wi in range(len(test_sets))]
+        x_train_id = ray.put(x_train)
+        y_train_id = ray.put(y_train)
+        x_test_id = ray.put(x_test)
+        y_test_id = ray.put(y_test)
         # the base kfold_wrapper of SplittingKFoldWrapper must be DistributedKFoldWrapper,
         # so with the y_proba_train, y_proba_tests, there is a log info list will be return.
         # so, ests_output is like (y_proba_train, y_proba_tests, logs)
-        ests_output = [est.fit_transform.remote(x_wins_train_obj_ids[self.ei2wi[ei][0]],
-                                                y_win_obj_ids[self.ei2wi[ei][0]], y_stratify[self.ei2wi[ei][0]],
-                                                test_sets=test_sets_obj_ids[self.ei2wi[ei][0]])
+        ests_output = [est.fit_transform_lazyscan.remote(x_train_id, y_train_id, x_test_id, y_test_id,
+                                                         self.windows[self.ei2wi[ei][0]])
                        for ei, est in enumerate(split_ests)]
         est_group = merge_group(split_group, split_ests_ratio, ests_output, self.dtype)
         est_group_result = ray.get(est_group)

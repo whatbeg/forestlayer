@@ -242,6 +242,12 @@ class MultiGrainScanLayer(Layer):
         """
         return window.fit_transform(x)
 
+    def scan_shape(self, window, x):
+        n, c, h, w = x.shape
+        nh = (h - window.win_y) / window.stride_y + 1
+        nw = (w - window.win_x) / window.stride_x + 1
+        return nh, nw
+
     def _init_estimator(self, est_arguments, wi, ei):
         """
         Initialize an estimator.
@@ -430,24 +436,15 @@ class MultiGrainScanLayer(Layer):
         x_test, y_test = self._check_input(x_test, y_test)
         self.LOGGER.debug('x_train size={}, dtype={}'.format(getmbof(x_train), x_train.dtype))
         self.LOGGER.debug(' x_test size={}, dtype={}'.format(getmbof(x_test), x_test.dtype))
-        # Construct test sets
-        x_wins_train = []
-        x_wins_test = []
-        for win in self.windows:
-            x_wins_train.append(self.scan(win, x_train))
-        for win in self.windows:
-            x_wins_test.append(self.scan(win, x_test))
-        self.LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
-        self.LOGGER.info('X_wins of  test: {}'.format([win.shape for win in x_wins_test]))
         x_win_est_train = []
         x_win_est_test = []
         ests = []
         est_offsets = [0, ]
         ei2wi = dict()
         nhs, nws = [None for _ in range(len(self.windows))], [None for _ in range(len(self.windows))]
-        y_win = [None for _ in range(len(self.windows))]
-        y_win_test = [None for _ in range(len(self.windows))]
-        test_sets = [None for _ in range(len(self.windows))]
+        # usually the size of x_test is smaller than x_train, use x_test here to save time
+        for wi, win in enumerate(self.windows):
+            nhs[wi], nws[wi] = self.scan_shape(win, x_test)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             if not isinstance(ests_for_win, (list, tuple)):
                 ests_for_win = [ests_for_win]
@@ -455,22 +452,13 @@ class MultiGrainScanLayer(Layer):
                 ests.append(est)
                 ei2wi[est_offsets[wi] + ei] = (wi, ei)
             est_offsets.append(est_offsets[-1] + len(ests_for_win))
-            _, nhs[wi], nws[wi], _ = x_wins_train[wi].shape
-            x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
-            x_wins_test[wi] = x_wins_test[wi].reshape((x_wins_test[wi].shape[0], -1, x_wins_test[wi].shape[-1]))
-            y_win[wi] = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
-            y_win_test[wi] = None if y_test is None else y_test[:, np.newaxis].repeat(x_wins_test[wi].shape[1], axis=1)
-            test_sets[wi] = [('testOfWin{}'.format(wi), x_wins_test[wi], y_win_test[wi])]
-            self.LOGGER.debug(
-                'x_wins_train[{}] size={}, dtype={}'.format(wi, getmbof(x_wins_train[wi]), x_wins_train[wi].dtype))
-            self.LOGGER.debug('y_win[{}] size={}, dtype={}'.format(wi, getmbof(y_win[wi]), y_win[wi].dtype))
         self.LOGGER.debug('est_offsets = {}'.format(est_offsets))
         self.LOGGER.debug('ei2wi = {}'.format(ei2wi))
         splitting = SplittingKFoldWrapper(dis_level=self.dis_level, estimators=ests, ei2wi=ei2wi,
-                                          num_workers=self.num_workers, seed=self.seed,
+                                          num_workers=self.num_workers, seed=self.seed, windows=self.windows,
                                           task=self.task, eval_metrics=self.eval_metrics,
                                           keep_in_mem=self.keep_in_mem, cv_seed=self.seed, dtype=self.dtype)
-        ests_output = splitting.fit_transform(x_wins_train, y_win, test_sets)
+        ests_output = splitting.fit_transform(x_train, y_train, x_test, y_test)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             win_est_train = []
             win_est_test = []
@@ -502,6 +490,14 @@ class MultiGrainScanLayer(Layer):
             x_win_est_train.append(win_est_train)
             x_win_est_test.append(win_est_test)
         if len(x_win_est_train) == 0:
+            x_wins_train = []
+            x_wins_test = []
+            for win in self.windows:
+                x_wins_train.append(self.scan(win, x_train))
+            for win in self.windows:
+                x_wins_test.append(self.scan(win, x_test))
+            self.LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
+            self.LOGGER.info('X_wins of  test: {}'.format([win.shape for win in x_wins_test]))
             return x_wins_train, x_wins_test
         self.LOGGER.info('x_win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
         self.LOGGER.info(' x_win_est_test.shape: {}'.format(list2str(x_win_est_test, 2)))
