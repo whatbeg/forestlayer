@@ -138,7 +138,7 @@ class RandomForestConfig(EstimatorConfig):
     Random Forest Argument.
     """
     def __init__(self, n_folds=3, n_estimators=500, max_depth=100, n_jobs=-1, max_features='sqrt',
-                 criterion="gini", min_samples_split=1, min_impurity_decrease=0.,
+                 criterion="gini", min_samples_split=2, min_impurity_decrease=0.,
                  min_samples_leaf=1, random_state=None):
         """
         Random Forest Arguments.
@@ -175,7 +175,7 @@ class ExtraRandomForestConfig(EstimatorConfig):
     Extremely Random Forest Argument.
     """
     def __init__(self, n_folds=3, n_estimators=500, max_depth=100, n_jobs=-1, max_features=1,
-                 criterion="gini", min_samples_split=1, min_impurity_decrease=0.,
+                 criterion="gini", min_samples_split=2, min_impurity_decrease=0.,
                  min_samples_leaf=1, random_state=None):
         """
         Completely Random Forest Arguments, also called Extremely Random Forest.
