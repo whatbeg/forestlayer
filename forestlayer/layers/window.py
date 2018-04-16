@@ -61,9 +61,9 @@ def get_windows(x, win_x, win_y, stride_x=1, stride_y=1, pad_x=0, pad_y=0):
     nh = (h - win_y) / stride_y + 1
     nw = (w - win_x) / stride_x + 1
     x_win = np.empty((nc, n * nh * nw), dtype=x.dtype)
-    LOGGER.info("get_windows_start: X.shape={}, X_win.shape={}, nw={}, nh={}, channel={},"
-                " win=({}x{}), stride=({}x{})".format(
-                 x.shape, x_win.shape, nw, nh, c, win_x, win_y, stride_x, stride_y))
+    # LOGGER.debug("get_windows_start: X.shape={}, X_win.shape={}, nw={}, nh={}, channel={},"
+    #              " win=({}x{}), stride=({}x{})".format(
+    #               x.shape, x_win.shape, nw, nh, c, win_x, win_y, stride_x, stride_y))
     Parallel(n_jobs=-1, backend="threading", verbose=0)(
             delayed(get_windows_channel)(x, x_win, des_id, nw, nh, win_x, win_y, stride_x, stride_y)
             for des_id in range(c * win_x * win_y))

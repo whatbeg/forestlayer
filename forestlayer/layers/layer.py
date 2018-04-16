@@ -258,7 +258,7 @@ class MultiGrainScanLayer(Layer):
         :return:
         """
         est_args = est_arguments.get_est_args()
-        est_name = 'win - {} - estimator - {} - {}folds'.format(wi, ei, est_args['n_folds'])
+        est_name = 'win-{}-estimator-{}-{}folds'.format(wi, ei, est_args['n_folds'])
         n_folds = int(est_args['n_folds'])
         est_args.pop('n_folds')
         est_type = est_args['est_type']
@@ -299,7 +299,7 @@ class MultiGrainScanLayer(Layer):
             self.LOGGER.info("Cache hit! Loading data from {}, skip fit!".format(train_path))
             return load_disk_cache(data_path=train_path)
         if self.distribute and self.dis_level >= 1:
-            return self._distributed_fit(x_train, y_train)
+            return self._dis_fit(x_train, y_train)
         x_wins_train = []
         for win in self.windows:
             x_wins_train.append(self.scan(win, x_train))
@@ -351,7 +351,7 @@ class MultiGrainScanLayer(Layer):
             self.LOGGER.info("Saving data x_win_est_train to {}".format(data_path))
         return x_win_est_train
 
-    def _distributed_fit(self, x_train, y_train):
+    def _dis_fit(self, x_train, y_train):
         """
         Fit.
 
@@ -422,7 +422,7 @@ class MultiGrainScanLayer(Layer):
             self.LOGGER.info("Saving data x_win_est_train to {}".format(data_path))
         return x_win_est_train
 
-    def _distribute_fit_transform(self,  x_train, y_train, x_test=None, y_test=None):
+    def _dis_fit_transform(self,  x_train, y_train, x_test=None, y_test=None):
         """
         Fit and transform.
 
@@ -539,7 +539,7 @@ class MultiGrainScanLayer(Layer):
             self.LOGGER.info("Cache hit! Loading test from {}, skip fit!".format(test_path))
             return load_disk_cache(train_path), load_disk_cache(test_path)
         if self.distribute and self.dis_level >= 1:
-            return self._distribute_fit_transform(x_train, y_train, x_test, y_test)
+            return self._dis_fit_transform(x_train, y_train, x_test, y_test)
         # Construct test sets
         x_wins_train = []
         x_wins_test = []
@@ -619,10 +619,6 @@ class MultiGrainScanLayer(Layer):
             save_disk_cache(test_path, x_win_est_test)
             self.LOGGER.info("Saving data x_win_est_train to {}".format(train_path))
             self.LOGGER.info("Saving data x_win_est_test to {}".format(test_path))
-        # xxx = x_win_est_train[0][0][:300].reshape(-1)
-        # for num in xxx[:300]:
-        #     print(num, end='')
-        # print()
         return x_win_est_train, x_win_est_test
 
     def transform(self, x_train):
@@ -1267,10 +1263,14 @@ class CascadeLayer(Layer):
             y_test_shape = (0,)
         else:
             y_test_shape = y_test.shape
-        self.LOGGER.info('X_train.shape={}, y_train.shape={}, dtype={}'.format(x_train.shape, y_train.shape,
-                                                                               x_train.dtype))
-        self.LOGGER.info(' X_test.shape={},  y_test.shape={}, dtype={}'.format(x_test.shape, y_test_shape,
-                                                                               x_test.dtype))
+        self.LOGGER.info('X_train.shape={}, size={}, y_train.shape={}, dtype={}'.format(x_train.shape,
+                                                                                        getmbof(x_train),
+                                                                                        y_train.shape,
+                                                                                        x_train.dtype))
+        self.LOGGER.info(' X_test.shape={}, size={},  y_test.shape={}, dtype={}'.format(x_test.shape,
+                                                                                        getmbof(x_test),
+                                                                                        y_test_shape,
+                                                                                        x_test.dtype))
         n_trains = x_train.shape[0]
         n_tests = x_test.shape[0]
         n_classes = self.n_classes  # if regression, n_classes = 1
@@ -1536,9 +1536,7 @@ class AutoGrowingCascadeLayer(Layer):
         self.verbose_dis = verbose_dis
         self.dis_level = dis_level
         if distribute is True:
-            if num_workers is None:
-                self.init_num_workers()
-            else:
+            if num_workers is not None:
                 self.num_workers = num_workers
         # properties
         self.layer_fit_cascades = []

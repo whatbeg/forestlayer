@@ -156,7 +156,7 @@ class KFoldWrapper(object):
                 y_proba = y_proba[:, np.newaxis]  # add one dimension
             if len(X.shape) == 3:
                 y_proba = y_proba.reshape((len(val_idx), -1, y_proba.shape[-1]))
-            self.log_eval_metrics(self.name, y[val_idx], y_proba, "train_{}".format(k))
+            self.log_metrics(self.name, y[val_idx], y_proba, "train_{}".format(k))
 
             # merging result
             if k == 0:
@@ -189,11 +189,11 @@ class KFoldWrapper(object):
             y_proba /= self.n_folds
 
         # log train average
-        self.log_eval_metrics(self.name, y, y_proba_train, "train_avg")
+        self.log_metrics(self.name, y, y_proba_train, "train_avg")
         # y_test can be None
         for vi, (test_name, X_test, y_test) in enumerate(test_sets):
             if y_test is not None:
-                self.log_eval_metrics(self.name, y_test, y_probas_test[vi], test_name)
+                self.log_metrics(self.name, y_test, y_probas_test[vi], test_name)
         return y_proba_train, y_probas_test
 
     def transform(self, x_tests):
@@ -223,7 +223,7 @@ class KFoldWrapper(object):
             proba_result /= self.n_folds
         return proba_result
 
-    def log_eval_metrics(self, est_name, y_true, y_proba, y_name):
+    def log_metrics(self, est_name, y_true, y_proba, y_name):
         """
         y_true (ndarray): n or n1 x n2
         y_proba (ndarray): n x n_classes or n1 x n2 x n_classes
@@ -334,7 +334,7 @@ class DistributedKFoldWrapper(object):
         est_class = est_class_from_type(self.task, self.est_type)
         return est_class(est_name, est_args)
 
-    def fit_transform_lazyscan(self, x_train, y_train, x_test, y_test, win):
+    def fit_transform_lazyscan(self, x_train, y_train, x_test, y_test, win, wi):
         x_wins_train = win.fit_transform(x_train)
         x_wins_test = win.fit_transform(x_test)
         # print('[lazy] X_wins of train: {}'.format(x_wins_train.shape))
@@ -344,7 +344,7 @@ class DistributedKFoldWrapper(object):
         y_win = y_train[:, np.newaxis].repeat(x_wins_train.shape[1], axis=1)
         y_stratify = y_win[:, 0]
         y_win_test = None if y_test is None else y_test[:, np.newaxis].repeat(x_wins_test.shape[1], axis=1)
-        test_sets = [('testOfWin{}x{}'.format(win.win_x, win.win_y), x_wins_test, y_win_test)]
+        test_sets = [('testOfWin{}'.format(wi), x_wins_test, y_win_test)]
         return self.fit_transform(x_wins_train, y_win, y_stratify, test_sets)
 
     def fit_transform(self, X, y, y_stratify=None, test_sets=None):
@@ -401,7 +401,7 @@ class DistributedKFoldWrapper(object):
                 y_proba = y_proba[:, np.newaxis]  # add one dimension
             if len(X.shape) == 3:
                 y_proba = y_proba.reshape((len(val_idx), -1, y_proba.shape[-1]))
-            self.log_eval_metrics(self.name, y[val_idx], y_proba, "train_{}".format(k))
+            self.log_metrics(self.name, y[val_idx], y_proba, "train_{}".format(k))
 
             # merging result
             if k == 0:
@@ -435,11 +435,11 @@ class DistributedKFoldWrapper(object):
             y_proba /= self.n_folds
 
         # log train average
-        self.log_eval_metrics(self.name, y, y_proba_train, "train_avg")
+        self.log_metrics(self.name, y, y_proba_train, "train_avg")
         # y_test can be None
         for vi, (test_name, X_test, y_test) in enumerate(test_sets):
             if y_test is not None:
-                self.log_eval_metrics(self.name, y_test, y_probas_test[vi], test_name)
+                self.log_metrics(self.name, y_test, y_probas_test[vi], test_name)
         return y_proba_train, y_probas_test, self.logs
 
     def transform(self, x_tests):
@@ -469,7 +469,7 @@ class DistributedKFoldWrapper(object):
             proba_result /= self.n_folds
         return proba_result
 
-    def log_eval_metrics(self, est_name, y_true, y_proba, y_name):
+    def log_metrics(self, est_name, y_true, y_proba, y_name):
         """
         Logging evaluation metrics.
 
@@ -590,7 +590,7 @@ class SplittingKFoldWrapper(object):
             for ei, est in enumerate(ests):
                 wi, wei = self.ei2wi[ei]
                 num_trees = est.get('n_estimators', 500)
-                est_name = 'win - {} - estimator - {} - {}folds'.format(wi, wei, est.get('n_folds', 3))
+                est_name = 'win-{}-estimator-{}-{}folds'.format(wi, wei, est.get('n_folds', 3))
                 split_ei = split_scheme[ei]
                 if split_ei[0] == -1:
                     gen_est = self._init_estimators(est.copy(), wi, wei, self.seed, self.cv_seed,
@@ -650,7 +650,7 @@ class SplittingKFoldWrapper(object):
         :return:
         """
         est_args = args.copy()
-        est_name = 'win - {} - estimator - {} - {}folds'.format(wi, ei, est_args['n_folds'])
+        est_name = 'win-{}-estimator-{}-{}folds'.format(wi, ei, est_args['n_folds'])
         n_folds = int(est_args['n_folds'])
         est_args.pop('n_folds')
         est_type = est_args['est_type']
@@ -730,7 +730,7 @@ class SplittingKFoldWrapper(object):
         # so with the y_proba_train, y_proba_tests, there is a log info list will be return.
         # so, ests_output is like (y_proba_train, y_proba_tests, logs)
         ests_output = [est.fit_transform_lazyscan.remote(x_train_id, y_train_id, x_test_id, y_test_id,
-                                                         self.windows[self.ei2wi[ei][0]])
+                                                         self.windows[self.ei2wi[ei][0]], self.ei2wi[ei][0])
                        for ei, est in enumerate(split_ests)]
         est_group = merge_group(split_group, split_ests_ratio, ests_output, self.dtype)
         est_group_result = ray.get(est_group)
@@ -910,23 +910,17 @@ class CascadeSplittingKFoldWrapper(object):
         split_ests, split_ests_ratio, split_group = self.splitting(self.estimators)
         self.LOGGER.debug('split_group = {}'.format(split_group))
         self.LOGGER.debug('split_ests_ratio = {}'.format(split_ests_ratio))
-        start_time = time.time()
         x_train_obj_id = ray.put(x_train)
         y_train_obj_id = ray.put(y_train)
         y_stratify_obj_id = ray.put(y_stratify)
         test_sets_obj_id = ray.put(test_sets)
-        self.LOGGER.info("put time: {}".format(time.time()-start_time))
-        start_time = time.time()
         # the base kfold_wrapper of SplittingKFoldWrapper must be DistributedKFoldWrapper,
         # so with the y_proba_train, y_proba_tests, there is a log info list will be return.
         # so, ests_output is like (y_proba_train, y_proba_tests, logs)
         ests_output = [est.fit_transform.remote(x_train_obj_id, y_train_obj_id, y_stratify_obj_id,
                                                 test_sets=test_sets_obj_id)
                        for est in split_ests]
-        self.LOGGER.info("remote fit_transform time: {}".format(time.time()-start_time))
-        start_time = time.time()
         est_group = merge_group(split_group, split_ests_ratio, ests_output, self.dtype)
-        self.LOGGER.info("merge_group_time: {}".format(time.time()-start_time))
         start_time = time.time()
         est_group_result = ray.get(est_group)
         self.LOGGER.info("ray.get(est_group) time: {}".format(time.time()-start_time))
@@ -970,12 +964,12 @@ def merge(tup_1, ratio1, tup_2, ratio2, dtype=np.float32):
         else:
             logs.append(t2)
     for key in mean_dict.keys():
-        mean_dict[key] = mean_dict[key]
+        # mean_dict[key] = mean_dict[key]
         key_split = key.split(',')
-        if "Approximate" in key_split[1]:
+        if "Approx" in key_split[1]:
             logs.append((key_split[0], key_split[1], mean_dict[key]))
         else:
-            logs.append((key_split[0], "Approximate " + key_split[1], mean_dict[key]))
+            logs.append((key_split[0], "Approx " + key_split[1], mean_dict[key]))
     logs.sort()
     return (tup_1[0] * ratio1 + tup_2[0] * ratio2).astype(dtype), tests, logs
 
