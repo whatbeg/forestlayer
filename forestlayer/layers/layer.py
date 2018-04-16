@@ -1325,6 +1325,7 @@ class CascadeLayer(Layer):
             check_shape(y_proba_train, n_trains, n_classes)
             if y_proba_test is not None:
                 check_shape(y_proba_test, n_tests, n_classes)
+                y_proba_test = check_dtype(y_proba_test, self.dtype)
             x_proba_train[:, ei*n_classes:ei*n_classes + n_classes] = y_proba_train
             x_proba_test[:, ei*n_classes:ei*n_classes + n_classes] = y_proba_test
             eval_proba_train += y_proba_train
@@ -2324,6 +2325,12 @@ def check_shape(y_proba, n, n_classes):
     if y_proba.shape != (n, n_classes):
         raise ValueError('output shape incorrect!,'
                          ' should be {}, but {}'.format((n, n_classes), y_proba.shape))
+
+
+def check_dtype(y_proba, dtype):
+    if y_proba.dtype != dtype:
+        y_proba = y_proba.astype(dtype)
+    return y_proba
 
 
 def _concat(x, depth):
