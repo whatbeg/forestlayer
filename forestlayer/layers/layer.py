@@ -510,10 +510,6 @@ class MultiGrainScanLayer(Layer):
             save_disk_cache(test_path, x_win_est_test)
             self.LOGGER.info("[dis] Saving data x_win_est_train to {}".format(train_path))
             self.LOGGER.info("[dis] Saving data x_win_est_test to {}".format(test_path))
-        # xxx = x_win_est_train[0][0][:300].reshape(-1)
-        # for num in xxx[:300]:
-        #     print(num, end='')
-        # print()
         return x_win_est_train, x_win_est_test
 
     def fit_transform(self, x_train, y_train, x_test=None, y_test=None):
@@ -594,6 +590,8 @@ class MultiGrainScanLayer(Layer):
                 y_probas_test = y_proba_tup[1]
                 y_probas_test = y_probas_test[0]
                 y_probas_test = y_probas_test.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                # This may cause precision issue that is inconsistency of dis and sm
+                y_probas_test = check_dtype(y_probas_test, self.dtype)
                 if len(y_proba_tup) == 3 and self.verbose_dis:
                     for log in y_proba_tup[2]:
                         if log[0] == 'INFO':

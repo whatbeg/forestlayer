@@ -143,15 +143,15 @@ class Pooling(object):
         else:
             self.name = "{}pool/".format(pool_strategy) + "{}x{}".format(win_x, win_y)
 
-    def fit_transform(self, X):
+    def fit_transform(self, x):
         """
-        Fit transform the input X.
+        Fit transform the input x.
 
-        :param X:
+        :param x:
         :return:
         """
         LOGGER.info("Multi-grain Scan pooling [{}] is running...".format(self.name))
-        return self._transform(X)
+        return self._transform(x)
 
     def _transform(self, x):
         """
@@ -165,7 +165,7 @@ class Pooling(object):
         n, c, h, w = x.shape
         nh = (h - 1) / self.win_x + 1
         nw = (w - 1) / self.win_y + 1
-        x_pool = np.empty((n, c, nh, nw), dtype=np.float32)
+        x_pool = np.empty((n, c, nh, nw), dtype=x.dtype)
         for k in range(c):
             for di in range(nh):
                 for dj in range(nw):
