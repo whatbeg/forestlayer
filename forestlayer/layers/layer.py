@@ -473,6 +473,8 @@ class MultiGrainScanLayer(Layer):
                 assert len(y_probas_test) == 1, 'assume there is only one test set!'
                 y_probas_test = y_probas_test[0]
                 y_probas_test = y_probas_test.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                # Lack of this line may cause precision issue that is inconsistency of dis and sm
+                y_probas_test = check_dtype(y_probas_test, self.dtype)
                 win_est_train.append(y_proba_train)
                 win_est_test.append(y_probas_test)
                 if len(y_proba_tup) == 3 and self.verbose_dis:
@@ -590,7 +592,7 @@ class MultiGrainScanLayer(Layer):
                 y_probas_test = y_proba_tup[1]
                 y_probas_test = y_probas_test[0]
                 y_probas_test = y_probas_test.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
-                # This may cause precision issue that is inconsistency of dis and sm
+                # Lack of this line may cause precision issue that is inconsistency of dis and sm
                 y_probas_test = check_dtype(y_probas_test, self.dtype)
                 if len(y_proba_tup) == 3 and self.verbose_dis:
                     for log in y_proba_tup[2]:
@@ -1755,8 +1757,9 @@ class AutoGrowingCascadeLayer(Layer):
         assert n_groups_train == n_groups_test, 'n_group_train must equal to n_group_test!,' \
                                                 ' but {} and {}'.format(n_groups_train, n_groups_test)
         # Initialize the groups
-        x_train_group = np.zeros((n_trains, 0), dtype=x_trains[0].dtype)
-        x_test_group = np.zeros((n_tests, 0), dtype=x_tests[0].dtype)
+        # 2018-04-17 change x_trains[0].dtype to self.dtype
+        x_train_group = np.zeros((n_trains, 0), dtype=self.dtype)
+        x_test_group = np.zeros((n_tests, 0), dtype=self.dtype)
         group_starts, group_ends, group_dims = [], [], []
         # train set
         for i, x_train in enumerate(x_trains):
@@ -1868,6 +1871,8 @@ class AutoGrowingCascadeLayer(Layer):
                     self.save_data(layer_id, False, *opt_data)
                 time_cost = time.time() - start_time
                 self.LOGGER.info("Layer {} time cost: {}".format(layer_id, time_cost))
+                # print("x_proba_test.shape = {}, dtype={}".format(x_proba_test.shape, x_proba_test.dtype))
+                # np.savetxt("layer-{}data.txt".format(layer_id), x_proba_test)
                 layer_id += 1
             # Max Layer Reached
             # opt_data = [x_cur_train, y_train, x_cur_test, y_test]
