@@ -335,6 +335,8 @@ class MultiGrainScanLayer(Layer):
                             self.LOGGER.info("{}".format(log[1].format(log[2])))
                         elif log[0] == 'WARN':
                             self.LOGGER.warn("{}".format(log))
+                        else:
+                            self.LOGGER.info(str(log))
                 win_est_train.append(y_proba_train)
             if self.keep_in_mem:
                 self.est_for_windows[wi] = ests_for_win
@@ -404,6 +406,8 @@ class MultiGrainScanLayer(Layer):
                             self.LOGGER.info("{}".format(log[1].format(log[2])))
                         elif log[0] == 'WARN':
                             self.LOGGER.warn("{}".format(log))
+                        else:
+                            self.LOGGER.info(str(log))
 
             if self.keep_in_mem:
                 self.est_for_windows[wi] = ests_for_win
@@ -483,6 +487,8 @@ class MultiGrainScanLayer(Layer):
                             self.LOGGER.info("{}".format(log[1].format(log[2])))
                         elif log[0] == 'WARN':
                             self.LOGGER.warn("{}".format(log))
+                        else:
+                            self.LOGGER.info(str(log))
 
             # TODO: improving keep estimators.
             if self.keep_in_mem:
@@ -600,6 +606,8 @@ class MultiGrainScanLayer(Layer):
                             self.LOGGER.info("{}".format(log[1].format(log[2])))
                         elif log[0] == 'WARN':
                             self.LOGGER.warn("{}".format(log))
+                        else:
+                            self.LOGGER.info(str(log))
                 win_est_train.append(y_proba_train)
                 win_est_test.append(y_probas_test)
             if self.keep_in_mem:
