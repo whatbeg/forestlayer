@@ -1231,6 +1231,8 @@ class CascadeLayer(Layer):
                         self.LOGGER.info("{}".format(log[1].format(log[2])))
                     elif log[0] == 'WARN':
                         self.LOGGER.warn("{}".format(log))
+                    else:
+                        self.LOGGER.info(str(log))
 
             if y_proba_train is None:
                 raise RuntimeError("layer - {} - estimator - {} fit FAILED!,"
@@ -1323,6 +1325,8 @@ class CascadeLayer(Layer):
                         self.LOGGER.info("{}".format(log[1].format(log[2])))
                     elif log[0] == 'WARN':
                         self.LOGGER.warn("{}".format(log))
+                    else:
+                        self.LOGGER.info(str(log))
 
             # if only one element on test_sets, return one test result like y_proba_train
             if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
