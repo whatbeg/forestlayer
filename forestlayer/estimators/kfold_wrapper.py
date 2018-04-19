@@ -10,6 +10,8 @@ import numpy as np
 import ray
 import copy
 import time
+import redis
+import forestlayer as fl
 try:
     import cPickle as pickle
 except ImportError:
@@ -18,9 +20,11 @@ from sklearn.model_selection import KFold, StratifiedKFold
 from .sklearn_estimator import *
 from .estimator_configs import EstimatorConfig
 from ..utils.log_utils import get_logger
-from ..utils.storage_utils import name2path
+from ..utils.storage_utils import name2path, getmbof
 from ..utils.metrics import Accuracy, MSE
+from ..backend.common import add_fit_time, add_kfold_time
 from collections import defaultdict
+import heapq
 import math
 MAX_RAND_SEED = np.iinfo(np.int32).max
 str2est_class = {
@@ -140,6 +144,7 @@ class KFoldWrapper(object):
         y_probas_test = []
         self.n_dims = X.shape[-1]
         inverse = False
+        fold_start_time = time.time()
         for k in range(self.n_folds):
             est = self._init_estimator(k)
             if not inverse:
@@ -147,11 +152,15 @@ class KFoldWrapper(object):
             else:
                 val_idx, train_idx = cv[k]
             # fit on k-fold train
+            start_time = time.time()
             est.fit(X[train_idx].reshape((-1, self.n_dims)), y[train_idx].reshape(-1), cache_dir=self.cache_dir)
-
+            print("fold {} fit time: {}".format(k, time.time()-start_time))
+            add_fit_time(time.time() - start_time)
+            start_time = time.time()
             # predict on k-fold validation, this y_proba.dtype is float64
             y_proba = est.predict_proba(X[val_idx].reshape((-1, self.n_dims)),
                                         cache_dir=self.cache_dir)
+            print("fold {} predict_proba time: {}".format(k, time.time() - start_time))
             if not est.is_classification:
                 y_proba = y_proba[:, np.newaxis]  # add one dimension
             if len(X.shape) == 3:
@@ -194,6 +203,8 @@ class KFoldWrapper(object):
         for vi, (test_name, X_test, y_test) in enumerate(test_sets):
             if y_test is not None:
                 self.log_metrics(self.name, y_test, y_probas_test[vi], test_name)
+        print("k fold time: {}".format(time.time() - fold_start_time))
+        add_kfold_time(time.time() - fold_start_time)
         return y_proba_train, y_probas_test
 
     def transform(self, x_tests):
@@ -334,11 +345,44 @@ class DistributedKFoldWrapper(object):
         est_class = est_class_from_type(self.task, self.est_type)
         return est_class(est_name, est_args)
 
-    def fit_transform_lazyscan(self, x_train, y_train, x_test, y_test, win, wi):
-        x_wins_train = win.fit_transform(x_train)
-        x_wins_test = win.fit_transform(x_test)
-        # print('[lazy] X_wins of train: {}'.format(x_wins_train.shape))
-        # print('[lazy] X_wins of  test: {}'.format(x_wins_test.shape))
+    def query(self, x_train, x_test, win, wi, redis_addr):
+        """
+        Query redis server to keep only one copy for every window scan in single machine.
+
+        :param x_train:
+        :param x_test:
+        :param win:
+        :param wi:
+        :param redis_addr:
+        :return:
+        """
+        local_ip = ray.services.get_node_ip_address()
+        rhost, rport = redis_addr.split(':')[:2]
+        redis_client = redis.StrictRedis(host=rhost, port=int(rport))
+        key_train = local_ip + ",{}train".format(wi)
+        query_train = redis_client.get(key_train)
+        if query_train is not None:
+            x_wins_train = ray.local_scheduler.ObjectID(query_train)
+            self.logs.append("Bingo! we get off-the-shelf x_wins_train!")
+        else:
+            x_wins_train = win.fit_transform(x_train)
+            self.logs.append("GENERATE x_wins_train={}".format(getmbof(x_wins_train)))
+            x_wins_train = ray.put(x_wins_train)
+            redis_client.set(key_train, x_wins_train.id())
+        key_test = local_ip + ",{}test".format(wi)
+        query_test = redis_client.get(key_test)
+        if query_test is not None:
+            x_wins_test = ray.local_scheduler.ObjectID(query_test)
+            self.logs.append("Bingo! we get off-the-shelf x_wins_test!")
+        else:
+            x_wins_test = win.fit_transform(x_test)
+            self.logs.append("GENERATE x_wins_test={}".format(getmbof(x_wins_test)))
+            x_wins_test = ray.put(x_wins_test)
+            redis_client.set(key_test, x_wins_test.id())
+        return x_wins_train, x_wins_test
+
+    def fit_transform_lazyscan(self, x_train, y_train, x_test, y_test, win, wi, redis_addr):
+        x_wins_train, x_wins_test = self.query(x_train, x_test, win, wi, redis_addr)
         x_wins_train = x_wins_train.reshape((x_wins_train.shape[0], -1, x_wins_train.shape[-1]))
         x_wins_test = x_wins_test.reshape((x_wins_test.shape[0], -1, x_wins_test.shape[-1]))
         y_win = y_train[:, np.newaxis].repeat(x_wins_train.shape[1], axis=1)
@@ -363,6 +407,7 @@ class DistributedKFoldWrapper(object):
                    y_test could be None, otherwise use eval_metrics for debugging
         :return:
         """
+        self.logs.append("{} Running on {}".format(self.name, ray.services.get_node_ip_address()))
         if self.keep_in_mem is None:
             self.keep_in_mem = False
         assert 2 <= len(X.shape) <= 3, "X.shape should be n x k or n x n2 x k"
@@ -705,6 +750,44 @@ class SplittingKFoldWrapper(object):
         return est_group_result
 
     def fit_transform(self, x_train, y_train, x_test, y_test):
+        x_wins_train = [None for _ in range(len(self.windows))]
+        x_wins_test = [None for _ in range(len(self.windows))]
+        nhs, nws = [None for _ in range(len(self.windows))], [None for _ in range(len(self.windows))]
+        y_win = [None for _ in range(len(self.windows))]
+        y_win_test = [None for _ in range(len(self.windows))]
+        test_sets = [None for _ in range(len(self.windows))]
+        for wi, win in enumerate(self.windows):
+            x_wins_train[wi] = win.fit_transform(x_train)
+            x_wins_test[wi] = win.fit_transform(x_test)
+            _, nhs[wi], nws[wi], _ = x_wins_train[wi].shape
+            x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
+            x_wins_test[wi] = x_wins_test[wi].reshape((x_wins_test[wi].shape[0], -1, x_wins_test[wi].shape[-1]))
+            y_win[wi] = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
+            y_win_test[wi] = None if y_test is None else y_test[:, np.newaxis].repeat(x_wins_test[wi].shape[1], axis=1)
+            test_sets[wi] = [('testOfWin{}'.format(wi), x_wins_test[wi], y_win_test[wi])]
+            self.LOGGER.debug(
+                'x_wins_train[{}] size={}, dtype={}'.format(wi, getmbof(x_wins_train[wi]), x_wins_train[wi].dtype))
+            self.LOGGER.debug('y_win[{}] size={}, dtype={}'.format(wi, getmbof(y_win[wi]), y_win[wi].dtype))
+            self.LOGGER.debug(
+                'x_wins_train[{}] size={}, dtype={}'.format(wi, getmbof(x_wins_train[wi]), x_wins_train[wi].dtype))
+            self.LOGGER.debug('y_win[{}] size={}, dtype={}'.format(wi, getmbof(y_win[wi]), y_win[wi].dtype))
+        split_ests, split_ests_ratio, split_group = self.splitting(self.estimators)
+        self.LOGGER.debug('split_group = {}'.format(split_group))
+        self.LOGGER.debug('split_ests_ratio = {}'.format(split_ests_ratio))
+        self.LOGGER.debug('new ei2wi = {}'.format(self.ei2wi))
+        x_wins_train_obj_ids = [ray.put(x_wins_train[wi]) for wi in range(len(x_wins_train))]
+        y_win_obj_ids = [ray.put(y_win[wi]) for wi in range(len(y_win))]
+        y_stratify = [ray.put(y_win[wi][:, 0]) for wi in range(len(y_win))]
+        test_sets_obj_ids = [ray.put(test_sets[wi]) for wi in range(len(test_sets))]
+        ests_output = [est.fit_transform.remote(x_wins_train_obj_ids[self.ei2wi[ei][0]],
+                                                y_win_obj_ids[self.ei2wi[ei][0]], y_stratify[self.ei2wi[ei][0]],
+                                                test_sets=test_sets_obj_ids[self.ei2wi[ei][0]])
+                       for ei, est in enumerate(split_ests)]
+        est_group = merge_group(split_group, split_ests_ratio, ests_output, self.dtype)
+        est_group_result = ray.get(est_group)
+        return est_group_result
+
+    def fit_transform_lazyscan(self, x_train, y_train, x_test, y_test):
         """
         Fit and transform. This method do splitting fit and collect/merge results of distributed forests.
 
@@ -730,7 +813,8 @@ class SplittingKFoldWrapper(object):
         # so with the y_proba_train, y_proba_tests, there is a log info list will be return.
         # so, ests_output is like (y_proba_train, y_proba_tests, logs)
         ests_output = [est.fit_transform_lazyscan.remote(x_train_id, y_train_id, x_test_id, y_test_id,
-                                                         self.windows[self.ei2wi[ei][0]], self.ei2wi[ei][0])
+                                                         self.windows[self.ei2wi[ei][0]], self.ei2wi[ei][0],
+                                                         fl.get_redis_address())
                        for ei, est in enumerate(split_ests)]
         est_group = merge_group(split_group, split_ests_ratio, ests_output, self.dtype)
         est_group_result = ray.get(est_group)
@@ -1078,20 +1162,18 @@ def get_dist_estimator_kfold(name, n_folds=3, task='classification', est_type='F
 
 
 def determine_split(dis_level, num_workers, ests):
-    forest_ests_idx = [i for i, est in enumerate(ests) if est.get('est_type') in ['FLRF', 'FLCRF']]
-    num_forest_estimators = len(forest_ests_idx)
+    """
+    Greedy split finding algorithm and bin-Split and non-Split.
+
+    :param dis_level: 0, 2, 3
+    :param num_workers: the number of workers
+    :param ests: estimators, each with some trees
+    :return: should_split(True or False), split_scheme
+    """
     if dis_level == 0:
         return False, []
     if dis_level == 1:
-        if 2 * num_workers >= num_forest_estimators:
-            splits = []
-            for i, est in enumerate(ests):
-                num_trees = est.get('n_estimators', 500)
-                if est.get('est_type') in ['FLRF', 'FLCRF']:
-                    splits.append([num_trees / 2, num_trees - num_trees / 2])
-                else:
-                    splits.append([-1])
-            return True, splits
+        raise NotImplementedError("Not supported dis_level=1 now")
     if dis_level == 2:
         splits = []
         for i, est in enumerate(ests):
@@ -1102,7 +1184,9 @@ def determine_split(dis_level, num_workers, ests):
                 splits.append([-1])
         return True, splits
     if dis_level == 3:
-        num_trees = map(lambda x: x.get('n_estimators', 500), ests)
+        forest_ests = [est for est in ests if est.get('est_type') in ['FLRF', 'FLCRF']]
+        non_forest_estimators = len(ests) - len(forest_ests)
+        num_trees = map(lambda x: x.get('n_estimators', 500), forest_ests)
         tree_sum = sum(num_trees)
         if tree_sum <= 0:
             return False, []
@@ -1110,9 +1194,11 @@ def determine_split(dis_level, num_workers, ests):
         # But when input data are large, one node may not be able to handle the concurrent training of two forests.
         # So this parameter should be considered later.
         # TODO: Consider when one node can handle two tasks.
-        avg_trees = int(math.ceil(tree_sum / float(num_workers * 2)))
+        denom = max(1, num_workers * 2 - non_forest_estimators)
+        avg_trees = int(math.ceil(tree_sum / float(denom)))
         splits = []
         should_split = False
+        forest_idx_tuples = []
         for i, est in enumerate(ests):
             split_i = []
             if est.get('est_type') not in ['FLRF', 'FLCRF']:
@@ -1123,11 +1209,14 @@ def determine_split(dis_level, num_workers, ests):
                 should_split = True
             while num_trees[i] > avg_trees:
                 split_i.append(avg_trees)
+                forest_idx_tuples.append((avg_trees, i))
                 num_trees[i] -= avg_trees
             if num_trees[i] > 0:
                 split_i.append(num_trees[i])
+                forest_idx_tuples.append((num_trees[i], i))
             splits.append(split_i)
-        return should_split, splits
+        make_span_should_split, splits = greedy_makespan_split(splits, avg_trees, denom, forest_idx_tuples)
+        return should_split or make_span_should_split, splits
     return False, None
 
 
@@ -1153,3 +1242,68 @@ def merge_group(split_group, split_ests_ratio, ests_output, self_dtype):
         else:
             est_group.append(group[0])
     return est_group
+
+
+def find_first_can_put_entirely(lis, start, x, capacity):
+    for i in range(start, len(lis)):
+        if lis[i] + x <= capacity:
+            return i
+    return -1
+
+
+def greedy_makespan_split(splits, avg, num_workers, forest_idx_tuples):
+    after_tuples = []
+    heap = []
+    should_split = False
+    for tup in forest_idx_tuples:
+        heapq.heappush(heap, (-tup[0], tup[1]))
+    num_tasks = len(forest_idx_tuples)
+    fill_in = [0 for _ in range(num_workers)]
+    first_unfilled = -1
+    for i in range(num_workers):
+        top = heapq.heappop(heap)
+        # print(top)
+        fill_in[i] += -top[0]
+        after_tuples.append((-top[0], top[1]))
+        if fill_in[i] < avg and first_unfilled == -1:
+            first_unfilled = i
+    for i in range(num_workers, num_tasks):
+        if first_unfilled >= len(fill_in):
+            print("Index out")
+            break
+        # for task i
+        if not heap:
+            print("Heap empty")
+            break
+        top = heapq.heappop(heap)
+        # print(top)
+        can_put_idx = find_first_can_put_entirely(fill_in, first_unfilled, -top[0], avg)
+        tag = 0
+        if can_put_idx == -1:
+            can_put_idx = first_unfilled
+            tag = 1
+        if fill_in[can_put_idx] + -top[0] >= avg:
+            if (-top[0] - avg + fill_in[can_put_idx]) > 0:
+                heapq.heappush(heap, (-(-top[0] - avg + fill_in[can_put_idx]), top[1]))
+                should_split = True
+            after_tuples.append((avg - fill_in[can_put_idx], top[1]))
+            fill_in[can_put_idx] = avg
+            can_put_idx += 1
+            first_unfilled += tag
+        else:
+            fill_in[can_put_idx] += -top[0]
+            after_tuples.append((-top[0], top[1]))
+    while heap:
+        top = heapq.heappop(heap)
+        after_tuples.append((-top[0], top[1]))
+    new_splits = [[] for _ in range(len(splits))]
+    for i in range(len(new_splits)):
+        if splits[i][0] == -1:
+            new_splits[i].append(-1)
+    for tup in after_tuples:
+        num_forest = tup[0]
+        idx = tup[1]
+        new_splits[idx].append(num_forest)
+    return should_split, new_splits
+
+
