@@ -17,6 +17,7 @@ try:
 except ImportError:
     import pickle
 import ray
+import forestlayer as fl
 from ..utils.log_utils import get_logger, list2str
 from ..utils.layer_utils import check_list_depth
 from ..utils.storage_utils import check_dir, getmbof, output_disk_path, load_disk_cache, save_disk_cache
@@ -173,7 +174,7 @@ class MultiGrainScanLayer(Layer):
     def __init__(self, batch_size=None, dtype=np.float32, name=None, task='classification',
                  windows=None, est_for_windows=None, n_class=None, keep_in_mem=False,
                  cache_in_disk=False, data_save_dir=None, eval_metrics=None, seed=None,
-                 distribute=False, dis_level=1, verbose_dis=True, num_workers=None):
+                 distribute=False, dis_level=1, verbose_dis=True, num_workers=None, lazyscan=True):
         """
         Initialize a multi-grain scan layer.
 
@@ -195,6 +196,7 @@ class MultiGrainScanLayer(Layer):
                             cluster resources, so the parallelization may be larger than len(self.est_configs).
                            2 means that anyway we must split forests.
                            Now 2 is the HIGHEST_DISLEVEL, default is 1.
+        :param lazyscan: if open lazyscan, default is True
         """
         if not name:
             prefix = 'multi_grain_scan'
@@ -225,6 +227,10 @@ class MultiGrainScanLayer(Layer):
         self.cache_in_disk = cache_in_disk
         self.data_save_dir = data_save_dir
         self.eval_metrics = eval_metrics
+        self.lazy_scan = lazyscan
+        if fl.get_redis_address() is None or fl.get_redis_address().split(':')[0] == "127.0.0.1":
+            self.LOGGER.warn("In standalone mode, it's unnecessary to enable lazyscan, we close it!")
+            self.lazy_scan = False
 
     def call(self, x_train, **kwargs):
         pass
@@ -462,7 +468,10 @@ class MultiGrainScanLayer(Layer):
                                           num_workers=self.num_workers, seed=self.seed, windows=self.windows,
                                           task=self.task, eval_metrics=self.eval_metrics,
                                           keep_in_mem=self.keep_in_mem, cv_seed=self.seed, dtype=self.dtype)
-        ests_output = splitting.fit_transform(x_train, y_train, x_test, y_test)
+        if self.lazy_scan:
+            ests_output = splitting.fit_transform_lazyscan(x_train, y_train, x_test, y_test)
+        else:
+            ests_output = splitting.fit_transform(x_train, y_train, x_test, y_test)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             win_est_train = []
             win_est_test = []
