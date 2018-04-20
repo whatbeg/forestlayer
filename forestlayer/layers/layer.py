@@ -18,6 +18,7 @@ except ImportError:
     import pickle
 import ray
 import forestlayer as fl
+from collections import defaultdict
 from ..utils.log_utils import get_logger, list2str
 from ..utils.layer_utils import check_list_depth
 from ..utils.storage_utils import check_dir, getmbof, output_disk_path, load_disk_cache, save_disk_cache
@@ -472,6 +473,7 @@ class MultiGrainScanLayer(Layer):
             ests_output = splitting.fit_transform_lazyscan(x_train, y_train, x_test, y_test)
         else:
             ests_output = splitting.fit_transform(x_train, y_train, x_test, y_test)
+        machines = defaultdict(int)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             win_est_train = []
             win_est_test = []
@@ -498,6 +500,8 @@ class MultiGrainScanLayer(Layer):
                             self.LOGGER.warn("{}".format(log))
                         else:
                             self.LOGGER.info(str(log))
+                            if str(log).count('Running on'):
+                                machines[log.split(' ')[3]] += 1
 
             # TODO: improving keep estimators.
             if self.keep_in_mem:
@@ -527,6 +531,9 @@ class MultiGrainScanLayer(Layer):
             save_disk_cache(test_path, x_win_est_test)
             self.LOGGER.info("[dis] Saving data x_win_est_train to {}".format(train_path))
             self.LOGGER.info("[dis] Saving data x_win_est_test to {}".format(test_path))
+        total_task = sum([v for v in machines.values()])
+        for key in machines.keys():
+            self.LOGGER.info('Machine {} was assigned {} / {}'.format(key, machines[key], total_task))
         return x_win_est_train, x_win_est_test
 
     def fit_transform(self, x_train, y_train, x_test=None, y_test=None):

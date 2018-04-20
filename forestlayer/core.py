@@ -13,10 +13,12 @@ REDIS_ADDRESS = "127.0.0.1:6379"
 
 
 def get_redis_address():
+    global REDIS_ADDRESS
     return REDIS_ADDRESS
 
 
 def set_redis_address(redis_address):
+    global REDIS_ADDRESS
     REDIS_ADDRESS = redis_address
 
 
