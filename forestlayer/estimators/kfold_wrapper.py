@@ -154,13 +154,11 @@ class KFoldWrapper(object):
             # fit on k-fold train
             start_time = time.time()
             est.fit(X[train_idx].reshape((-1, self.n_dims)), y[train_idx].reshape(-1), cache_dir=self.cache_dir)
-            print("fold {} fit time: {}".format(k, time.time()-start_time))
+            # print("fold {} fit time: {}".format(k, time.time()-start_time))
             add_fit_time(time.time() - start_time)
-            start_time = time.time()
             # predict on k-fold validation, this y_proba.dtype is float64
             y_proba = est.predict_proba(X[val_idx].reshape((-1, self.n_dims)),
                                         cache_dir=self.cache_dir)
-            print("fold {} predict_proba time: {}".format(k, time.time() - start_time))
             if not est.is_classification:
                 y_proba = y_proba[:, np.newaxis]  # add one dimension
             if len(X.shape) == 3:
@@ -362,23 +360,23 @@ class DistributedKFoldWrapper(object):
         key_train = local_ip + ",{}train".format(wi)
         query_train = redis_client.get(key_train)
         if query_train is not None:
-            x_wins_train = ray.local_scheduler.ObjectID(query_train)
+            x_wins_train = ray.get(ray.local_scheduler.ObjectID(query_train))
             self.logs.append("Bingo! we get off-the-shelf x_wins_train!")
         else:
             x_wins_train = win.fit_transform(x_train)
             self.logs.append("GENERATE x_wins_train={}".format(getmbof(x_wins_train)))
-            x_wins_train = ray.put(x_wins_train)
-            redis_client.set(key_train, x_wins_train.id())
+            x_wins_train_id = ray.put(x_wins_train)
+            redis_client.set(key_train, x_wins_train_id.id())
         key_test = local_ip + ",{}test".format(wi)
         query_test = redis_client.get(key_test)
         if query_test is not None:
-            x_wins_test = ray.local_scheduler.ObjectID(query_test)
+            x_wins_test = ray.get(ray.local_scheduler.ObjectID(query_test))
             self.logs.append("Bingo! we get off-the-shelf x_wins_test!")
         else:
             x_wins_test = win.fit_transform(x_test)
             self.logs.append("GENERATE x_wins_test={}".format(getmbof(x_wins_test)))
-            x_wins_test = ray.put(x_wins_test)
-            redis_client.set(key_test, x_wins_test.id())
+            x_wins_test_id = ray.put(x_wins_test)
+            redis_client.set(key_test, x_wins_test_id.id())
         return x_wins_train, x_wins_test
 
     def fit_transform_lazyscan(self, x_train, y_train, x_test, y_test, win, wi, redis_addr):
@@ -431,15 +429,17 @@ class DistributedKFoldWrapper(object):
         y_probas_test = []
         self.n_dims = X.shape[-1]
         inverse = False
+        fold_start_time = time.time()
         for k in range(self.n_folds):
             est = self._init_estimator(k)
             if not inverse:
                 train_idx, val_idx = cv[k]
             else:
                 val_idx, train_idx = cv[k]
+            start_time = time.time()
             # fit on k-fold train
             est.fit(X[train_idx].reshape((-1, self.n_dims)), y[train_idx].reshape(-1), cache_dir=self.cache_dir)
-
+            add_fit_time(time.time() - start_time)
             # predict on k-fold validation
             y_proba = est.predict_proba(X[val_idx].reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
             if not est.is_classification:
@@ -485,6 +485,8 @@ class DistributedKFoldWrapper(object):
         for vi, (test_name, X_test, y_test) in enumerate(test_sets):
             if y_test is not None:
                 self.log_metrics(self.name, y_test, y_probas_test[vi], test_name)
+        add_kfold_time(time.time() - fold_start_time)
+        self.logs.append("{} fit time total: {}".format(ray.services.get_node_ip_address(), add_kfold_time(0)))
         return y_proba_train, y_probas_test, self.logs
 
     def transform(self, x_tests):
