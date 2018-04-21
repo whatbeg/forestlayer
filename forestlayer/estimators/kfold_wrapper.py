@@ -361,20 +361,20 @@ class DistributedKFoldWrapper(object):
         query_train = redis_client.get(key_train)
         if query_train is not None:
             x_wins_train = ray.get(ray.local_scheduler.ObjectID(query_train))
-            self.logs.append("Bingo! we get off-the-shelf x_wins_train!")
+            self.logs.append("Bingo! we get off-the-shelf x_wins_train! in {} for {}".format(local_ip, wi))
         else:
             x_wins_train = win.fit_transform(x_train)
-            self.logs.append("GENERATE x_wins_train={}".format(getmbof(x_wins_train)))
+            self.logs.append("GENERATE x_wins_train={} in {} for {}".format(getmbof(x_wins_train), local_ip, wi))
             x_wins_train_id = ray.put(x_wins_train)
             redis_client.set(key_train, x_wins_train_id.id())
         key_test = local_ip + ",{}test".format(wi)
         query_test = redis_client.get(key_test)
         if query_test is not None:
             x_wins_test = ray.get(ray.local_scheduler.ObjectID(query_test))
-            self.logs.append("Bingo! we get off-the-shelf x_wins_test!")
+            self.logs.append("Bingo! we get off-the-shelf x_wins_test! in {} for {}".format(local_ip, wi))
         else:
             x_wins_test = win.fit_transform(x_test)
-            self.logs.append("GENERATE x_wins_test={}".format(getmbof(x_wins_test)))
+            self.logs.append("GENERATE x_wins_test={} in {} for {}".format(getmbof(x_wins_test), local_ip, wi))
             x_wins_test_id = ray.put(x_wins_test)
             redis_client.set(key_test, x_wins_test_id.id())
         return x_wins_train, x_wins_test
@@ -405,7 +405,8 @@ class DistributedKFoldWrapper(object):
                    y_test could be None, otherwise use eval_metrics for debugging
         :return:
         """
-        self.logs.append("{} Running on {}".format(self.name, ray.services.get_node_ip_address()))
+        self.logs.append("{}:{} Running on {}".format(self.name, self.est_args.get('n_estimators', -1),
+                                                      ray.services.get_node_ip_address()))
         if self.keep_in_mem is None:
             self.keep_in_mem = False
         assert 2 <= len(X.shape) <= 3, "X.shape should be n x k or n x n2 x k"
@@ -889,8 +890,8 @@ class CascadeSplittingKFoldWrapper(object):
             i = 0
             for ei, est in enumerate(ests):
                 num_trees = est.get('n_estimators', 500)
-                est_name = 'layer - {} - estimator - {} - {}folds'.format(self.layer_id, ei,
-                                                                          est.get('n_folds', 3))
+                est_name = 'layer-{}-estimator-{}-{}folds'.format(self.layer_id, ei,
+                                                                  est.get('n_folds', 3))
                 split_ei = split_scheme[ei]
                 if split_ei[0] == -1:
                     gen_est = self._init_estimators(est.copy(), self.layer_id, ei, self.seed, self.cv_seed,

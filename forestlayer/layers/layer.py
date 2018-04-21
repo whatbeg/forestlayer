@@ -474,6 +474,8 @@ class MultiGrainScanLayer(Layer):
         else:
             ests_output = splitting.fit_transform(x_train, y_train, x_test, y_test)
         machines = defaultdict(int)
+        trees = defaultdict(int)
+        machine_time_max = defaultdict(float)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             win_est_train = []
             win_est_test = []
@@ -502,6 +504,10 @@ class MultiGrainScanLayer(Layer):
                             self.LOGGER.info(str(log))
                             if str(log).count('Running on'):
                                 machines[log.split(' ')[3]] += 1
+                                trees[log.split(' ')[3]] += int(log.split(' ')[0].split(':')[1])
+                            elif str(log).count('fit time total:'):
+                                machine_time_max[log.split(' ')[0]] = max(machine_time_max[log.split(' ')[0]],
+                                                                          float(log.split(' ')[4]))
 
             # TODO: improving keep estimators.
             if self.keep_in_mem:
@@ -533,7 +539,9 @@ class MultiGrainScanLayer(Layer):
             self.LOGGER.info("[dis] Saving data x_win_est_test to {}".format(test_path))
         total_task = sum([v for v in machines.values()])
         for key in machines.keys():
-            self.LOGGER.info('Machine {} was assigned {} / {}'.format(key, machines[key], total_task))
+            self.LOGGER.info('Machine {} was assigned {}:{} / {}, max {}'.format(key, machines[key],
+                                                                                 trees[key], total_task,
+                                                                                 machine_time_max[key]))
         return x_win_est_train, x_win_est_test
 
     def fit_transform(self, x_train, y_train, x_test=None, y_test=None):
@@ -1171,7 +1179,7 @@ class CascadeLayer(Layer):
         :return:
         """
         est_args = self.est_args[est_id].copy()
-        est_name = 'layer - {} - estimator - {} - {}folds'.format(layer_id, est_id, est_args['n_folds'])
+        est_name = 'layer-{}-estimator-{}-{}folds'.format(layer_id, est_id, est_args['n_folds'])
         n_folds = int(est_args['n_folds'])
         est_args.pop('n_folds')
         est_type = est_args['est_type']
@@ -1331,7 +1339,9 @@ class CascadeLayer(Layer):
                 estimators.append(est)
                 y_probas = est.fit_transform(x_train, y_train, y_stratify, test_sets=[('test', x_test,  y_test)])
                 y_proba_train_tests.append(y_probas)
-
+        machines = defaultdict(int)
+        trees = defaultdict(int)
+        machine_time_max = defaultdict(float)
         for ei, y_proba_train_tup in enumerate(y_proba_train_tests):
             y_proba_train = y_proba_train_tup[0]
             y_proba_test = y_proba_train_tup[1]
@@ -1343,6 +1353,12 @@ class CascadeLayer(Layer):
                         self.LOGGER.warn("{}".format(log))
                     else:
                         self.LOGGER.info(str(log))
+                        if str(log).count('Running on'):
+                            machines[log.split(' ')[3]] += 1
+                            trees[log.split(' ')[3]] += int(log.split(' ')[0].split(':')[1])
+                        elif str(log).count('fit time total:'):
+                            machine_time_max[log.split(' ')[0]] = max(machine_time_max[log.split(' ')[0]],
+                                                                      float(log.split(' ')[4]))
 
             # if only one element on test_sets, return one test result like y_proba_train
             if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
@@ -1378,6 +1394,11 @@ class CascadeLayer(Layer):
         # if y_test is None, we need to generate test prediction, so keep eval_proba_test
         if y_test is None:
             self.eval_proba_test = eval_proba_test
+        total_task = sum([v for v in machines.values()])
+        for key in machines.keys():
+            self.LOGGER.info('Machine {} was assigned {}:{} / {}, max {}'.format(key, machines[key],
+                                                                                 trees[key], total_task,
+                                                                                 machine_time_max[key]))
         return x_proba_train, x_proba_test
 
     @property
