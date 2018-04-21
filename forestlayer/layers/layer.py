@@ -1259,7 +1259,7 @@ class CascadeLayer(Layer):
                         self.LOGGER.info(str(log))
 
             if y_proba_train is None:
-                raise RuntimeError("layer - {} - estimator - {} fit FAILED!,"
+                raise RuntimeError("layer-{}-estimator-{} fit FAILED!,"
                                    " y_proba_train is None!".format(self.layer_id, ei))
             check_shape(y_proba_train, n_trains, n_classes)
             x_proba_train[:, ei * n_classes:ei * n_classes + n_classes] = y_proba_train
@@ -1364,7 +1364,7 @@ class CascadeLayer(Layer):
             if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
                 y_proba_test = y_proba_test[0]
             if y_proba_train is None:
-                raise RuntimeError("layer - {} - estimator - {} fit FAILED!,"
+                raise RuntimeError("layer-{}-estimator-{} fit FAILED!,"
                                    " y_proba_train is None".format(self.layer_id, ei))
             check_shape(y_proba_train, n_trains, n_classes)
             if y_proba_test is not None:
@@ -1428,7 +1428,7 @@ class CascadeLayer(Layer):
             # transform by n-folds CV
             y_proba = est.transform(X)
             if y_proba is None:
-                raise RuntimeError("layer - {} - estimator - {} transform FAILED!".format(self.layer_id, ei))
+                raise RuntimeError("layer-{}-estimator-{} transform FAILED!".format(self.layer_id, ei))
             check_shape(y_proba, n_trains, n_classes)
             x_proba[:, ei * n_classes:ei * n_classes + n_classes] = y_proba
         return x_proba
@@ -1466,7 +1466,7 @@ class CascadeLayer(Layer):
             # transform by n-folds CV
             y_proba_train = est.transform(X)
             if y_proba_train is None:
-                raise RuntimeError("layer - {} - estimator - {} transform FAILED!".format(self.layer_id, ei))
+                raise RuntimeError("layer-{}-estimator-{} transform FAILED!".format(self.layer_id, ei))
             check_shape(y_proba_train, n_trains, n_classes)
             proba_sum += y_proba_train
         return proba_sum

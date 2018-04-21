@@ -947,7 +947,7 @@ class CascadeSplittingKFoldWrapper(object):
         :return:
         """
         est_args = args.copy()
-        est_name = 'layer - {} - estimator - {} - {}folds'.format(layer_id, ei, est_args['n_folds'])
+        est_name = 'layer-{}-estimator-{}-{}folds'.format(layer_id, ei, est_args['n_folds'])
         n_folds = int(est_args['n_folds'])
         est_args.pop('n_folds')
         est_type = est_args['est_type']
