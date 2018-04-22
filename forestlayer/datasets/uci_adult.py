@@ -14,7 +14,7 @@ from .dataset import get_dataset_dir
 from keras.utils.data_utils import get_file
 from ..utils.log_utils import get_logger, get_logging_level
 
-LOGGER = get_logger('datasets.uci_adult')
+# LOGGER = get_logger('datasets.uci_adult')
 
 
 def load_data(one_hot=True):
@@ -24,7 +24,7 @@ def load_data(one_hot=True):
     :param one_hot: whether use one-hot encoding
     :return: X_train, y_train, X_test, y_test
     """
-    LOGGER.setLevel(get_logging_level())
+    # LOGGER.setLevel(get_logging_level())
     train_path = 'adult.data'
     test_path = 'adult.test'
     features_path = 'features'
@@ -40,7 +40,7 @@ def load_data(one_hot=True):
                              origin='http://7xt9qk.com1.z0.glb.clouddn.com/features',
                              cache_subdir='uci_adult',
                              cache_dir=get_dataset_dir())
-    LOGGER.info('Load data from directory: {}'.format(osp.dirname(train_path)))
+    # LOGGER.info('Load data from directory: {}'.format(osp.dirname(train_path)))
     feature_parsers = []
     with open(features_path) as f:
         for row in f.readlines():

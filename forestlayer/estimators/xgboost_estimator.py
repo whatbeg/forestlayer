@@ -14,7 +14,7 @@ import xgboost as xgb
 import numpy as np
 import joblib
 
-LOGGER = get_logger('estimators.xgboost')
+# self.LOGGER = get_logger('estimators.xgboost')
 
 
 class XGBoostClassifier(BaseEstimator):
@@ -54,7 +54,7 @@ class XGBoostClassifier(BaseEstimator):
         cache_path = self._cache_path(cache_dir=cache_dir)
         # cache it
         if is_path_exists(cache_path):
-            LOGGER.info('Found estimator from {}, skip fit'.format(cache_path))
+            self.LOGGER.info('Found estimator from {}, skip fit'.format(cache_path))
             return
         if not isinstance(X, xgb.DMatrix):
             X = xgb.DMatrix(X, label=y)
@@ -68,7 +68,7 @@ class XGBoostClassifier(BaseEstimator):
                         verbose_eval=self.verbose_eval,
                         learning_rates=self.learning_rates)
         if cache_path is not None:
-            LOGGER.info("Save estimator to {} ...".format(cache_path))
+            self.LOGGER.info("Save estimator to {} ...".format(cache_path))
             check_dir(cache_path)
             self._save_model_to_disk(self.est, cache_path)
             # keep out memory
@@ -147,7 +147,7 @@ class XGBoostRegressor(BaseEstimator):
         cache_path = self._cache_path(cache_dir=cache_dir)
         # cache it
         if is_path_exists(cache_path):
-            LOGGER.info('Found estimator from {}, skip fit'.format(cache_path))
+            self.LOGGER.info('Found estimator from {}, skip fit'.format(cache_path))
             return
         if not isinstance(X, xgb.DMatrix):
             X = xgb.DMatrix(X, label=y)
@@ -161,7 +161,7 @@ class XGBoostRegressor(BaseEstimator):
                         verbose_eval=self.verbose_eval,
                         learning_rates=self.learning_rates)
         if cache_path is not None:
-            LOGGER.info("Save estimator to {} ...".format(cache_path))
+            self.LOGGER.info("Save estimator to {} ...".format(cache_path))
             check_dir(cache_path)
             self._save_model_to_disk(self.est, cache_path)
             # keep out memory

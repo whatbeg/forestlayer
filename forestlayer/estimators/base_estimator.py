@@ -9,7 +9,7 @@ import sys
 from ..utils.storage_utils import is_path_exists, check_dir, name2path, getmbof
 from ..utils.log_utils import get_logger, get_logging_level
 
-LOGGER = get_logger('estimators.base_estimator')
+# self.LOGGER = get_logger('estimators.base_estimator')
 
 
 class BaseEstimator(object):
@@ -25,7 +25,8 @@ class BaseEstimator(object):
         :param name: estimator name
         :param est_args: dict, estimator argument
         """
-        LOGGER.setLevel(get_logging_level())
+        self.LOGGER = get_logger('estimators.base_estimator')
+        self.LOGGER.setLevel(get_logging_level())
         self.name = name
         self.task = task
         self.est_class = est_class
@@ -52,16 +53,16 @@ class BaseEstimator(object):
         :param cache_dir:
         :return:
         """
-        LOGGER.debug("X_train.shape={}, y_train.shape={}".format(X.shape, y.shape))
+        self.LOGGER.debug("X_train.shape={}, y_train.shape={}".format(X.shape, y.shape))
         cache_path = self._cache_path(cache_dir=cache_dir)
         # cache it
         if is_path_exists(cache_path):
-            LOGGER.info('Found estimator from {}, skip fit'.format(cache_path))
+            self.LOGGER.info('Found estimator from {}, skip fit'.format(cache_path))
             return
         est = self._init_estimators()
         self._fit(est, X, y)
         if cache_path is not None:
-            LOGGER.info("Save estimator to {} ...".format(cache_path))
+            self.LOGGER.info("Save estimator to {} ...".format(cache_path))
             check_dir(cache_path)
             self._save_model_to_disk(self.est, cache_path)
             # keep out memory
@@ -81,13 +82,13 @@ class BaseEstimator(object):
         :param batch_size:
         :return:
         """
-        LOGGER.debug("X.shape={}".format(X.shape))
+        self.LOGGER.debug("X.shape={}".format(X.shape))
         cache_path = self._cache_path(cache_dir)
         # cache
         if cache_path is not None:
-            LOGGER.info("Load estimator from {} ...".format(cache_path))
+            self.LOGGER.info("Load estimator from {} ...".format(cache_path))
             est = self._load_model_from_disk(cache_path)
-            LOGGER.info("done ...")
+            self.LOGGER.info("done ...")
         else:
             est = self.est
         batch_size = batch_size or self._default_predict_batch_size(est=est, X=X, task=self.task)
@@ -95,7 +96,7 @@ class BaseEstimator(object):
             y_pred = self._batch_predict(est, X, batch_size)
         else:
             y_pred = self._predict(est, X)
-        LOGGER.debug("y_proba.shape={}".format(y_pred.shape))
+        self.LOGGER.debug("y_proba.shape={}".format(y_pred.shape))
         return y_pred
 
     def predict_proba(self, X, cache_dir=None, batch_size=None):
@@ -111,13 +112,13 @@ class BaseEstimator(object):
         """
         if self.task == 'regression':
             return self.predict(X, cache_dir=cache_dir, batch_size=batch_size)
-        LOGGER.debug("X.shape={}, size = {}".format(X.shape, getmbof(X)))
+        self.LOGGER.debug("X.shape={}, size = {}".format(X.shape, getmbof(X)))
         cache_path = self._cache_path(cache_dir)
         # cache
         if cache_path is not None:
-            LOGGER.info("Load estimator from {} ...".format(cache_path))
+            self.LOGGER.info("Load estimator from {} ...".format(cache_path))
             est = self._load_model_from_disk(cache_path)
-            LOGGER.info("done ...")
+            self.LOGGER.info("done ...")
         else:
             est = self.est
         batch_size = batch_size or self._default_predict_batch_size(est, X, self.task)
@@ -125,7 +126,7 @@ class BaseEstimator(object):
             y_proba = self._batch_predict_proba(est, X, batch_size)
         else:
             y_proba = self._predict_proba(est, X)
-        LOGGER.debug("y_proba.shape={}, size = {}, dtype = {}".format(y_proba.shape, getmbof(y_proba), y_proba.dtype))
+        self.LOGGER.debug("y_proba.shape={}, size = {}, dtype = {}".format(y_proba.shape, getmbof(y_proba), y_proba.dtype))
         return y_proba
 
     def _batch_predict_proba(self, est, X, batch_size):
@@ -137,7 +138,7 @@ class BaseEstimator(object):
         :param batch_size:
         :return:
         """
-        LOGGER.debug("X.shape={}, batch_size={}".format(X.shape, batch_size))
+        self.LOGGER.debug("X.shape={}, batch_size={}".format(X.shape, batch_size))
         verbose_backup = 0
         # clear verbose
         if hasattr(est, "verbose"):
@@ -146,17 +147,17 @@ class BaseEstimator(object):
         n_datas = X.shape[0]
         y_pred_proba = None
         for j in range(0, n_datas, batch_size):
-            LOGGER.info("[batch_predict_proba][batch_size={}] ({}/{})".format(batch_size, j, n_datas))
+            self.LOGGER.info("[batch_predict_proba][batch_size={}] ({}/{})".format(batch_size, j, n_datas))
             cur_x = X[j:j+batch_size]
             y_cur = self._predict_proba(est, cur_x)
-            LOGGER.debug('[cur_x.dtype = {}][y_cur.dtype = {}]'.format(cur_x.dtype, y_cur.dtype))
-            LOGGER.debug('[cur_x.shape = {}][y_cur.shape = {}]'.format(cur_x.shape, y_cur.shape))
-            LOGGER.debug("[cur_x.size = {}][y_cur.size = {}]".format(getmbof(cur_x), getmbof(y_cur)))
+            self.LOGGER.debug('[cur_x.dtype = {}][y_cur.dtype = {}]'.format(cur_x.dtype, y_cur.dtype))
+            self.LOGGER.debug('[cur_x.shape = {}][y_cur.shape = {}]'.format(cur_x.shape, y_cur.shape))
+            self.LOGGER.debug("[cur_x.size = {}][y_cur.size = {}]".format(getmbof(cur_x), getmbof(y_cur)))
             if j == 0:
                 n_classes = y_cur.shape[1]
                 y_pred_proba = np.empty((n_datas, n_classes), dtype=np.float32)
             y_pred_proba[j:j+batch_size, :] = y_cur
-        LOGGER.debug('[y_pred_proba size = {}, dtype = {}]'.format(getmbof(y_pred_proba), y_pred_proba.dtype))
+        self.LOGGER.debug('[y_pred_proba size = {}, dtype = {}]'.format(getmbof(y_pred_proba), y_pred_proba.dtype))
         # restore verbose
         if hasattr(est, "verbose"):
             est.verbose = verbose_backup
@@ -171,7 +172,7 @@ class BaseEstimator(object):
         :param batch_size:
         :return:
         """
-        LOGGER.debug("X.shape={}, batch_size={}".format(X.shape, batch_size))
+        self.LOGGER.debug("X.shape={}, batch_size={}".format(X.shape, batch_size))
         verbose_backup = 0
         # clear verbose
         if hasattr(est, "verbose"):
@@ -180,7 +181,7 @@ class BaseEstimator(object):
         n_datas = X.shape[0]
         y_pred = None
         for j in range(0, n_datas, batch_size):
-            LOGGER.info("[batch_predict_proba][batch_size={}] ({}/{})".format(batch_size, j, n_datas))
+            self.LOGGER.info("[batch_predict_proba][batch_size={}] ({}/{})".format(batch_size, j, n_datas))
             y_cur = self._predict(est, X[j:j + batch_size])
             if j == 0:
                 y_pred = np.empty((n_datas,), dtype=np.float32)

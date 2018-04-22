@@ -14,7 +14,7 @@ from forestlayer.utils.log_utils import get_logger, get_logging_level
 import numpy as np
 import os.path as osp
 
-LOGGER = get_logger('datasets.higgs-boson')
+# LOGGER = get_logger('datasets.higgs-boson')
 
 
 def load_data(size='1K'):
@@ -25,14 +25,14 @@ def load_data(size='1K'):
                  '1K', '10K', '100K', '1M', default is '1K'.
     :return: x_train, y_train, x_test, y_test
     """
-    LOGGER.setLevel(get_logging_level())
+    # LOGGER.setLevel(get_logging_level())
     data_path = osp.join("higgs", "HIGGS-{}.csv".format(size))
     # data_path = get_file(data_path,
     #                      origin='http://archive.ics.uci.edu/ml/machine-learning-databases/00280/HIGGS.csv.gz',
     #                      cache_subdir='higgs-boson',
     #                      cache_dir=get_dataset_dir())
     data_path = osp.join(get_dataset_dir(), data_path)
-    LOGGER.info("Load data from {}".format(data_path))
+    # LOGGER.info("Load data from {}".format(data_path))
     data = np.loadtxt(data_path, delimiter=',')
     y = data[:, 0]
     X = data[:, 1:]
