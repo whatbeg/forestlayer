@@ -163,7 +163,11 @@ class Graph(object):
                 layer.num_workers = self.get_num_workers()
             x_trains, x_tests = layer.fit_transform(x_trains, y_trains, x_tests, y_tests)
             time_cost = time.time() - layer_start_time
-            self.LOGGER.info('{} time cost: {:.6f} s'.format(layer, time_cost))
+            if "AutoGrowingCascadeLayer" in str(layer):
+                self.LOGGER.info('{} time cost: {:.4f} s, avg layer time: {:.4f}s'.format(layer, time_cost,
+                                                                                          time_cost/layer.n_layers))
+            else:
+                self.LOGGER.info('{} time cost: {:.4f} s'.format(layer, time_cost))
             time_cost_kv.append(("{}".format(layer), time_cost))
         time_cost = time.time() - start_time
         self.LOGGER.info("graph fit_transform finished! Time Cost: {:.6f} s".format(time_cost))

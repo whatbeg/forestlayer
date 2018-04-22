@@ -501,7 +501,7 @@ class MultiGrainScanLayer(Layer):
                         elif log[0] == 'WARN':
                             self.LOGGER.warn("{}".format(log))
                         else:
-                            self.LOGGER.info(str(log))
+                            # self.LOGGER.info(str(log))
                             if str(log).count('Running on'):
                                 machines[log.split(' ')[3]] += 1
                                 trees[log.split(' ')[3]] += int(log.split(' ')[0].split(':')[1])
@@ -1163,6 +1163,9 @@ class CascadeLayer(Layer):
         self.train_avg_metric = None
         self.test_avg_metric = None
         self.eval_proba_test = None
+        self.machines = defaultdict(int)
+        self.trees = defaultdict(int)
+        self.machine_time_max = defaultdict(float)
 
     def call(self, inputs, **kwargs):
         return inputs
@@ -1339,9 +1342,6 @@ class CascadeLayer(Layer):
                 estimators.append(est)
                 y_probas = est.fit_transform(x_train, y_train, y_stratify, test_sets=[('test', x_test,  y_test)])
                 y_proba_train_tests.append(y_probas)
-        machines = defaultdict(int)
-        trees = defaultdict(int)
-        machine_time_max = defaultdict(float)
         for ei, y_proba_train_tup in enumerate(y_proba_train_tests):
             y_proba_train = y_proba_train_tup[0]
             y_proba_test = y_proba_train_tup[1]
@@ -1352,13 +1352,13 @@ class CascadeLayer(Layer):
                     elif log[0] == 'WARN':
                         self.LOGGER.warn("{}".format(log))
                     else:
-                        self.LOGGER.info(str(log))
+                        # self.LOGGER.info(str(log))
                         if str(log).count('Running on'):
-                            machines[log.split(' ')[3]] += 1
-                            trees[log.split(' ')[3]] += int(log.split(' ')[0].split(':')[1])
+                            self.machines[log.split(' ')[3]] += 1
+                            self.trees[log.split(' ')[3]] += int(log.split(' ')[0].split(':')[1])
                         elif str(log).count('fit time total:'):
-                            machine_time_max[log.split(' ')[0]] = max(machine_time_max[log.split(' ')[0]],
-                                                                      float(log.split(' ')[4]))
+                            self.machine_time_max[log.split(' ')[0]] = max(self.machine_time_max[log.split(' ')[0]],
+                                                                           float(log.split(' ')[4]))
 
             # if only one element on test_sets, return one test result like y_proba_train
             if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
@@ -1394,11 +1394,11 @@ class CascadeLayer(Layer):
         # if y_test is None, we need to generate test prediction, so keep eval_proba_test
         if y_test is None:
             self.eval_proba_test = eval_proba_test
-        total_task = sum([v for v in machines.values()])
-        for key in machines.keys():
-            self.LOGGER.info('Machine {} was assigned {}:{} / {}, max {}'.format(key, machines[key],
-                                                                                 trees[key], total_task,
-                                                                                 machine_time_max[key]))
+        total_task = sum([v for v in self.machines.values()])
+        for key in self.machines.keys():
+            self.LOGGER.info('Machine {} was assigned {}:{} / {}, max {}'.format(key, self.machines[key],
+                                                                                 self.trees[key], total_task,
+                                                                                 self.machine_time_max[key]))
         return x_proba_train, x_proba_test
 
     @property
@@ -1845,6 +1845,9 @@ class AutoGrowingCascadeLayer(Layer):
         layer_id = 0
         layer_train_metrics, layer_test_metrics = [], []
         opt_data = [None, None]
+        machines = defaultdict(int)
+        trees = defaultdict(int)
+        machine_time_max = defaultdict(float)
         try:
             while True:
                 start_time = time.time()
@@ -1922,6 +1925,10 @@ class AutoGrowingCascadeLayer(Layer):
                 self.LOGGER.info("Layer {} time cost: {}".format(layer_id, time_cost))
                 # print("x_proba_test.shape = {}, dtype={}".format(x_proba_test.shape, x_proba_test.dtype))
                 # np.savetxt("layer-{}data.txt".format(layer_id), x_proba_test)
+                for key in cascade.machines.keys():
+                    machines[key] += cascade.machines[key]
+                    trees[key] += cascade.trees[key]
+                    machine_time_max[key] = max(machine_time_max[key], cascade.machine_time_max[key])
                 layer_id += 1
             # Max Layer Reached
             # opt_data = [x_cur_train, y_train, x_cur_test, y_test]
@@ -1961,6 +1968,12 @@ class AutoGrowingCascadeLayer(Layer):
             return x_cur_train, x_cur_test
         except KeyboardInterrupt:
             pass
+        finally:
+            total_task = sum([v for v in machines.values()])
+            for key in machines.keys():
+                self.LOGGER.info('[SUMMARY] Machine {} was assigned {}:{} / {}, max {}'.format(key, machines[key],
+                                                                                               trees[key], total_task,
+                                                                                               machine_time_max[key]))
 
     def transform(self, X, y=None):
         """
