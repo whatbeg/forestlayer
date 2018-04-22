@@ -501,7 +501,7 @@ class MultiGrainScanLayer(Layer):
                         elif log[0] == 'WARN':
                             self.LOGGER.warn("{}".format(log))
                         else:
-                            # self.LOGGER.info(str(log))
+                            self.LOGGER.info(str(log))
                             if str(log).count('Running on'):
                                 machines[log.split(' ')[3]] += 1
                                 trees[log.split(' ')[3]] += int(log.split(' ')[0].split(':')[1])

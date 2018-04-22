@@ -345,7 +345,7 @@ class DistributedKFoldWrapper(object):
 
     def query(self, x_train, x_test, win, wi, redis_addr):
         """
-        Query redis server to keep only one copy for every window scan in single machine.
+        [WIP] Query redis server to keep only one copy for every window scan in single machine.
 
         :param x_train:
         :param x_test:
@@ -357,26 +357,52 @@ class DistributedKFoldWrapper(object):
         local_ip = ray.services.get_node_ip_address()
         rhost, rport = redis_addr.split(':')[:2]
         redis_client = redis.StrictRedis(host=rhost, port=int(rport))
-        key_train = local_ip + ",{}train".format(wi)
-        query_train = redis_client.get(key_train)
-        if query_train is not None:
-            x_wins_train = ray.get(ray.local_scheduler.ObjectID(query_train))
-            self.logs.append("Bingo! we get off-the-shelf x_wins_train! in {} for {}".format(local_ip, wi))
-        else:
+        key_train_seal = local_ip + ",train{},seal".format(wi)
+        key_train = local_ip + ",train{}".format(wi)
+        query_train_seal = redis_client.get(key_train_seal)
+        if query_train_seal is None:
+            # become a publisher
+            redis_client.setex(key_train_seal, 20, '1')
             x_wins_train = win.fit_transform(x_train)
             self.logs.append("GENERATE x_wins_train={} in {} for {}".format(getmbof(x_wins_train), local_ip, wi))
             x_wins_train_id = ray.put(x_wins_train)
-            redis_client.set(key_train, x_wins_train_id.id())
-        key_test = local_ip + ",{}test".format(wi)
-        query_test = redis_client.get(key_test)
-        if query_test is not None:
-            x_wins_test = ray.get(ray.local_scheduler.ObjectID(query_test))
-            self.logs.append("Bingo! we get off-the-shelf x_wins_test! in {} for {}".format(local_ip, wi))
+            redis_client.publish(key_train, x_wins_train_id.id())
         else:
+            # become a subscriber
+            p = redis_client.pubsub()
+            p.subscribe(key_train)
+            for message in p.listen():
+                if message['type'] == 'message':
+                    data = message['data']
+                    x_wins_train = ray.get(ray.local_scheduler.ObjectID(data))
+                    self.logs.append("Bingo! we get off-the-shelf x_wins_train {}!"
+                                     " in {} for {}".format(getmbof(x_wins_train), local_ip, wi))
+                    break
+                time.sleep(0.1)
+            p.unsubscribe(key_train)
+        key_test_seal = local_ip + ",test{},seal".format(wi)
+        key_test = local_ip + ",test{}".format(wi)
+        query_test_seal = redis_client.get(key_test_seal)
+        if query_test_seal is None:
+            # become a publisher
+            redis_client.setex(key_test_seal, 20, '1')
             x_wins_test = win.fit_transform(x_test)
-            self.logs.append("GENERATE x_wins_test={} in {} for {}".format(getmbof(x_wins_test), local_ip, wi))
+            self.logs.append("GENERATE x_wins_train={} in {} for {}".format(getmbof(x_wins_test), local_ip, wi))
             x_wins_test_id = ray.put(x_wins_test)
-            redis_client.set(key_test, x_wins_test_id.id())
+            redis_client.publish(key_test, x_wins_test_id.id())
+        else:
+            # become a subscriber
+            p = redis_client.pubsub()
+            p.subscribe(key_test)
+            for message in p.listen():
+                if message['type'] == 'message':
+                    data = message['data']
+                    x_wins_test = ray.get(ray.local_scheduler.ObjectID(data))
+                    self.logs.append("Bingo! we get off-the-shelf x_wins_test {}!"
+                                     " in {} for {}".format(getmbof(x_wins_test), local_ip, wi))
+                    break
+                time.sleep(0.1)
+            p.unsubscribe(key_test)
         return x_wins_train, x_wins_test
 
     def fit_transform_lazyscan(self, x_train, y_train, x_test, y_test, win, wi, redis_addr):
@@ -1176,7 +1202,14 @@ def determine_split(dis_level, num_workers, ests):
     if dis_level == 0:
         return False, []
     if dis_level == 1:
-        raise NotImplementedError("Not supported dis_level=1 now")
+        splits = []
+        for i, est in enumerate(ests):
+            num_trees = est.get('n_estimators', 500)
+            if est.get('est_type') in ['FLRF', 'FLCRF']:
+                splits.append([num_trees / 3, num_trees / 3, num_trees - 2 * num_trees / 3])
+            else:
+                splits.append([-1])
+        return True, splits
     if dis_level == 2:
         splits = []
         for i, est in enumerate(ests):
