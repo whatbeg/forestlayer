@@ -1206,7 +1206,9 @@ def determine_split(dis_level, num_workers, ests):
         for i, est in enumerate(ests):
             num_trees = est.get('n_estimators', 500)
             if est.get('est_type') in ['FLRF', 'FLCRF']:
-                splits.append([num_trees / 3, num_trees / 3, num_trees - 2 * num_trees / 3])
+                splits.append([num_trees / 3,
+                               (num_trees-num_trees/3)/2,
+                               (num_trees-num_trees/3)-(num_trees-num_trees/3)/2])
             else:
                 splits.append([-1])
         return True, splits
@@ -1260,6 +1262,7 @@ def merge_group(split_group, split_ests_ratio, ests_output, self_dtype):
     est_group = []
     for gi, grp in enumerate(split_group):
         ests_ratio = split_ests_ratio[gi]
+        assert sum(ests_ratio) == 1.0, "The sum of est_ratio is not equal to 1!"
         group = [ests_output[i] for i in grp[:]]
         if len(grp) > 2:
             while len(group) > 1:
