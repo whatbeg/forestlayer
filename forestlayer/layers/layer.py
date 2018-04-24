@@ -175,7 +175,8 @@ class MultiGrainScanLayer(Layer):
     def __init__(self, batch_size=None, dtype=np.float32, name=None, task='classification',
                  windows=None, est_for_windows=None, n_class=None, keep_in_mem=False,
                  cache_in_disk=False, data_save_dir=None, eval_metrics=None, seed=None,
-                 distribute=False, dis_level=1, verbose_dis=True, num_workers=None, lazyscan=True):
+                 distribute=False, dis_level=1, verbose_dis=True, num_workers=None, lazyscan=True,
+                 pre_pools=None):
         """
         Initialize a multi-grain scan layer.
 
@@ -197,7 +198,8 @@ class MultiGrainScanLayer(Layer):
                             cluster resources, so the parallelization may be larger than len(self.est_configs).
                            2 means that anyway we must split forests.
                            Now 2 is the HIGHEST_DISLEVEL, default is 1.
-        :param lazyscan: if open lazyscan, default is True
+        :param lazyscan: if open lazyscan, default is True.
+        :param pre_pools: if we does pre pooling, we fill this variable.
         """
         if not name:
             prefix = 'multi_grain_scan'
@@ -232,6 +234,7 @@ class MultiGrainScanLayer(Layer):
         if fl.get_redis_address() is None or fl.get_redis_address().split(':')[0] == "127.0.0.1":
             self.LOGGER.warn("In standalone mode, it's unnecessary to enable lazyscan, we close it!")
             self.lazy_scan = False
+        self.pre_pools = pre_pools  # [[pool1, pool2], [pool1, pool2], [pool1, pool2], ...]
 
     def call(self, x_train, **kwargs):
         pass
@@ -249,10 +252,16 @@ class MultiGrainScanLayer(Layer):
         """
         return window.fit_transform(x)
 
-    def scan_shape(self, window, x):
-        n, c, h, w = x.shape
+    def scan_shape(self, window, x_shape):
+        n, c, h, w = x_shape
         nh = (h - window.win_y) / window.stride_y + 1
         nw = (w - window.win_x) / window.stride_x + 1
+        return nh, nw
+
+    def pool_shape(self, pool, win_shape):
+        h, w = win_shape
+        nh = (h - 1) / pool.win_x + 1
+        nw = (w - 1) / pool.win_y + 1
         return nh, nw
 
     def _init_estimator(self, est_arguments, wi, ei):
@@ -361,6 +370,8 @@ class MultiGrainScanLayer(Layer):
         return x_win_est_train
 
     def _dis_fit(self, x_train, y_train):
+        # TODO: Add lazy scan for _dis_fit
+        # TODO: Add advance pooling for _dis_fit
         """
         Fit.
 
@@ -455,7 +466,7 @@ class MultiGrainScanLayer(Layer):
         nhs, nws = [None for _ in range(len(self.windows))], [None for _ in range(len(self.windows))]
         # usually the size of x_test is smaller than x_train, use x_test here to save time
         for wi, win in enumerate(self.windows):
-            nhs[wi], nws[wi] = self.scan_shape(win, x_test)
+            nhs[wi], nws[wi] = self.scan_shape(win, x_test.shape)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             if not isinstance(ests_for_win, (list, tuple)):
                 ests_for_win = [ests_for_win]
@@ -467,7 +478,7 @@ class MultiGrainScanLayer(Layer):
         self.LOGGER.debug('ei2wi = {}'.format(ei2wi))
         splitting = SplittingKFoldWrapper(dis_level=self.dis_level, estimators=ests, ei2wi=ei2wi,
                                           num_workers=self.num_workers, seed=self.seed, windows=self.windows,
-                                          task=self.task, eval_metrics=self.eval_metrics,
+                                          pools=self.pre_pools, task=self.task, eval_metrics=self.eval_metrics,
                                           keep_in_mem=self.keep_in_mem, cv_seed=self.seed, dtype=self.dtype)
         if self.lazy_scan:
             ests_output = splitting.fit_transform_lazyscan(x_train, y_train, x_test, y_test)
@@ -483,13 +494,17 @@ class MultiGrainScanLayer(Layer):
             nh, nw = nhs[wi], nws[wi]
             # (60000, 121, 49)
             y_proba_train_tests = ests_output[est_offsets[wi]:est_offsets[wi + 1]]
-            for y_proba_tup in y_proba_train_tests:
+            for ei, y_proba_tup in enumerate(y_proba_train_tests):
                 y_proba_train = y_proba_tup[0]
-                y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                if self.pre_pools is not None:
+                    height, width = self.pool_shape(self.pre_pools[wi][ei], (nh, nw))
+                else:
+                    height, width = nh, nw
+                y_proba_train = y_proba_train.reshape((-1, height, width, self.n_class)).transpose((0, 3, 1, 2))
                 y_probas_test = y_proba_tup[1]
                 assert len(y_probas_test) == 1, 'assume there is only one test set!'
                 y_probas_test = y_probas_test[0]
-                y_probas_test = y_probas_test.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                y_probas_test = y_probas_test.reshape((-1, height, width, self.n_class)).transpose((0, 3, 1, 2))
                 # Lack of this line may cause precision issue that is inconsistency of dis and sm
                 y_probas_test = check_dtype(y_probas_test, self.dtype)
                 win_est_train.append(y_proba_train)
@@ -501,13 +516,14 @@ class MultiGrainScanLayer(Layer):
                         elif log[0] == 'WARN':
                             self.LOGGER.warn("{}".format(log))
                         else:
-                            self.LOGGER.info(str(log))
                             if str(log).count('Running on'):
                                 machines[log.split(' ')[3]] += 1
                                 trees[log.split(' ')[3]] += int(log.split(' ')[0].split(':')[1])
                             elif str(log).count('fit time total:'):
                                 machine_time_max[log.split(' ')[0]] = max(machine_time_max[log.split(' ')[0]],
                                                                           float(log.split(' ')[4]))
+                            else:
+                                self.LOGGER.info(str(log))
 
             # TODO: improving keep estimators.
             if self.keep_in_mem:
@@ -1861,6 +1877,7 @@ class AutoGrowingCascadeLayer(Layer):
                     x_cur_test = np.hstack((x_cur_test, x_test_group[:, group_starts[gid]:group_ends[gid]]))
                 x_cur_train = np.hstack((x_cur_train, x_proba_train))
                 x_cur_test = np.hstack((x_cur_test, x_proba_test))
+                # np.savetxt("layer-{}-cur-train.txt".format(layer_id), x_cur_train[:1000])
                 data_save_dir = self.data_save_dir
                 if data_save_dir is not None:
                     data_save_dir = osp.join(data_save_dir, 'cascade_layer_{}'.format(layer_id))
