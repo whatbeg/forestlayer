@@ -45,7 +45,8 @@ str2est_class = {
 }
 
 
-LOGGER = get_logger("LLL")
+# LOGGER = get_logger("LLL")
+
 
 class KFoldWrapper(object):
     def __init__(self, name, n_folds, task, est_type, seed=None, dtype=np.float32,
@@ -530,11 +531,11 @@ class DistributedKFoldWrapper(object):
             else:
                 remember_middle = None
             y_proba_train = y_proba_train.reshape((-1, nh, nw, n_class)).transpose((0, 3, 1, 2))
-            LOGGER.info("y_proba_train.shape = {}".format(y_proba_train.shape))
+            # LOGGER.info("y_proba_train.shape = {}".format(y_proba_train.shape))
             y_proba_train = self.pool.fit_transform(y_proba_train)
-            LOGGER.info("y_proba_train.shape 2 = {}".format(y_proba_train.shape))
+            # LOGGER.info("y_proba_train.shape 2 = {}".format(y_proba_train.shape))
             pool_nh, pool_nw = self.pool_shape(self.pool, self.win_shape)
-            LOGGER.info("pool_nh, pool_nw = {}, remember = {}".format((pool_nh, pool_nw), remember_middle))
+            # LOGGER.info("pool_nh, pool_nw = {}, remember = {}".format((pool_nh, pool_nw), remember_middle))
             if remember_middle:
                 y_proba_train = (y_proba_train.reshape((-1, n_class, pool_nh, pool_nw))
                                  .transpose((0, 2, 3, 1))
@@ -604,7 +605,7 @@ class DistributedKFoldWrapper(object):
         for metric in self.eval_metrics:
             acc = metric.calc_proba(y_true, y_proba)
             self.logs.append(('INFO', "{a}({b} - {c}) = {d}{e}".format(
-                a=metric.__class__.__name__, b=est_name, c=y_name, d="{:.4f}",
+                a=metric.__class__.__name__, b=est_name, c=y_name, d="{:.18f}",
                 e='%' if isinstance(metric, Accuracy) else ''), acc))
 
     @staticmethod
@@ -756,7 +757,7 @@ class SplittingKFoldWrapper(object):
                     sub_est = self._init_estimators(args, wi, wei, seeds[sei], self.cv_seed, splitting=True,
                                                     win_shape=win_shape, pool=pool)
                     split_ests.append(sub_est)
-                    ratio_i.append(split_ei[sei] / float(trees_sum))
+                    ratio_i.append(np.float64(split_ei[sei] / float(trees_sum)))
                     new_ei2wi[i + sei] = (wi, wei)
                 split_ests_ratio.append(ratio_i)
                 split_group.append([li for li in range(i, i + total_split)])
@@ -775,6 +776,7 @@ class SplittingKFoldWrapper(object):
                                                 wi, wei, self.seed, self.cv_seed, splitting=False,
                                                 win_shape=win_shape, pool=pool)
                 split_ests.append(gen_est)
+                # TODO: to be np.float64(1.0)?
                 split_ests_ratio.append(1.0)
             split_group = [[i, ] for i in range(len(ests))]
         return split_ests, split_ests_ratio, split_group
@@ -872,8 +874,9 @@ class SplittingKFoldWrapper(object):
         split_ests, split_ests_ratio, split_group = self.splitting(self.estimators,
                                                                    in_win_shapes=[(nhs[k], nws[k]) for k in range(len(nhs))])
         self.LOGGER.debug('split_group = {}'.format(split_group))
-        self.LOGGER.debug('split_ests_ratio = {}'.format(split_ests_ratio))
+        self.LOGGER.debug('split_ests_ratio = {}'.format(["{:.18f}".format(r) for r in split_ests_ratio[0]]))
         self.LOGGER.debug('new ei2wi = {}'.format(self.ei2wi))
+        # np.savetxt('x_wins_train[{}].txt'.format(0), x_wins_train[0].reshape(-1))
         x_wins_train_obj_ids = [ray.put(x_wins_train[wi]) for wi in range(len(x_wins_train))]
         y_win_obj_ids = [ray.put(y_win[wi]) for wi in range(len(y_win))]
         y_stratify = [ray.put(y_win[wi][:, 0]) for wi in range(len(y_win))]
@@ -993,7 +996,8 @@ class CascadeSplittingKFoldWrapper(object):
                     gen_est = self._init_estimators(est.copy(), self.layer_id, ei, self.seed, self.cv_seed,
                                                     splitting=False)
                     split_ests.append(gen_est)
-                    split_ests_ratio.append(1.0)
+                    # TODO: to be np.float64(1.0)?
+                    split_ests_ratio.append([1.0])
                     split_group.append([i, ])
                     i += 1
                     continue
@@ -1019,7 +1023,7 @@ class CascadeSplittingKFoldWrapper(object):
                     args['n_estimators'] = split_ei[sei]
                     sub_est = self._init_estimators(args, self.layer_id, ei, seeds[sei], self.cv_seed, splitting=True)
                     split_ests.append(sub_est)
-                    ratio_i.append(split_ei[sei] / float(trees_sum))
+                    ratio_i.append(np.float64(split_ei[sei]/float(trees_sum)))
                 split_ests_ratio.append(ratio_i)
                 split_group.append([li for li in range(i, i + total_split)])
                 i += total_split
@@ -1027,7 +1031,8 @@ class CascadeSplittingKFoldWrapper(object):
             for ei, est in enumerate(ests):
                 gen_est = self._init_estimators(est.copy(), self.layer_id, ei, self.seed, self.cv_seed, splitting=False)
                 split_ests.append(gen_est)
-                split_ests_ratio.append(1.0)
+                # TODO: to be np.float64(1.0)?
+                split_ests_ratio.append([1.0])
             split_group = [[i, ] for i in range(len(ests))]
         return split_ests, split_ests_ratio, split_group
 
@@ -1104,9 +1109,7 @@ class CascadeSplittingKFoldWrapper(object):
                                                 test_sets=test_sets_obj_id)
                        for est in split_ests]
         est_group = merge_group(split_group, split_ests_ratio, ests_output, self.dtype)
-        start_time = time.time()
         est_group_result = ray.get(est_group)
-        self.LOGGER.info("ray.get(est_group) time: {}".format(time.time()-start_time))
         return est_group_result, split_ests, split_group
 
 
@@ -1149,12 +1152,8 @@ def merge(tup_1, ratio1, tup_2, ratio2, dtype=np.float32):
     for key in mean_dict.keys():
         # mean_dict[key] = mean_dict[key]
         key_split = key.split(',')
-        if "Approx" in key_split[1]:
-            logs.append((key_split[0], key_split[1], mean_dict[key]))
-        else:
-            logs.append((key_split[0], "Approx " + key_split[1], mean_dict[key]))
+        logs.append((key_split[0], key_split[1], mean_dict[key]))
     logs.sort()
-    LOGGER.info("NINI, tup_1.shape = {}".format(tup_1[0].shape))
     return (tup_1[0] * ratio1 + tup_2[0] * ratio2).astype(dtype), tests, logs
 
 
@@ -1345,7 +1344,7 @@ def merge_group(split_group, split_ests_ratio, ests_output, self_dtype):
                     dtype = np.float64
                 group = group[2:] + [merge.remote(group[0], ests_ratio[0],
                                                   group[1], ests_ratio[1], dtype=dtype)]
-                ests_ratio = ests_ratio[2:] + [1.0]
+                ests_ratio = ests_ratio[2:] + [np.float64(1.0)]
             est_group.append(group[0])
         elif len(grp) == 2:
             # tree reduce
