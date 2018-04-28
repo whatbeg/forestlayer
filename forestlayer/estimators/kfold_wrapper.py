@@ -605,7 +605,7 @@ class DistributedKFoldWrapper(object):
         for metric in self.eval_metrics:
             acc = metric.calc_proba(y_true, y_proba)
             self.logs.append(('INFO', "{a}({b} - {c}) = {d}{e}".format(
-                a=metric.__class__.__name__, b=est_name, c=y_name, d="{:.18f}",
+                a=metric.__class__.__name__, b=est_name, c=y_name, d="{:.4f}",
                 e='%' if isinstance(metric, Accuracy) else ''), acc))
 
     @staticmethod
@@ -876,7 +876,6 @@ class SplittingKFoldWrapper(object):
         self.LOGGER.debug('split_group = {}'.format(split_group))
         self.LOGGER.debug('split_ests_ratio = {}'.format(["{:.18f}".format(r) for r in split_ests_ratio[0]]))
         self.LOGGER.debug('new ei2wi = {}'.format(self.ei2wi))
-        # np.savetxt('x_wins_train[{}].txt'.format(0), x_wins_train[0].reshape(-1))
         x_wins_train_obj_ids = [ray.put(x_wins_train[wi]) for wi in range(len(x_wins_train))]
         y_win_obj_ids = [ray.put(y_win[wi]) for wi in range(len(y_win))]
         y_stratify = [ray.put(y_win[wi][:, 0]) for wi in range(len(y_win))]
@@ -1331,6 +1330,15 @@ def determine_split(dis_level, num_workers, ests):
 
 
 def merge_group(split_group, split_ests_ratio, ests_output, self_dtype):
+    """
+    Merge split estimators output.
+
+    :param split_group: [[0, 1, 2], [3, 4, 5]]
+    :param split_ests_ratio: [[0.332, 0.334, 0.334], [0.332, 0.334, 0.334]]
+    :param ests_output: [out0, out1, out2, out3, out4, out5]
+    :param self_dtype: np.float32 or np.float64
+    :return:
+    """
     est_group = []
     for gi, grp in enumerate(split_group):
         ests_ratio = split_ests_ratio[gi]

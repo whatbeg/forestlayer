@@ -11,6 +11,7 @@ import os.path as osp
 import os
 import numpy as np
 from ..backend.backend import get_base_dir
+from collections import Iterable
 import sys
 try:
     import cPickle as pickle
@@ -153,3 +154,11 @@ def getkbof(x):
 def save_model(model, file_path, overrite=True):
     pass
 
+
+def savetxt(filename, obj):
+    if isinstance(obj, Iterable):
+        with open(filename, 'w') as f:
+            for x in obj:
+                f.write("{}\n".format(x))
+    else:
+        raise NotImplementedError("obj type of {} is not supported!")
