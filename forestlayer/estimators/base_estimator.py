@@ -155,7 +155,7 @@ class BaseEstimator(object):
             self.LOGGER.debug("[cur_x.size = {}][y_cur.size = {}]".format(getmbof(cur_x), getmbof(y_cur)))
             if j == 0:
                 n_classes = y_cur.shape[1]
-                y_pred_proba = np.empty((n_datas, n_classes), dtype=np.float32)
+                y_pred_proba = np.empty((n_datas, n_classes), dtype=np.float64)
             y_pred_proba[j:j+batch_size, :] = y_cur
         self.LOGGER.debug('[y_pred_proba size = {}, dtype = {}]'.format(getmbof(y_pred_proba), y_pred_proba.dtype))
         # restore verbose
