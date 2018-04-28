@@ -8,3 +8,6 @@ Initialize forestlayer.
 # License: Apache-2.0
 
 from forestlayer.core import (init, get_redis_address)
+from forestlayer.utils.storage_utils import savetxt
+
+

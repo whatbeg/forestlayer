@@ -22,6 +22,7 @@ def set_redis_address(redis_address):
     REDIS_ADDRESS = redis_address
 
 
+# Ray 0.4.0
 def init(redis_address=None, node_ip_address=None, object_id_seed=None,
          num_workers=None, driver_mode=ray.SCRIPT_MODE,
          redirect_worker_output=False, redirect_output=True,
@@ -37,5 +38,3 @@ def init(redis_address=None, node_ip_address=None, object_id_seed=None,
              num_custom_resource=num_custom_resource, num_redis_shards=num_redis_shards,
              redis_max_clients=redis_max_clients, plasma_directory=plasma_directory,
              huge_pages=huge_pages, include_webui=include_webui, object_store_memory=object_store_memory)
-
-
