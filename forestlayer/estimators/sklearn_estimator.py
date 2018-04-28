@@ -30,7 +30,7 @@ def forest_predict_batch_size(clf, X, task):
     :return: batch_size
     """
     # TODO: Different cluster need different batch size determination strategy.
-    free_memory = psutil.virtual_memory().free
+    free_memory = psutil.virtual_memory().total - psutil.virtual_memory().used
     # LOGGER.debug('free_memory: {}'.format(free_memory))
     if free_memory < 2e9:
         free_memory = int(2e9)
