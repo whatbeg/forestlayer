@@ -69,7 +69,7 @@ def get_windows(x, win_x, win_y, stride_x=1, stride_y=1, pad_x=0, pad_y=0):
             for des_id in range(c * win_x * win_y))
     x_win = x_win.transpose((1, 0))
     x_win = x_win.reshape((n, nh, nw, nc))
-    LOGGER.info("get_windows___end: X.shape={}, X_win.shape={}".format(x.shape, x_win.shape))
+    LOGGER.info("got_windows: X.shape={}, X_win.shape={}".format(x.shape, x_win.shape))
     return x_win
 
 
@@ -150,7 +150,7 @@ class Pooling(object):
         :param x:
         :return:
         """
-        LOGGER.info("Multi-grain Scan pooling [{}] is running...".format(self.name))
+        LOGGER.info("Multi-grain Scan pooling [{}] is running..., x.dtype={}".format(self.name, x.dtype))
         return self._transform(x)
 
     def _transform(self, x):
