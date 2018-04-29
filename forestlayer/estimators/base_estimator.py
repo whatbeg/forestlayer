@@ -184,7 +184,7 @@ class BaseEstimator(object):
             self.LOGGER.info("[batch_predict_proba][batch_size={}] ({}/{})".format(batch_size, j, n_datas))
             y_cur = self._predict(est, X[j:j + batch_size])
             if j == 0:
-                y_pred = np.empty((n_datas,), dtype=np.float32)
+                y_pred = np.empty((n_datas,), dtype=np.float64)
             y_pred[j:j + batch_size] = y_cur
         # restore verbose
         if hasattr(est, "verbose"):

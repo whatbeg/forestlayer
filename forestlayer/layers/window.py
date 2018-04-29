@@ -150,7 +150,7 @@ class Pooling(object):
         :param x:
         :return:
         """
-        LOGGER.info("Multi-grain Scan pooling [{}] is running..., x.dtype={}".format(self.name, x.dtype))
+        # LOGGER.info("Multi-grain Scan pooling [{}] is running..., x.dtype={}".format(self.name, x.dtype))
         return self._transform(x)
 
     def _transform(self, x):

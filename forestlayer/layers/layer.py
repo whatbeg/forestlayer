@@ -553,12 +553,11 @@ class MultiGrainScanLayer(Layer):
             save_disk_cache(test_path, x_win_est_test)
             self.LOGGER.info("[dis] Saving data x_win_est_train to {}".format(train_path))
             self.LOGGER.info("[dis] Saving data x_win_est_test to {}".format(test_path))
-        # total_task = sum([v for v in machines.values()])
-        # for key in machines.keys():
-        #     self.LOGGER.info('Machine {} was assigned {}:{} / {}, max {}'.format(key, machines[key],
-        #                                                                          trees[key], total_task,
-        #                                                                          machine_time_max[key]))
-        # np.savetxt('x_win_est_train_{}_{}.txt'.format(0, 0), x_win_est_train[0][0].reshape(-1))
+        total_task = sum([v for v in machines.values()])
+        for key in machines.keys():
+            self.LOGGER.info('Machine {} was assigned {}:{} / {}, max {}'.format(key, machines[key],
+                                                                                 trees[key], total_task,
+                                                                                 machine_time_max[key]))
         return x_win_est_train, x_win_est_test
 
     def fit_transform(self, x_train, y_train, x_test=None, y_test=None):
@@ -841,7 +840,6 @@ class PoolingLayer(Layer):
         :param y_tests:
         :return:
         """
-        np.savetxt("before-pool-x_trains00.txt", x_trains[0][0].reshape(-1)[:10000])
         if x_tests is None:
             return self.fit(x_trains, y_trains), None
         # inputs shape: [[(60000, 10, 11, 11), (60000, 10, 11, 11)], [.., ..], ...]
@@ -1318,14 +1316,14 @@ class CascadeLayer(Layer):
             y_test_shape = (0,)
         else:
             y_test_shape = y_test.shape
-        self.LOGGER.info('X_train.shape={}, size={}, y_train.shape={}, dtype={}'.format(x_train.shape,
-                                                                                        getmbof(x_train),
-                                                                                        y_train.shape,
-                                                                                        x_train.dtype))
-        self.LOGGER.info(' X_test.shape={}, size={},  y_test.shape={}, dtype={}'.format(x_test.shape,
-                                                                                        getmbof(x_test),
-                                                                                        y_test_shape,
-                                                                                        x_test.dtype))
+        self.LOGGER.debug('X_train.shape={}, size={}, y_train.shape={}, dtype={}'.format(x_train.shape,
+                                                                                         getmbof(x_train),
+                                                                                         y_train.shape,
+                                                                                         x_train.dtype))
+        self.LOGGER.debug(' X_test.shape={}, size={},  y_test.shape={}, dtype={}'.format(x_test.shape,
+                                                                                         getmbof(x_test),
+                                                                                         y_test_shape,
+                                                                                         x_test.dtype))
         n_trains = x_train.shape[0]
         n_tests = x_test.shape[0]
         n_classes = self.n_classes  # if regression, n_classes = 1
@@ -1879,7 +1877,6 @@ class AutoGrowingCascadeLayer(Layer):
                     x_cur_test = np.hstack((x_cur_test, x_test_group[:, group_starts[gid]:group_ends[gid]]))
                 x_cur_train = np.hstack((x_cur_train, x_proba_train))
                 x_cur_test = np.hstack((x_cur_test, x_proba_test))
-                np.savetxt("layer-{}-cur-train.txt".format(layer_id), x_cur_train[:1000].reshape(-1))
                 data_save_dir = self.data_save_dir
                 if data_save_dir is not None:
                     data_save_dir = osp.join(data_save_dir, 'cascade_layer_{}'.format(layer_id))
@@ -1941,7 +1938,7 @@ class AutoGrowingCascadeLayer(Layer):
                 if self.data_save_rounds > 0 and (layer_id + 1) % self.data_save_rounds == 0:
                     self.save_data(layer_id, False, *opt_data)
                 time_cost = time.time() - start_time
-                self.LOGGER.info("Layer {} time cost: {}".format(layer_id, time_cost))
+                # self.LOGGER.info("Layer {} time cost: {}".format(layer_id, time_cost))
                 # print("x_proba_test.shape = {}, dtype={}".format(x_proba_test.shape, x_proba_test.dtype))
                 # np.savetxt("layer-{}data.txt".format(layer_id), x_proba_test)
                 for key in cascade.machines.keys():
@@ -1988,11 +1985,11 @@ class AutoGrowingCascadeLayer(Layer):
         except KeyboardInterrupt:
             pass
         finally:
-            # total_task = sum([v for v in machines.values()])
-            # for key in machines.keys():
-            #     self.LOGGER.info('[SUMMARY] Machine {} was assigned {}:{} / {}, max {}'.format(key, machines[key],
-            #                                                                                    trees[key], total_task,
-            #                                                                                    machine_time_max[key]))
+            total_task = sum([v for v in machines.values()])
+            for key in machines.keys():
+                self.LOGGER.info('[SUMMARY] Machine {} was assigned {}:{} / {}, max {}'.format(key, machines[key],
+                                                                                               trees[key], total_task,
+                                                                                               machine_time_max[key]))
             pass
 
     def transform(self, X, y=None):
