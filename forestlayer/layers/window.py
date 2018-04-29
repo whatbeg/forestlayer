@@ -170,7 +170,7 @@ class Pooling(object):
             for di in range(nh):
                 for dj in range(nw):
                     si = di * self.win_x
-                    sj = dj * self.win_y  # big bug. should be dj, previous is di.
+                    sj = dj * self.win_y
                     src = x[:, k, si:si+self.win_x, sj:sj+self.win_y]
                     src = src.reshape((x.shape[0], -1))
                     if self.pool_strategy == 'max':

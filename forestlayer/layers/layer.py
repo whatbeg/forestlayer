@@ -1937,7 +1937,7 @@ class AutoGrowingCascadeLayer(Layer):
                     return opt_data[0], opt_data[2]
                 if self.data_save_rounds > 0 and (layer_id + 1) % self.data_save_rounds == 0:
                     self.save_data(layer_id, False, *opt_data)
-                time_cost = time.time() - start_time
+                # time_cost = time.time() - start_time
                 # self.LOGGER.info("Layer {} time cost: {}".format(layer_id, time_cost))
                 # print("x_proba_test.shape = {}, dtype={}".format(x_proba_test.shape, x_proba_test.dtype))
                 # np.savetxt("layer-{}data.txt".format(layer_id), x_proba_test)
@@ -1981,7 +1981,6 @@ class AutoGrowingCascadeLayer(Layer):
             if self.keep_in_mem:
                 for li in range(opt_layer_id + 1, layer_id + 1):
                     self.layer_fit_cascades[li] = None
-            return x_cur_train, x_cur_test
         except KeyboardInterrupt:
             pass
         finally:
@@ -1990,7 +1989,7 @@ class AutoGrowingCascadeLayer(Layer):
                 self.LOGGER.info('[SUMMARY] Machine {} was assigned {}:{} / {}, max {}'.format(key, machines[key],
                                                                                                trees[key], total_task,
                                                                                                machine_time_max[key]))
-            pass
+            return x_cur_train, x_cur_test
 
     def transform(self, X, y=None):
         """
