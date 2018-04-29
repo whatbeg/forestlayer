@@ -2146,7 +2146,7 @@ class AutoGrowingCascadeLayer(Layer):
                 data = {"X": x_train, "y": y_train}
             else:
                 data = {"X": x_test, "y": y_test if y_test is not None else np.zeros((0,), dtype=self.dtype)}
-            self.LOGGER.info("Saving {} Data in {} ... X.shape={}, y.shape={}".format(
+            self.LOGGER.debug("Saving {} Data in {} ... X.shape={}, y.shape={}".format(
                 phase, data_path, data["X"].shape, data["y"].shape))
             with open(data_path, "wb") as f:
                 pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)

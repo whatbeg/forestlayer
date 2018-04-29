@@ -109,6 +109,7 @@ run_data/
 run_model/
 
 benchmark/
+EXPERIMENT/
 
 # docs
 docs/site/*

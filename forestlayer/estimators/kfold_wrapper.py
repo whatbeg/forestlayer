@@ -707,8 +707,8 @@ class SplittingKFoldWrapper(object):
         split_ests = []
         split_ests_ratio = []
         split_group = []
-        # self.LOGGER.info('dis_level = {}, num_workers = {}, num_estimators = {}, should_split? {}'.format(
-        #     self.dis_level, self.num_workers, len(ests), should_split))
+        self.LOGGER.info('dis_level = {}, num_workers = {}, num_estimators = {}, should_split? {}'.format(
+            self.dis_level, self.num_workers, len(ests), should_split))
         # TODO: what if self.seed is an object of RandomState?
         if self.cv_seed is None:
             self.cv_seed = copy.deepcopy(self.seed)
