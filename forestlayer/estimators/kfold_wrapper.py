@@ -10,6 +10,7 @@ import numpy as np
 import ray
 import copy
 import time
+from time import time as get_time
 import redis
 import forestlayer as fl
 try:
@@ -26,6 +27,7 @@ from ..backend.common import add_fit_time, add_kfold_time
 from collections import defaultdict
 import heapq
 import math
+from psutil import virtual_memory
 MAX_RAND_SEED = np.iinfo(np.int32).max
 str2est_class = {
     'classification': {
@@ -43,9 +45,6 @@ str2est_class = {
         'FLLGBM': FLLGBMRegressor,
     }
 }
-
-
-# LOGGER = get_logger("LLL")
 
 
 class KFoldWrapper(object):
@@ -366,50 +365,72 @@ class DistributedKFoldWrapper(object):
         redis_client = redis.StrictRedis(host=rhost, port=int(rport))
         key_train_seal = local_ip + ",train{},seal".format(wi)
         key_train = local_ip + ",train{}".format(wi)
+        time.sleep(np.random.random())  # randomly sleep [0, 1) seconds to reduce collision
         query_train_seal = redis_client.get(key_train_seal)
         if query_train_seal is None:
             # become a publisher
             redis_client.setex(key_train_seal, 20, '1')
+            start_time = get_time()
             x_wins_train = win.fit_transform(x_train)
             self.logs.append("GENERATE x_wins_train={} in {} for {}".format(getmbof(x_wins_train), local_ip, wi))
             x_wins_train_id = ray.put(x_wins_train)
+            if time.time() - start_time < 3:  # wait for all other process to subscribe this channel
+                time.sleep(3 - get_time() + start_time)
             redis_client.publish(key_train, x_wins_train_id.id())
         else:
-            # become a subscriber
-            p = redis_client.pubsub()
-            p.subscribe(key_train)
-            for message in p.listen():
-                if message['type'] == 'message':
-                    data = message['data']
-                    x_wins_train = ray.get(ray.local_scheduler.ObjectID(data))
-                    self.logs.append("Bingo! we get off-the-shelf x_wins_train {}!"
-                                     " in {} for {}".format(getmbof(x_wins_train), local_ip, wi))
-                    break
-                time.sleep(0.1)
-            p.unsubscribe(key_train)
+            try:
+                # become a subscriber
+                p = redis_client.pubsub()
+                p.subscribe(key_train)
+                start_time = time.time()
+                for message in p.listen():
+                    if message['type'] == 'message':
+                        data = message['data']
+                        x_wins_train = ray.get(ray.local_scheduler.ObjectID(data))
+                        self.logs.append("Bingo! we get off-the-shelf x_wins_train {}!"
+                                         " in {} for {}".format(getmbof(x_wins_train), local_ip, wi))
+                        break
+                    time.sleep(0.1)
+                    if time.time() - start_time > 5:
+                        x_wins_train = win.fit_transform(x_train)
+                        p.unsubscribe(key_train)
+                        break
+            finally:
+                p.unsubscribe(key_train)
         key_test_seal = local_ip + ",test{},seal".format(wi)
         key_test = local_ip + ",test{}".format(wi)
+        time.sleep(np.random.random())  # randomly sleep [0, 1) seconds to reduce collision
         query_test_seal = redis_client.get(key_test_seal)
         if query_test_seal is None:
             # become a publisher
             redis_client.setex(key_test_seal, 20, '1')
+            start_time = get_time()
             x_wins_test = win.fit_transform(x_test)
-            self.logs.append("GENERATE x_wins_train={} in {} for {}".format(getmbof(x_wins_test), local_ip, wi))
+            self.logs.append("GENERATE x_wins_test={} in {} for {}".format(getmbof(x_wins_test), local_ip, wi))
             x_wins_test_id = ray.put(x_wins_test)
+            if time.time() - start_time < 3:  # wait for all other process to subscribe this channel
+                time.sleep(3 - get_time() + start_time)
             redis_client.publish(key_test, x_wins_test_id.id())
         else:
-            # become a subscriber
-            p = redis_client.pubsub()
-            p.subscribe(key_test)
-            for message in p.listen():
-                if message['type'] == 'message':
-                    data = message['data']
-                    x_wins_test = ray.get(ray.local_scheduler.ObjectID(data))
-                    self.logs.append("Bingo! we get off-the-shelf x_wins_test {}!"
-                                     " in {} for {}".format(getmbof(x_wins_test), local_ip, wi))
-                    break
-                time.sleep(0.1)
-            p.unsubscribe(key_test)
+            try:
+                # become a subscriber
+                p = redis_client.pubsub()
+                p.subscribe(key_test)
+                start_time = time.time()
+                for message in p.listen():
+                    if message['type'] == 'message':
+                        data = message['data']
+                        x_wins_test = ray.get(ray.local_scheduler.ObjectID(data))
+                        self.logs.append("Bingo! we get off-the-shelf x_wins_test {}!"
+                                         " in {} for {}".format(getmbof(x_wins_test), local_ip, wi))
+                        break
+                    time.sleep(0.1)
+                    if time.time() - start_time > 5:
+                        x_wins_test = win.fit_transform(x_test)
+                        p.unsubscribe(key_test)
+                        break
+            finally:
+                p.unsubscribe(key_test)
         return x_wins_train, x_wins_test
 
     def fit_transform_lazyscan(self, x_train, y_train, x_test, y_test, win, wi, redis_addr):
@@ -465,6 +486,8 @@ class DistributedKFoldWrapper(object):
         inverse = False
         fold_start_time = time.time()
         for k in range(self.n_folds):
+            # fuse mechanism. Keep memory using safety.
+            fuse()
             est = self._init_estimator(k)
             if not inverse:
                 train_idx, val_idx = cv[k]
@@ -531,9 +554,9 @@ class DistributedKFoldWrapper(object):
             else:
                 remember_middle = None
             y_proba_train = y_proba_train.reshape((-1, nh, nw, n_class)).transpose((0, 3, 1, 2))
-            # LOGGER.info("y_proba_train.shape = {}".format(y_proba_train.shape))
+            # self.logs.append("y_proba_train.shape = {}".format(y_proba_train.shape))
             y_proba_train = self.pool.fit_transform(y_proba_train)
-            # LOGGER.info("y_proba_train.shape 2 = {}".format(y_proba_train.shape))
+            # self.logs.append("y_proba_train.shape 2 = {}".format(y_proba_train.shape))
             pool_nh, pool_nw = self.pool_shape(self.pool, self.win_shape)
             # LOGGER.info("pool_nh, pool_nw = {}, remember = {}".format((pool_nh, pool_nw), remember_middle))
             if remember_middle:
@@ -880,6 +903,7 @@ class SplittingKFoldWrapper(object):
         y_win_obj_ids = [ray.put(y_win[wi]) for wi in range(len(y_win))]
         y_stratify = [ray.put(y_win[wi][:, 0]) for wi in range(len(y_win))]
         test_sets_obj_ids = [ray.put(test_sets[wi]) for wi in range(len(test_sets))]
+        self.LOGGER.info("[NO Lazy Scan] Put all input down!")
         ests_output = [est.fit_transform.remote(x_wins_train_obj_ids[self.ei2wi[ei][0]],
                                                 y_win_obj_ids[self.ei2wi[ei][0]], y_stratify[self.ei2wi[ei][0]],
                                                 test_sets=test_sets_obj_ids[self.ei2wi[ei][0]])
@@ -910,6 +934,7 @@ class SplittingKFoldWrapper(object):
         y_train_id = ray.put(y_train)
         x_test_id = ray.put(x_test)
         y_test_id = ray.put(y_test)
+        self.LOGGER.info("[Lazy Scan] Put all input down!")
         # the base kfold_wrapper of SplittingKFoldWrapper must be DistributedKFoldWrapper,
         # so with the y_proba_train, y_proba_tests, there is a log info list will be return.
         # so, ests_output is like (y_proba_train, y_proba_tests, logs)
@@ -1425,4 +1450,11 @@ def greedy_makespan_split(splits, avg, num_workers, forest_idx_tuples):
         new_splits[idx].append(num_forest)
     return should_split, new_splits
 
+
+def fuse():
+    if virtual_memory().used > virtual_memory().total * 0.95:
+        # raise EnvironmentError("Too heavy node! Used {:.1f}% memory in {} Killed!".format(
+        #     virtual_memory().used / virtual_memory().total, ray.services.get_node_ip_address()))
+        import os
+        os.system('ray stop')
 
