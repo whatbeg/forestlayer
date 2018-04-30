@@ -171,6 +171,7 @@ class Graph(object):
                         and layer.distribute is True):
                     pooling_layer = self.layers[li+1]
                     layer.pre_pools = pooling_layer.pools
+                    layer.dtype = pooling_layer.dtype
                     cross_pooling = True
                 if "PoolingLayer" == str(layer) and cross_pooling:
                     cross_pooling = False
