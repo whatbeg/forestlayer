@@ -26,7 +26,7 @@ class Graph(object):
      dynamically add layers to it, you need to re-fit the whole graph. Later we shall consider how to support
      dynamic graph construction and execution.
     """
-    def __init__(self, task='classification'):
+    def __init__(self, task='classification', advance_pooling=False):
         """
         Initialize a graph for specific task.
 
@@ -37,6 +37,7 @@ class Graph(object):
         self.task = task
         self.num_workers = None
         self.FIT = False
+        self.advance_pooling = advance_pooling
 
     def call(self):
         pass
@@ -100,6 +101,7 @@ class Graph(object):
         return self.num_workers
 
     def fit(self, x_trains, y_trains):
+        # TODO: Advance pooling if well performed
         """
         Fit with x_trians, y_trains.
 
@@ -155,15 +157,35 @@ class Graph(object):
             x_tests = [x_tests]
         if y_tests is not None and not isinstance(y_tests, (list, tuple)):
             y_tests = [y_tests]
+        time_cost_kv = []
+        cross_pooling = False
         for li, layer in enumerate(self.layers):
             self.LOGGER.info(" -------------- Now fit_transforming - [{}] [{}] --------------".format(li, layer))
             layer_start_time = time.time()
             if layer.distribute is True and layer.num_workers is None:
                 layer.num_workers = self.get_num_workers()
+            if self.advance_pooling:
+                if ("MultiGrainScanLayer" == str(layer)
+                        and li < len(self.layers)-1
+                        and "PoolingLayer" == str(self.layers[li+1])):
+                    pooling_layer = self.layers[li+1]
+                    layer.pre_pools = pooling_layer.pools
+                    cross_pooling = True
+                if "PoolingLayer" == str(layer) and cross_pooling:
+                    cross_pooling = False
+                    continue
             x_trains, x_tests = layer.fit_transform(x_trains, y_trains, x_tests, y_tests)
-            self.LOGGER.info('{} time cost: {:.6f} s'.format(layer, time.time() - layer_start_time))
+            time_cost = time.time() - layer_start_time
+            if "AutoGrowingCascadeLayer" in str(layer):
+                self.LOGGER.info('{} time cost: {:.4f} s, avg layer time: {:.4f}s'.format(layer, time_cost,
+                                                                                          time_cost/layer.n_layers))
+            else:
+                self.LOGGER.info('{} time cost: {:.4f} s'.format(layer, time_cost))
+            time_cost_kv.append(("{}".format(layer), time_cost))
         time_cost = time.time() - start_time
         self.LOGGER.info("graph fit_transform finished! Time Cost: {:.6f} s".format(time_cost))
+        for tckv in time_cost_kv:
+            self.LOGGER.info("{} cost {}".format(tckv[0], tckv[1]))
         self.FIT = True
         return x_trains, x_tests
 

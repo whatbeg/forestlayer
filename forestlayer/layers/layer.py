@@ -10,12 +10,15 @@ Base layers definition.
 from __future__ import print_function
 import numpy as np
 import datetime
+import time
 import os.path as osp
 try:
     import cPickle as pickle
 except ImportError:
     import pickle
 import ray
+import forestlayer as fl
+from collections import defaultdict
 from ..utils.log_utils import get_logger, list2str
 from ..utils.layer_utils import check_list_depth
 from ..utils.storage_utils import check_dir, getmbof, output_disk_path, load_disk_cache, save_disk_cache
@@ -172,7 +175,8 @@ class MultiGrainScanLayer(Layer):
     def __init__(self, batch_size=None, dtype=np.float32, name=None, task='classification',
                  windows=None, est_for_windows=None, n_class=None, keep_in_mem=False,
                  cache_in_disk=False, data_save_dir=None, eval_metrics=None, seed=None,
-                 distribute=False, dis_level=1, verbose_dis=True, num_workers=None):
+                 distribute=False, dis_level=1, verbose_dis=True, num_workers=None, lazyscan=True,
+                 pre_pools=None):
         """
         Initialize a multi-grain scan layer.
 
@@ -194,6 +198,8 @@ class MultiGrainScanLayer(Layer):
                             cluster resources, so the parallelization may be larger than len(self.est_configs).
                            2 means that anyway we must split forests.
                            Now 2 is the HIGHEST_DISLEVEL, default is 1.
+        :param lazyscan: if open lazyscan, default is True.
+        :param pre_pools: if we does pre pooling, we fill this variable.
         """
         if not name:
             prefix = 'multi_grain_scan'
@@ -224,6 +230,11 @@ class MultiGrainScanLayer(Layer):
         self.cache_in_disk = cache_in_disk
         self.data_save_dir = data_save_dir
         self.eval_metrics = eval_metrics
+        self.lazy_scan = lazyscan
+        if fl.get_redis_address() is None or fl.get_redis_address().split(':')[0] == "127.0.0.1":
+            self.LOGGER.warn("In standalone mode, it's unnecessary to enable lazyscan, we close it!")
+            self.lazy_scan = False
+        self.pre_pools = pre_pools  # [[pool1, pool2], [pool1, pool2], [pool1, pool2], ...]
 
     def call(self, x_train, **kwargs):
         pass
@@ -241,6 +252,18 @@ class MultiGrainScanLayer(Layer):
         """
         return window.fit_transform(x)
 
+    def scan_shape(self, window, x_shape):
+        n, c, h, w = x_shape
+        nh = (h - window.win_y) / window.stride_y + 1
+        nw = (w - window.win_x) / window.stride_x + 1
+        return nh, nw
+
+    def pool_shape(self, pool, win_shape):
+        h, w = win_shape
+        nh = (h - 1) / pool.win_x + 1
+        nw = (w - 1) / pool.win_y + 1
+        return nh, nw
+
     def _init_estimator(self, est_arguments, wi, ei):
         """
         Initialize an estimator.
@@ -251,7 +274,7 @@ class MultiGrainScanLayer(Layer):
         :return:
         """
         est_args = est_arguments.get_est_args()
-        est_name = 'win - {} - estimator - {} - {}folds'.format(wi, ei, est_args['n_folds'])
+        est_name = 'win-{}-estimator-{}-{}folds'.format(wi, ei, est_args['n_folds'])
         n_folds = int(est_args['n_folds'])
         est_args.pop('n_folds')
         est_type = est_args['est_type']
@@ -292,7 +315,7 @@ class MultiGrainScanLayer(Layer):
             self.LOGGER.info("Cache hit! Loading data from {}, skip fit!".format(train_path))
             return load_disk_cache(data_path=train_path)
         if self.distribute and self.dis_level >= 1:
-            return self._distributed_fit(x_train, y_train)
+            return self._dis_fit(x_train, y_train)
         x_wins_train = []
         for win in self.windows:
             x_wins_train.append(self.scan(win, x_train))
@@ -328,6 +351,8 @@ class MultiGrainScanLayer(Layer):
                             self.LOGGER.info("{}".format(log[1].format(log[2])))
                         elif log[0] == 'WARN':
                             self.LOGGER.warn("{}".format(log))
+                        else:
+                            self.LOGGER.info(str(log))
                 win_est_train.append(y_proba_train)
             if self.keep_in_mem:
                 self.est_for_windows[wi] = ests_for_win
@@ -344,7 +369,9 @@ class MultiGrainScanLayer(Layer):
             self.LOGGER.info("Saving data x_win_est_train to {}".format(data_path))
         return x_win_est_train
 
-    def _distributed_fit(self, x_train, y_train):
+    def _dis_fit(self, x_train, y_train):
+        # TODO: Add lazy scan for _dis_fit
+        # TODO: Add advance pooling for _dis_fit
         """
         Fit.
 
@@ -397,6 +424,8 @@ class MultiGrainScanLayer(Layer):
                             self.LOGGER.info("{}".format(log[1].format(log[2])))
                         elif log[0] == 'WARN':
                             self.LOGGER.warn("{}".format(log))
+                        else:
+                            self.LOGGER.info(str(log))
 
             if self.keep_in_mem:
                 self.est_for_windows[wi] = ests_for_win
@@ -415,7 +444,7 @@ class MultiGrainScanLayer(Layer):
             self.LOGGER.info("Saving data x_win_est_train to {}".format(data_path))
         return x_win_est_train
 
-    def _distribute_fit_transform(self,  x_train, y_train, x_test=None, y_test=None):
+    def _dis_fit_transform(self,  x_train, y_train, x_test=None, y_test=None):
         """
         Fit and transform.
 
@@ -427,24 +456,17 @@ class MultiGrainScanLayer(Layer):
         """
         x_train, y_train = self._check_input(x_train, y_train)
         x_test, y_test = self._check_input(x_test, y_test)
-        # Construct test sets
-        x_wins_train = []
-        x_wins_test = []
-        for win in self.windows:
-            x_wins_train.append(self.scan(win, x_train))
-        for win in self.windows:
-            x_wins_test.append(self.scan(win, x_test))
-        self.LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
-        self.LOGGER.info('X_wins of  test: {}'.format([win.shape for win in x_wins_test]))
+        self.LOGGER.debug('x_train size={}, dtype={}'.format(getmbof(x_train), x_train.dtype))
+        self.LOGGER.debug(' x_test size={}, dtype={}'.format(getmbof(x_test), x_test.dtype))
         x_win_est_train = []
         x_win_est_test = []
         ests = []
         est_offsets = [0, ]
         ei2wi = dict()
         nhs, nws = [None for _ in range(len(self.windows))], [None for _ in range(len(self.windows))]
-        y_win = [None for _ in range(len(self.windows))]
-        y_win_test = [None for _ in range(len(self.windows))]
-        test_sets = [None for _ in range(len(self.windows))]
+        # usually the size of x_test is smaller than x_train, use x_test here to save time
+        for wi, win in enumerate(self.windows):
+            nhs[wi], nws[wi] = self.scan_shape(win, x_test.shape)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             if not isinstance(ests_for_win, (list, tuple)):
                 ests_for_win = [ests_for_win]
@@ -452,22 +474,19 @@ class MultiGrainScanLayer(Layer):
                 ests.append(est)
                 ei2wi[est_offsets[wi] + ei] = (wi, ei)
             est_offsets.append(est_offsets[-1] + len(ests_for_win))
-            _, nhs[wi], nws[wi], _ = x_wins_train[wi].shape
-            x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
-            x_wins_test[wi] = x_wins_test[wi].reshape((x_wins_test[wi].shape[0], -1, x_wins_test[wi].shape[-1]))
-            y_win[wi] = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
-            y_win_test[wi] = None if y_test is None else y_test[:, np.newaxis].repeat(x_wins_test[wi].shape[1], axis=1)
-            test_sets[wi] = [('testOfWin{}'.format(wi), x_wins_test[wi], y_win_test[wi])]
-            self.LOGGER.debug(
-                'x_wins_train[{}] size={}, dtype={}'.format(wi, getmbof(x_wins_train[wi]), x_wins_train[wi].dtype))
-            self.LOGGER.debug('y_win[{}] size={}, dtype={}'.format(wi, getmbof(y_win[wi]), y_win[wi].dtype))
         self.LOGGER.debug('est_offsets = {}'.format(est_offsets))
         self.LOGGER.debug('ei2wi = {}'.format(ei2wi))
         splitting = SplittingKFoldWrapper(dis_level=self.dis_level, estimators=ests, ei2wi=ei2wi,
-                                          num_workers=self.num_workers, seed=self.seed,
-                                          task=self.task, eval_metrics=self.eval_metrics,
+                                          num_workers=self.num_workers, seed=self.seed, windows=self.windows,
+                                          pools=self.pre_pools, task=self.task, eval_metrics=self.eval_metrics,
                                           keep_in_mem=self.keep_in_mem, cv_seed=self.seed, dtype=self.dtype)
-        ests_output = splitting.fit_transform(x_wins_train, y_win, test_sets)
+        if self.lazy_scan:
+            ests_output = splitting.fit_transform_lazyscan(x_train, y_train, x_test, y_test)
+        else:
+            ests_output = splitting.fit_transform(x_train, y_train, x_test, y_test)
+        machines = defaultdict(int)
+        trees = defaultdict(int)
+        machine_time_max = defaultdict(float)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             win_est_train = []
             win_est_test = []
@@ -475,13 +494,19 @@ class MultiGrainScanLayer(Layer):
             nh, nw = nhs[wi], nws[wi]
             # (60000, 121, 49)
             y_proba_train_tests = ests_output[est_offsets[wi]:est_offsets[wi + 1]]
-            for y_proba_tup in y_proba_train_tests:
+            for ei, y_proba_tup in enumerate(y_proba_train_tests):
                 y_proba_train = y_proba_tup[0]
-                y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                if self.pre_pools is not None:
+                    height, width = self.pool_shape(self.pre_pools[wi][ei], (nh, nw))
+                else:
+                    height, width = nh, nw
+                y_proba_train = y_proba_train.reshape((-1, height, width, self.n_class)).transpose((0, 3, 1, 2))
                 y_probas_test = y_proba_tup[1]
                 assert len(y_probas_test) == 1, 'assume there is only one test set!'
                 y_probas_test = y_probas_test[0]
-                y_probas_test = y_probas_test.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                y_probas_test = y_probas_test.reshape((-1, height, width, self.n_class)).transpose((0, 3, 1, 2))
+                # Lack of this line may cause precision issue that is inconsistency of dis and sm
+                y_probas_test = check_dtype(y_probas_test, self.dtype)
                 win_est_train.append(y_proba_train)
                 win_est_test.append(y_probas_test)
                 if len(y_proba_tup) == 3 and self.verbose_dis:
@@ -490,6 +515,15 @@ class MultiGrainScanLayer(Layer):
                             self.LOGGER.info("{}".format(log[1].format(log[2])))
                         elif log[0] == 'WARN':
                             self.LOGGER.warn("{}".format(log))
+                        else:
+                            if str(log).count('Running on'):
+                                machines[log.split(' ')[3]] += 1
+                                trees[log.split(' ')[3]] += int(log.split(' ')[0].split(':')[1])
+                            elif str(log).count('fit time total:'):
+                                machine_time_max[log.split(' ')[0]] = max(machine_time_max[log.split(' ')[0]],
+                                                                          float(log.split(' ')[4]))
+                            else:
+                                self.LOGGER.info(str(log))
 
             # TODO: improving keep estimators.
             if self.keep_in_mem:
@@ -499,6 +533,14 @@ class MultiGrainScanLayer(Layer):
             x_win_est_train.append(win_est_train)
             x_win_est_test.append(win_est_test)
         if len(x_win_est_train) == 0:
+            x_wins_train = []
+            x_wins_test = []
+            for win in self.windows:
+                x_wins_train.append(self.scan(win, x_train))
+            for win in self.windows:
+                x_wins_test.append(self.scan(win, x_test))
+            self.LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
+            self.LOGGER.info('X_wins of  test: {}'.format([win.shape for win in x_wins_test]))
             return x_wins_train, x_wins_test
         self.LOGGER.info('x_win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
         self.LOGGER.info(' x_win_est_test.shape: {}'.format(list2str(x_win_est_test, 2)))
@@ -511,10 +553,11 @@ class MultiGrainScanLayer(Layer):
             save_disk_cache(test_path, x_win_est_test)
             self.LOGGER.info("[dis] Saving data x_win_est_train to {}".format(train_path))
             self.LOGGER.info("[dis] Saving data x_win_est_test to {}".format(test_path))
-        # xxx = x_win_est_train[0][0][:300].reshape(-1)
-        # for num in xxx[:300]:
-        #     print(num, end='')
-        # print()
+        total_task = sum([v for v in machines.values()])
+        for key in machines.keys():
+            self.LOGGER.info('Machine {} was assigned {}:{} / {}, max {}'.format(key, machines[key],
+                                                                                 trees[key], total_task,
+                                                                                 machine_time_max[key]))
         return x_win_est_train, x_win_est_test
 
     def fit_transform(self, x_train, y_train, x_test=None, y_test=None):
@@ -540,7 +583,7 @@ class MultiGrainScanLayer(Layer):
             self.LOGGER.info("Cache hit! Loading test from {}, skip fit!".format(test_path))
             return load_disk_cache(train_path), load_disk_cache(test_path)
         if self.distribute and self.dis_level >= 1:
-            return self._distribute_fit_transform(x_train, y_train, x_test, y_test)
+            return self._dis_fit_transform(x_train, y_train, x_test, y_test)
         # Construct test sets
         x_wins_train = []
         x_wins_test = []
@@ -595,12 +638,16 @@ class MultiGrainScanLayer(Layer):
                 y_probas_test = y_proba_tup[1]
                 y_probas_test = y_probas_test[0]
                 y_probas_test = y_probas_test.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                # Lack of this line may cause precision issue that is inconsistency of dis and sm
+                y_probas_test = check_dtype(y_probas_test, self.dtype)
                 if len(y_proba_tup) == 3 and self.verbose_dis:
                     for log in y_proba_tup[2]:
                         if log[0] == 'INFO':
                             self.LOGGER.info("{}".format(log[1].format(log[2])))
                         elif log[0] == 'WARN':
                             self.LOGGER.warn("{}".format(log))
+                        else:
+                            self.LOGGER.info(str(log))
                 win_est_train.append(y_proba_train)
                 win_est_test.append(y_probas_test)
             if self.keep_in_mem:
@@ -620,10 +667,6 @@ class MultiGrainScanLayer(Layer):
             save_disk_cache(test_path, x_win_est_test)
             self.LOGGER.info("Saving data x_win_est_train to {}".format(train_path))
             self.LOGGER.info("Saving data x_win_est_test to {}".format(test_path))
-        # xxx = x_win_est_train[0][0][:300].reshape(-1)
-        # for num in xxx[:300]:
-        #     print(num, end='')
-        # print()
         return x_win_est_train, x_win_est_test
 
     def transform(self, x_train):
@@ -1136,6 +1179,9 @@ class CascadeLayer(Layer):
         self.train_avg_metric = None
         self.test_avg_metric = None
         self.eval_proba_test = None
+        self.machines = defaultdict(int)
+        self.trees = defaultdict(int)
+        self.machine_time_max = defaultdict(float)
 
     def call(self, inputs, **kwargs):
         return inputs
@@ -1152,7 +1198,7 @@ class CascadeLayer(Layer):
         :return:
         """
         est_args = self.est_args[est_id].copy()
-        est_name = 'layer - {} - estimator - {} - {}folds'.format(layer_id, est_id, est_args['n_folds'])
+        est_name = 'layer-{}-estimator-{}-{}folds'.format(layer_id, est_id, est_args['n_folds'])
         n_folds = int(est_args['n_folds'])
         est_args.pop('n_folds')
         est_type = est_args['est_type']
@@ -1228,9 +1274,11 @@ class CascadeLayer(Layer):
                         self.LOGGER.info("{}".format(log[1].format(log[2])))
                     elif log[0] == 'WARN':
                         self.LOGGER.warn("{}".format(log))
+                    else:
+                        self.LOGGER.info(str(log))
 
             if y_proba_train is None:
-                raise RuntimeError("layer - {} - estimator - {} fit FAILED!,"
+                raise RuntimeError("layer-{}-estimator-{} fit FAILED!,"
                                    " y_proba_train is None!".format(self.layer_id, ei))
             check_shape(y_proba_train, n_trains, n_classes)
             x_proba_train[:, ei * n_classes:ei * n_classes + n_classes] = y_proba_train
@@ -1268,10 +1316,14 @@ class CascadeLayer(Layer):
             y_test_shape = (0,)
         else:
             y_test_shape = y_test.shape
-        self.LOGGER.info('X_train.shape={}, y_train.shape={}, dtype={}'.format(x_train.shape, y_train.shape,
-                                                                               x_train.dtype))
-        self.LOGGER.info(' X_test.shape={},  y_test.shape={}, dtype={}'.format(x_test.shape, y_test_shape,
-                                                                               x_test.dtype))
+        self.LOGGER.debug('X_train.shape={}, size={}, y_train.shape={}, dtype={}'.format(x_train.shape,
+                                                                                         getmbof(x_train),
+                                                                                         y_train.shape,
+                                                                                         x_train.dtype))
+        self.LOGGER.debug(' X_test.shape={}, size={},  y_test.shape={}, dtype={}'.format(x_test.shape,
+                                                                                         getmbof(x_test),
+                                                                                         y_test_shape,
+                                                                                         x_test.dtype))
         n_trains = x_train.shape[0]
         n_tests = x_test.shape[0]
         n_classes = self.n_classes  # if regression, n_classes = 1
@@ -1306,26 +1358,34 @@ class CascadeLayer(Layer):
                 estimators.append(est)
                 y_probas = est.fit_transform(x_train, y_train, y_stratify, test_sets=[('test', x_test,  y_test)])
                 y_proba_train_tests.append(y_probas)
-
         for ei, y_proba_train_tup in enumerate(y_proba_train_tests):
             y_proba_train = y_proba_train_tup[0]
             y_proba_test = y_proba_train_tup[1]
-            if len(y_proba_train_tup) == 3 and self.verbose_dis:
+            if len(y_proba_train_tup) == 3:
                 for log in y_proba_train_tup[2]:
-                    if log[0] == 'INFO':
+                    if log[0] == 'INFO' and self.verbose_dis:
                         self.LOGGER.info("{}".format(log[1].format(log[2])))
-                    elif log[0] == 'WARN':
+                    elif log[0] == 'WARN' and self.verbose_dis:
                         self.LOGGER.warn("{}".format(log))
+                    else:
+                        # self.LOGGER.info(str(log))
+                        if str(log).count('Running on'):
+                            self.machines[log.split(' ')[3]] += 1
+                            self.trees[log.split(' ')[3]] += int(log.split(' ')[0].split(':')[1])
+                        elif str(log).count('fit time total:'):
+                            self.machine_time_max[log.split(' ')[0]] = max(self.machine_time_max[log.split(' ')[0]],
+                                                                           float(log.split(' ')[4]))
 
             # if only one element on test_sets, return one test result like y_proba_train
             if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
                 y_proba_test = y_proba_test[0]
             if y_proba_train is None:
-                raise RuntimeError("layer - {} - estimator - {} fit FAILED!,"
+                raise RuntimeError("layer-{}-estimator-{} fit FAILED!,"
                                    " y_proba_train is None".format(self.layer_id, ei))
             check_shape(y_proba_train, n_trains, n_classes)
             if y_proba_test is not None:
                 check_shape(y_proba_test, n_tests, n_classes)
+                y_proba_test = check_dtype(y_proba_test, self.dtype)
             x_proba_train[:, ei*n_classes:ei*n_classes + n_classes] = y_proba_train
             x_proba_test[:, ei*n_classes:ei*n_classes + n_classes] = y_proba_test
             eval_proba_train += y_proba_train
@@ -1350,6 +1410,11 @@ class CascadeLayer(Layer):
         # if y_test is None, we need to generate test prediction, so keep eval_proba_test
         if y_test is None:
             self.eval_proba_test = eval_proba_test
+        # total_task = sum([v for v in self.machines.values()])
+        # for key in self.machines.keys():
+        #     self.LOGGER.info('Machine {} was assigned {}:{} / {}, max {}'.format(key, self.machines[key],
+        #                                                                          self.trees[key], total_task,
+        #                                                                          self.machine_time_max[key]))
         return x_proba_train, x_proba_test
 
     @property
@@ -1379,7 +1444,7 @@ class CascadeLayer(Layer):
             # transform by n-folds CV
             y_proba = est.transform(X)
             if y_proba is None:
-                raise RuntimeError("layer - {} - estimator - {} transform FAILED!".format(self.layer_id, ei))
+                raise RuntimeError("layer-{}-estimator-{} transform FAILED!".format(self.layer_id, ei))
             check_shape(y_proba, n_trains, n_classes)
             x_proba[:, ei * n_classes:ei * n_classes + n_classes] = y_proba
         return x_proba
@@ -1417,7 +1482,7 @@ class CascadeLayer(Layer):
             # transform by n-folds CV
             y_proba_train = est.transform(X)
             if y_proba_train is None:
-                raise RuntimeError("layer - {} - estimator - {} transform FAILED!".format(self.layer_id, ei))
+                raise RuntimeError("layer-{}-estimator-{} transform FAILED!".format(self.layer_id, ei))
             check_shape(y_proba_train, n_trains, n_classes)
             proba_sum += y_proba_train
         return proba_sum
@@ -1537,9 +1602,7 @@ class AutoGrowingCascadeLayer(Layer):
         self.verbose_dis = verbose_dis
         self.dis_level = dis_level
         if distribute is True:
-            if num_workers is None:
-                self.init_num_workers()
-            else:
+            if num_workers is not None:
                 self.num_workers = num_workers
         # properties
         self.layer_fit_cascades = []
@@ -1759,8 +1822,9 @@ class AutoGrowingCascadeLayer(Layer):
         assert n_groups_train == n_groups_test, 'n_group_train must equal to n_group_test!,' \
                                                 ' but {} and {}'.format(n_groups_train, n_groups_test)
         # Initialize the groups
-        x_train_group = np.zeros((n_trains, 0), dtype=x_trains[0].dtype)
-        x_test_group = np.zeros((n_tests, 0), dtype=x_tests[0].dtype)
+        # 2018-04-17 change x_trains[0].dtype to self.dtype
+        x_train_group = np.zeros((n_trains, 0), dtype=self.dtype)
+        x_test_group = np.zeros((n_tests, 0), dtype=self.dtype)
         group_starts, group_ends, group_dims = [], [], []
         # train set
         for i, x_train in enumerate(x_trains):
@@ -1797,6 +1861,9 @@ class AutoGrowingCascadeLayer(Layer):
         layer_id = 0
         layer_train_metrics, layer_test_metrics = [], []
         opt_data = [None, None]
+        machines = defaultdict(int)
+        trees = defaultdict(int)
+        machine_time_max = defaultdict(float)
         try:
             while True:
                 if layer_id >= self.max_layers > 0:
@@ -1864,11 +1931,14 @@ class AutoGrowingCascadeLayer(Layer):
                     if self.keep_in_mem:  # if not keep_in_mem, self.layer_fit_cascades is None originally
                         for li in range(opt_layer_id + 1, layer_id + 1):
                             self.layer_fit_cascades[li] = None
-                    # return x_cur_train, x_cur_test
                     # return the best layer
                     return opt_data[0], opt_data[2]
                 if self.data_save_rounds > 0 and (layer_id + 1) % self.data_save_rounds == 0:
                     self.save_data(layer_id, False, *opt_data)
+                for key in cascade.machines.keys():
+                    machines[key] += cascade.machines[key]
+                    trees[key] += cascade.trees[key]
+                    machine_time_max[key] = max(machine_time_max[key], cascade.machine_time_max[key])
                 layer_id += 1
             # Max Layer Reached
             # opt_data = [x_cur_train, y_train, x_cur_test, y_test]
@@ -1905,9 +1975,15 @@ class AutoGrowingCascadeLayer(Layer):
             if self.keep_in_mem:
                 for li in range(opt_layer_id + 1, layer_id + 1):
                     self.layer_fit_cascades[li] = None
-            return x_cur_train, x_cur_test
         except KeyboardInterrupt:
             pass
+        finally:
+            total_task = sum([v for v in machines.values()])
+            for key in machines.keys():
+                self.LOGGER.info('[SUMMARY] Machine {} was assigned {}:{} / {}, max {}'.format(key, machines[key],
+                                                                                               trees[key], total_task,
+                                                                                               machine_time_max[key]))
+            return x_cur_train, x_cur_test
 
     def transform(self, X, y=None):
         """
@@ -2063,7 +2139,7 @@ class AutoGrowingCascadeLayer(Layer):
                 data = {"X": x_train, "y": y_train}
             else:
                 data = {"X": x_test, "y": y_test if y_test is not None else np.zeros((0,), dtype=self.dtype)}
-            self.LOGGER.info("Saving {} Data in {} ... X.shape={}, y.shape={}".format(
+            self.LOGGER.debug("Saving {} Data in {} ... X.shape={}, y.shape={}".format(
                 phase, data_path, data["X"].shape, data["y"].shape))
             with open(data_path, "wb") as f:
                 pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
@@ -2324,6 +2400,12 @@ def check_shape(y_proba, n, n_classes):
     if y_proba.shape != (n, n_classes):
         raise ValueError('output shape incorrect!,'
                          ' should be {}, but {}'.format((n, n_classes), y_proba.shape))
+
+
+def check_dtype(y_proba, dtype):
+    if y_proba.dtype != dtype:
+        y_proba = y_proba.astype(dtype)
+    return y_proba
 
 
 def _concat(x, depth):

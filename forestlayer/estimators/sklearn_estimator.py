@@ -17,7 +17,7 @@ from ..utils.log_utils import get_logger
 from sklearn.externals import joblib
 import psutil
 
-LOGGER = get_logger('estimators.sklearn_estimator')
+# LOGGER = get_logger('estimators.sklearn_estimator')
 
 
 def forest_predict_batch_size(clf, X, task):
@@ -30,13 +30,13 @@ def forest_predict_batch_size(clf, X, task):
     :return: batch_size
     """
     # TODO: Different cluster need different batch size determination strategy.
-    free_memory = psutil.virtual_memory().free
-    LOGGER.debug('free_memory: {}'.format(free_memory))
+    free_memory = psutil.virtual_memory().total - psutil.virtual_memory().used
+    # LOGGER.debug('free_memory: {}'.format(free_memory))
     if free_memory < 2e9:
         free_memory = int(2e9)
     # max_mem_size = max(half of free memory, 10GB)
     max_mem_size = max(int(free_memory * 0.7), int(1e10))
-    LOGGER.debug('max_mem_size: {}'.format(max_mem_size))
+    # LOGGER.debug('max_mem_size: {}'.format(max_mem_size))
     if task == 'regression':
         mem_size_1 = clf.n_estimators * 16
     else:
@@ -48,7 +48,7 @@ def forest_predict_batch_size(clf, X, task):
         batch_size = 10
     if batch_size >= X.shape[0]:
         return 0
-    LOGGER.info('batch_size = {} / {} = {}'.format(max_mem_size - 1, mem_size_1, batch_size))
+    # LOGGER.info('batch_size = {} / {} = {}'.format(max_mem_size - 1, mem_size_1, batch_size))
     return batch_size
 
 
