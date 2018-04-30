@@ -1361,11 +1361,11 @@ class CascadeLayer(Layer):
         for ei, y_proba_train_tup in enumerate(y_proba_train_tests):
             y_proba_train = y_proba_train_tup[0]
             y_proba_test = y_proba_train_tup[1]
-            if len(y_proba_train_tup) == 3 and self.verbose_dis:
+            if len(y_proba_train_tup) == 3:
                 for log in y_proba_train_tup[2]:
-                    if log[0] == 'INFO':
+                    if log[0] == 'INFO' and self.verbose_dis:
                         self.LOGGER.info("{}".format(log[1].format(log[2])))
-                    elif log[0] == 'WARN':
+                    elif log[0] == 'WARN' and self.verbose_dis:
                         self.LOGGER.warn("{}".format(log))
                     else:
                         # self.LOGGER.info(str(log))
@@ -1410,11 +1410,11 @@ class CascadeLayer(Layer):
         # if y_test is None, we need to generate test prediction, so keep eval_proba_test
         if y_test is None:
             self.eval_proba_test = eval_proba_test
-        total_task = sum([v for v in self.machines.values()])
-        for key in self.machines.keys():
-            self.LOGGER.info('Machine {} was assigned {}:{} / {}, max {}'.format(key, self.machines[key],
-                                                                                 self.trees[key], total_task,
-                                                                                 self.machine_time_max[key]))
+        # total_task = sum([v for v in self.machines.values()])
+        # for key in self.machines.keys():
+        #     self.LOGGER.info('Machine {} was assigned {}:{} / {}, max {}'.format(key, self.machines[key],
+        #                                                                          self.trees[key], total_task,
+        #                                                                          self.machine_time_max[key]))
         return x_proba_train, x_proba_test
 
     @property
@@ -1866,7 +1866,6 @@ class AutoGrowingCascadeLayer(Layer):
         machine_time_max = defaultdict(float)
         try:
             while True:
-                start_time = time.time()
                 if layer_id >= self.max_layers > 0:
                     break
                 x_cur_train = np.zeros((n_trains, 0), dtype=self.dtype)
@@ -1932,15 +1931,10 @@ class AutoGrowingCascadeLayer(Layer):
                     if self.keep_in_mem:  # if not keep_in_mem, self.layer_fit_cascades is None originally
                         for li in range(opt_layer_id + 1, layer_id + 1):
                             self.layer_fit_cascades[li] = None
-                    # return x_cur_train, x_cur_test
                     # return the best layer
                     return opt_data[0], opt_data[2]
                 if self.data_save_rounds > 0 and (layer_id + 1) % self.data_save_rounds == 0:
                     self.save_data(layer_id, False, *opt_data)
-                # time_cost = time.time() - start_time
-                # self.LOGGER.info("Layer {} time cost: {}".format(layer_id, time_cost))
-                # print("x_proba_test.shape = {}, dtype={}".format(x_proba_test.shape, x_proba_test.dtype))
-                # np.savetxt("layer-{}data.txt".format(layer_id), x_proba_test)
                 for key in cascade.machines.keys():
                     machines[key] += cascade.machines[key]
                     trees[key] += cascade.trees[key]

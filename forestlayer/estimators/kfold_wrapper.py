@@ -372,7 +372,7 @@ class DistributedKFoldWrapper(object):
             redis_client.setex(key_train_seal, 20, '1')
             start_time = get_time()
             x_wins_train = win.fit_transform(x_train)
-            self.logs.append("GENERATE x_wins_train={} in {} for {}".format(getmbof(x_wins_train), local_ip, wi))
+            # self.logs.append("GENERATE x_wins_train={} in {} for {}".format(getmbof(x_wins_train), local_ip, wi))
             x_wins_train_id = ray.put(x_wins_train)
             if time.time() - start_time < 3:  # wait for all other process to subscribe this channel
                 time.sleep(3 - get_time() + start_time)
@@ -387,8 +387,8 @@ class DistributedKFoldWrapper(object):
                     if message['type'] == 'message':
                         data = message['data']
                         x_wins_train = ray.get(ray.local_scheduler.ObjectID(data))
-                        self.logs.append("Bingo! we get off-the-shelf x_wins_train {}!"
-                                         " in {} for {}".format(getmbof(x_wins_train), local_ip, wi))
+                        # self.logs.append("Bingo! we get off-the-shelf x_wins_train {}!"
+                        #                  " in {} for {}".format(getmbof(x_wins_train), local_ip, wi))
                         break
                     time.sleep(0.1)
                     if time.time() - start_time > 5:
@@ -406,7 +406,7 @@ class DistributedKFoldWrapper(object):
             redis_client.setex(key_test_seal, 20, '1')
             start_time = get_time()
             x_wins_test = win.fit_transform(x_test)
-            self.logs.append("GENERATE x_wins_test={} in {} for {}".format(getmbof(x_wins_test), local_ip, wi))
+            # self.logs.append("GENERATE x_wins_test={} in {} for {}".format(getmbof(x_wins_test), local_ip, wi))
             x_wins_test_id = ray.put(x_wins_test)
             if time.time() - start_time < 3:  # wait for all other process to subscribe this channel
                 time.sleep(3 - get_time() + start_time)
@@ -421,8 +421,8 @@ class DistributedKFoldWrapper(object):
                     if message['type'] == 'message':
                         data = message['data']
                         x_wins_test = ray.get(ray.local_scheduler.ObjectID(data))
-                        self.logs.append("Bingo! we get off-the-shelf x_wins_test {}!"
-                                         " in {} for {}".format(getmbof(x_wins_test), local_ip, wi))
+                        # self.logs.append("Bingo! we get off-the-shelf x_wins_test {}!"
+                        #                  " in {} for {}".format(getmbof(x_wins_test), local_ip, wi))
                         break
                     time.sleep(0.1)
                     if time.time() - start_time > 5:
