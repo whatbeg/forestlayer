@@ -109,9 +109,13 @@ run_data/
 run_model/
 
 benchmark/
+EXPERIMENT/
 
 # docs
 docs/site/*
 docs/_build/*
 docs/_static/
 docs/_templates/
+
+# shell script
+*.sh

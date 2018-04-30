@@ -7,5 +7,7 @@ Initialize forestlayer.
 # Authors: Qiu Hu <huqiu00#163.com>
 # License: Apache-2.0
 
-# highest distributed level
-HIGHEST_DISLEVEL = 2
+from forestlayer.core import (init, get_redis_address)
+from forestlayer.utils.storage_utils import savetxt
+
+
