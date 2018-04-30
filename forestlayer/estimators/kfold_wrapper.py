@@ -549,17 +549,13 @@ class DistributedKFoldWrapper(object):
             self.logs.append("Advance pooling in shape: {}".format(y_proba_train.shape))
             nh, nw = self.win_shape
             n_class = y_proba_train.shape[-1]
-            if len(X.shape) == 3:
-                remember_middle = y_proba_train.shape[1]
-            else:
-                remember_middle = None
             y_proba_train = y_proba_train.reshape((-1, nh, nw, n_class)).transpose((0, 3, 1, 2))
             # self.logs.append("y_proba_train.shape = {}".format(y_proba_train.shape))
             y_proba_train = self.pool.fit_transform(y_proba_train)
             # self.logs.append("y_proba_train.shape 2 = {}".format(y_proba_train.shape))
             pool_nh, pool_nw = self.pool_shape(self.pool, self.win_shape)
             # LOGGER.info("pool_nh, pool_nw = {}, remember = {}".format((pool_nh, pool_nw), remember_middle))
-            if remember_middle:
+            if len(X.shape) == 3:
                 y_proba_train = (y_proba_train.reshape((-1, n_class, pool_nh, pool_nw))
                                  .transpose((0, 2, 3, 1))
                                  .reshape((-1, pool_nh*pool_nw, n_class)))
@@ -572,10 +568,6 @@ class DistributedKFoldWrapper(object):
                 y_probas_test[yi] = self.pool.fit_transform(y_proba_test)
                 pool_nh, pool_nw = self.pool_shape(self.pool, self.win_shape)
                 if len(X.shape) == 3:
-                    remember_middle = y_proba_test.shape[1]
-                else:
-                    remember_middle = None
-                if remember_middle:
                     y_probas_test[yi] = (y_probas_test[yi].reshape((-1, n_class, pool_nh, pool_nw))
                                          .transpose((0, 2, 3, 1))
                                          .reshape((-1, pool_nh*pool_nw, n_class)))

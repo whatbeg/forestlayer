@@ -10,7 +10,6 @@ Base layers definition.
 from __future__ import print_function
 import numpy as np
 import datetime
-import time
 import os.path as osp
 try:
     import cPickle as pickle
@@ -869,8 +868,8 @@ class PoolingLayer(Layer):
                 raise ValueError('len(pools[{}]) does not equal to'
                                  ' len(test inputs[{}]), you must set right pools!'.format(pi, pi))
             for pj, pl in enumerate(pool):
-                x_trains[pi][pj] = pl.fit_transform(x_trains[pi][pj])
-                x_tests[pi][pj] = pl.fit_transform(x_tests[pi][pj])
+                x_trains[pi][pj] = pl.fit_transform(x_trains[pi][pj]).astype(self.dtype)
+                x_tests[pi][pj] = pl.fit_transform(x_tests[pi][pj]).astype(self.dtype)
         self.LOGGER.info('x_trains pooled: {}'.format(list2str(x_trains, 2)))
         self.LOGGER.info('x_tests  pooled: {}'.format(list2str(x_tests, 2)))
         # save data into disk.
