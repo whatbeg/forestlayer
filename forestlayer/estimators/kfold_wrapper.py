@@ -511,9 +511,6 @@ class DistributedKFoldWrapper(object):
                     y_proba_cv = np.zeros((n_stratify, y_proba.shape[1]))
                 else:
                     y_proba_cv = np.zeros((n_stratify, y_proba.shape[1], y_proba.shape[2]))
-                # if not splitting, we directly let it be self.dtype to potentially save memory
-                if not self.splitting:
-                    y_proba_cv = y_proba_cv.astype(self.dtype)
                 y_proba_train = y_proba_cv
             y_proba_train[val_idx, :] += y_proba
 
@@ -576,6 +573,9 @@ class DistributedKFoldWrapper(object):
                                          .transpose((0, 2, 3, 1))
                                          .reshape((-1, n_class)))
             # self.logs.append("Advance pooling out shape: {}".format(y_proba_train.shape))
+        # if not splitting, we directly let it be self.dtype to potentially save memory
+        if not self.splitting and y_proba_train.dtype != self.dtype:
+            y_proba_train = y_proba_train.astype(self.dtype)
         return y_proba_train, y_probas_test, self.logs
 
     def transform(self, x_tests):
