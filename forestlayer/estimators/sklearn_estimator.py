@@ -13,11 +13,8 @@ class YOURRegressor(xSKLearnBaseEstimator):
 """
 
 from base_estimator import BaseEstimator
-from ..utils.log_utils import get_logger
 from sklearn.externals import joblib
 import psutil
-
-# LOGGER = get_logger('estimators.sklearn_estimator')
 
 
 def forest_predict_batch_size(clf, X, task):
@@ -48,7 +45,6 @@ def forest_predict_batch_size(clf, X, task):
         batch_size = 10
     if batch_size >= X.shape[0]:
         return 0
-    # LOGGER.info('batch_size = {} / {} = {}'.format(max_mem_size - 1, mem_size_1, batch_size))
     return batch_size
 
 

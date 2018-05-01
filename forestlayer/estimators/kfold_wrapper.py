@@ -511,9 +511,6 @@ class DistributedKFoldWrapper(object):
                     y_proba_cv = np.zeros((n_stratify, y_proba.shape[1]))
                 else:
                     y_proba_cv = np.zeros((n_stratify, y_proba.shape[1], y_proba.shape[2]))
-                # if not splitting, we directly let it be self.dtype to potentially save memory
-                if not self.splitting:
-                    y_proba_cv = y_proba_cv.astype(self.dtype)
                 y_proba_train = y_proba_cv
             y_proba_train[val_idx, :] += y_proba
 
@@ -546,20 +543,16 @@ class DistributedKFoldWrapper(object):
         self.logs.append("{} fit time total: {}".format(ray.services.get_node_ip_address(), add_kfold_time(0)))
         # Advance pooling
         if self.pool is not None:
-            self.logs.append("Advance pooling in shape: {}".format(y_proba_train.shape))
+            # self.logs.append("Advance pooling in shape: {}".format(y_proba_train.shape))
             nh, nw = self.win_shape
             n_class = y_proba_train.shape[-1]
-            if len(X.shape) == 3:
-                remember_middle = y_proba_train.shape[1]
-            else:
-                remember_middle = None
             y_proba_train = y_proba_train.reshape((-1, nh, nw, n_class)).transpose((0, 3, 1, 2))
             # self.logs.append("y_proba_train.shape = {}".format(y_proba_train.shape))
             y_proba_train = self.pool.fit_transform(y_proba_train)
             # self.logs.append("y_proba_train.shape 2 = {}".format(y_proba_train.shape))
             pool_nh, pool_nw = self.pool_shape(self.pool, self.win_shape)
             # LOGGER.info("pool_nh, pool_nw = {}, remember = {}".format((pool_nh, pool_nw), remember_middle))
-            if remember_middle:
+            if len(X.shape) == 3:
                 y_proba_train = (y_proba_train.reshape((-1, n_class, pool_nh, pool_nw))
                                  .transpose((0, 2, 3, 1))
                                  .reshape((-1, pool_nh*pool_nw, n_class)))
@@ -572,10 +565,6 @@ class DistributedKFoldWrapper(object):
                 y_probas_test[yi] = self.pool.fit_transform(y_proba_test)
                 pool_nh, pool_nw = self.pool_shape(self.pool, self.win_shape)
                 if len(X.shape) == 3:
-                    remember_middle = y_proba_test.shape[1]
-                else:
-                    remember_middle = None
-                if remember_middle:
                     y_probas_test[yi] = (y_probas_test[yi].reshape((-1, n_class, pool_nh, pool_nw))
                                          .transpose((0, 2, 3, 1))
                                          .reshape((-1, pool_nh*pool_nw, n_class)))
@@ -583,7 +572,10 @@ class DistributedKFoldWrapper(object):
                     y_probas_test[yi] = (y_probas_test[yi].reshape((-1, n_class, pool_nh, pool_nw))
                                          .transpose((0, 2, 3, 1))
                                          .reshape((-1, n_class)))
-            self.logs.append("Advance pooling out shape: {}".format(y_proba_train.shape))
+            # self.logs.append("Advance pooling out shape: {}".format(y_proba_train.shape))
+        # if not splitting, we directly let it be self.dtype to potentially save memory
+        if not self.splitting and y_proba_train.dtype != self.dtype:
+            y_proba_train = y_proba_train.astype(self.dtype)
         return y_proba_train, y_probas_test, self.logs
 
     def transform(self, x_tests):
@@ -1207,7 +1199,8 @@ def get_estimator(name, task, est_type, est_args):
 
 
 def get_estimator_kfold(name, n_folds=3, task='classification', est_type='FLRF', eval_metrics=None, seed=None,
-                        dtype=np.float32, cache_dir=None, keep_in_mem=True, est_args=None, cv_seed=None):
+                        dtype=np.float32, cache_dir=None, keep_in_mem=True, est_args=None, cv_seed=None,
+                        win_shape=None, pool=None):
     """
     A factory method to get a k-fold estimator.
 
@@ -1222,6 +1215,8 @@ def get_estimator_kfold(name, n_folds=3, task='classification', est_type='FLRF',
     :param keep_in_mem: whether keep the model in memory
     :param est_args: estimator arguments
     :param cv_seed: random seed for cross validation
+    :param win_shape: None
+    :param pool: None
     :return: a KFoldWrapper instance of concrete estimator
     """
     # est_class = est_class_from_type(task, est_type)
@@ -1261,6 +1256,8 @@ def get_dist_estimator_kfold(name, n_folds=3, task='classification', est_type='F
     :param keep_in_mem: whether keep the model in memory
     :param est_args: estimator arguments
     :param cv_seed: random seed for cross validation
+    :param win_shape: None
+    :param pool: None
     :return: a KFoldWrapper instance of concrete estimator
     """
     # est_class = est_class_from_type(task, est_type)

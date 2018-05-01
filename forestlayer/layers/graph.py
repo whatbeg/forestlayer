@@ -167,12 +167,22 @@ class Graph(object):
             if self.advance_pooling:
                 if ("MultiGrainScanLayer" == str(layer)
                         and li < len(self.layers)-1
-                        and "PoolingLayer" == str(self.layers[li+1])):
+                        and "PoolingLayer" == str(self.layers[li+1])
+                        and layer.distribute is True):
                     pooling_layer = self.layers[li+1]
                     layer.pre_pools = pooling_layer.pools
+                    layer.dtype = pooling_layer.dtype
                     cross_pooling = True
                 if "PoolingLayer" == str(layer) and cross_pooling:
                     cross_pooling = False
+                    if layer.dtype != self.layers[li-1].dtype:
+                        for ti, train in enumerate(x_trains):
+                            for i, t in enumerate(train):
+                                x_trains[ti][i] = t.astype(layer.dtype)
+                        if x_tests is not None:
+                            for ti, test in enumerate(x_tests):
+                                for i, t in enumerate(test):
+                                    x_tests[ti][i] = t.astype(layer.dtype)
                     continue
             x_trains, x_tests = layer.fit_transform(x_trains, y_trains, x_tests, y_tests)
             time_cost = time.time() - layer_start_time
