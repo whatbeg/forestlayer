@@ -263,7 +263,7 @@ class MultiGrainScanLayer(Layer):
         nw = (w - 1) / pool.win_y + 1
         return nh, nw
 
-    def _init_estimator(self, est_arguments, wi, ei):
+    def _init_estimator(self, est_arguments, wi, ei, win_shape=None, pool=None):
         """
         Initialize an estimator.
 
@@ -287,6 +287,9 @@ class MultiGrainScanLayer(Layer):
             get_est_func = get_dist_estimator_kfold
         else:
             get_est_func = get_estimator_kfold
+            # single machine mode, no need to pre pool
+            win_shape = None
+            pool = None
         # print('init_estimator seed = {}, cv_seed = {}'.format(seed, cv_seed))
         return get_est_func(name=est_name,
                             n_folds=n_folds,
@@ -297,7 +300,9 @@ class MultiGrainScanLayer(Layer):
                             dtype=self.dtype,
                             keep_in_mem=self.keep_in_mem,
                             est_args=est_args,
-                            cv_seed=seed)
+                            cv_seed=seed,
+                            win_shape=win_shape,
+                            pool=pool)
 
     def fit(self, x_train, y_train):
         """
@@ -598,6 +603,9 @@ class MultiGrainScanLayer(Layer):
         self.LOGGER.info('X_wins of  test: {}'.format([win.shape for win in x_wins_test]))
         x_win_est_train = []
         x_win_est_test = []
+        machines = defaultdict(int)
+        trees = defaultdict(int)
+        machine_time_max = defaultdict(float)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             if not isinstance(ests_for_win, (list, tuple)):
                 ests_for_win = [ests_for_win]
@@ -614,7 +622,11 @@ class MultiGrainScanLayer(Layer):
             # fit estimators for this window
             for ei, est in enumerate(ests_for_win):
                 if isinstance(est, EstimatorConfig):
-                    est = self._init_estimator(est, wi, ei)
+                    pool, win_shape = None, None
+                    if self.pre_pools and self.distribute:
+                        pool = self.pre_pools[wi][ei]
+                        win_shape = (nh, nw)
+                    est = self._init_estimator(est, wi, ei, win_shape=win_shape, pool=pool)
                 # if self.distribute is True, then est is an ActorHandle.
                 ests_for_win[ei] = est
             self.LOGGER.debug('x_wins_train[{}].size = {}'.format(wi, getmbof(x_wins_train[wi])))
@@ -631,12 +643,16 @@ class MultiGrainScanLayer(Layer):
                 y_proba_train_tests = [est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
                                        for est in ests_for_win]
             self.LOGGER.debug('got y_proba_train_tests size = {}'.format(getmbof(y_proba_train_tests)))
-            for y_proba_tup in y_proba_train_tests:
+            for ei, y_proba_tup in enumerate(y_proba_train_tests):
+                if self.pre_pools is not None:
+                    height, width = self.pool_shape(self.pre_pools[wi][ei], (nh, nw))
+                else:
+                    height, width = nh, nw
                 y_proba_train = y_proba_tup[0]
-                y_proba_train = y_proba_train.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                y_proba_train = y_proba_train.reshape((-1, height, width, self.n_class)).transpose((0, 3, 1, 2))
                 y_probas_test = y_proba_tup[1]
                 y_probas_test = y_probas_test[0]
-                y_probas_test = y_probas_test.reshape((-1, nh, nw, self.n_class)).transpose((0, 3, 1, 2))
+                y_probas_test = y_probas_test.reshape((-1, height, width, self.n_class)).transpose((0, 3, 1, 2))
                 # Lack of this line may cause precision issue that is inconsistency of dis and sm
                 y_probas_test = check_dtype(y_probas_test, self.dtype)
                 if len(y_proba_tup) == 3 and self.verbose_dis:
@@ -646,7 +662,14 @@ class MultiGrainScanLayer(Layer):
                         elif log[0] == 'WARN':
                             self.LOGGER.warn("{}".format(log))
                         else:
-                            self.LOGGER.info(str(log))
+                            if str(log).count('Running on'):
+                                machines[log.split(' ')[3]] += 1
+                                trees[log.split(' ')[3]] += int(log.split(' ')[0].split(':')[1])
+                            elif str(log).count('fit time total:'):
+                                machine_time_max[log.split(' ')[0]] = max(machine_time_max[log.split(' ')[0]],
+                                                                          float(log.split(' ')[4]))
+                            else:
+                                self.LOGGER.info(str(log))
                 win_est_train.append(y_proba_train)
                 win_est_test.append(y_probas_test)
             if self.keep_in_mem:
@@ -666,6 +689,11 @@ class MultiGrainScanLayer(Layer):
             save_disk_cache(test_path, x_win_est_test)
             self.LOGGER.info("Saving data x_win_est_train to {}".format(train_path))
             self.LOGGER.info("Saving data x_win_est_test to {}".format(test_path))
+        total_task = sum([v for v in machines.values()])
+        for key in machines.keys():
+            self.LOGGER.info('Machine {} was assigned {}:{} / {}, max {}'.format(key, machines[key],
+                                                                                 trees[key], total_task,
+                                                                                 machine_time_max[key]))
         return x_win_est_train, x_win_est_test
 
     def transform(self, x_train):
