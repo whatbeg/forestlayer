@@ -15,10 +15,6 @@ from forestlayer.layers.graph import Graph
 from forestlayer.estimators.estimator_configs import ExtraRandomForestConfig, RandomForestConfig, Basic4x2
 
 x_train, y_train, x_test, y_test = uci_sEMG.load_data()
-# x_train = x_train[:18]
-# y_train = y_train[:18]
-# x_test = x_test[:12]
-# y_test = y_test[:12]
 
 print("x_train.shape = {}, y_train.shape = {}".format(x_train.shape, y_train.shape))
 print("x_test.shape = {}, y_test.shape = {}".format(x_test.shape, y_test.shape))
@@ -27,8 +23,8 @@ windows = [MGSWindow((1, 157)),
            MGSWindow((1, 375)),
            MGSWindow((1, 750))]
 
-rf1 = ExtraRandomForestConfig(n_folds=1, min_samples_leaf=10)
-rf2 = RandomForestConfig(n_folds=1, min_samples_leaf=10)
+rf1 = ExtraRandomForestConfig(n_folds=3, min_samples_leaf=10, max_features='auto')
+rf2 = RandomForestConfig(n_folds=3, min_samples_leaf=10)
 
 est_for_windows = [[rf1, rf2],
                    [rf1, rf2],

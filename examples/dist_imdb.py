@@ -50,6 +50,7 @@ cascade = AutoGrowingCascadeLayer(est_configs=est_configs,
                                   data_save_dir=data_save_dir,
                                   model_save_dir=model_save_dir,
                                   distribute=True,
+                                  dis_level=0,
                                   seed=0)
 
 cascade.fit_transform(x_train, y_train, x_test, y_test)
