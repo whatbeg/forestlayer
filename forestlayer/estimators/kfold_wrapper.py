@@ -739,7 +739,7 @@ class SplittingKFoldWrapper(object):
                     gen_est = self._init_estimators(est.copy(), wi, wei, self.seed, self.cv_seed,
                                                     splitting=False)
                     split_ests.append(gen_est)
-                    split_ests_ratio.append(1.0)
+                    split_ests_ratio.append([1.0, ])
                     split_group.append([i, ])
                     i += 1
                     continue
@@ -791,8 +791,7 @@ class SplittingKFoldWrapper(object):
                                                 wi, wei, self.seed, self.cv_seed, splitting=False,
                                                 win_shape=win_shape, pool=pool)
                 split_ests.append(gen_est)
-                # TODO: to be np.float64(1.0)?
-                split_ests_ratio.append(1.0)
+                split_ests_ratio.append([1.0, ])
             split_group = [[i, ] for i in range(len(ests))]
         return split_ests, split_ests_ratio, split_group
 
@@ -950,12 +949,11 @@ class CascadeSplittingKFoldWrapper(object):
         """
         Initialize CascadeSplittingKFoldWrapper.
 
-        :param dis_level: distributed level, or parallelization level, 0 / 1 / 2
+        :param dis_level: distributed level, or parallelization level, 0 / 1 / 2 / 3
                            0 means lowest parallelization level, parallelization is len(self.est_configs).
-                           1 means we will split the forests in some condition to making more full use of
-                            cluster resources, so the parallelization may be larger than len(self.est_configs).
-                           2 means that anyway we must split forests.
-                           Now 2 is the HIGHEST_DISLEVEL
+                           1 means triple-split.
+                           2 means bin-split.
+                           3 means avg split
         :param estimators: base estimators.
         :param num_workers: number of workers in the cluster.
         :param seed: random state.
@@ -1012,8 +1010,7 @@ class CascadeSplittingKFoldWrapper(object):
                     gen_est = self._init_estimators(est.copy(), self.layer_id, ei, self.seed, self.cv_seed,
                                                     splitting=False)
                     split_ests.append(gen_est)
-                    # TODO: to be np.float64(1.0)?
-                    split_ests_ratio.append([1.0])
+                    split_ests_ratio.append([1.0, ])
                     split_group.append([i, ])
                     i += 1
                     continue
@@ -1047,8 +1044,7 @@ class CascadeSplittingKFoldWrapper(object):
             for ei, est in enumerate(ests):
                 gen_est = self._init_estimators(est.copy(), self.layer_id, ei, self.seed, self.cv_seed, splitting=False)
                 split_ests.append(gen_est)
-                # TODO: to be np.float64(1.0)?
-                split_ests_ratio.append([1.0])
+                split_ests_ratio.append([1.0, ])
             split_group = [[i, ] for i in range(len(ests))]
         return split_ests, split_ests_ratio, split_group
 

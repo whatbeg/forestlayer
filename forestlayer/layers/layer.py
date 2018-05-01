@@ -191,12 +191,11 @@ class MultiGrainScanLayer(Layer):
         :param seed:
         :param distribute: whether use distributed training. If use, you should `import ray`
                            and write `ray.init(<redis-address>)` at the beginning of the main program.
-        :param dis_level: distributed level, or parallelization level, 0 / 1 / 2
+        :param dis_level: distributed level, or parallelization level, 0 / 1 / 2 / 3
                            0 means lowest parallelization level, parallelization is len(self.est_configs).
-                           1 means we will split the forests in some condition to making more full use of
-                            cluster resources, so the parallelization may be larger than len(self.est_configs).
-                           2 means that anyway we must split forests.
-                           Now 2 is the HIGHEST_DISLEVEL, default is 1.
+                           1 means triple-split.
+                           2 means bin-split.
+                           3 means avg split
         :param lazyscan: if open lazyscan, default is True.
         :param pre_pools: if we does pre pooling, we fill this variable.
         """
@@ -586,7 +585,7 @@ class MultiGrainScanLayer(Layer):
             self.LOGGER.info("Cache hit! Loading train from {}, skip fit!".format(train_path))
             self.LOGGER.info("Cache hit! Loading test from {}, skip fit!".format(test_path))
             return load_disk_cache(train_path), load_disk_cache(test_path)
-        if self.distribute and self.dis_level >= 1:
+        if self.distribute and self.dis_level >= 0:
             return self._dis_fit_transform(x_train, y_train, x_test, y_test)
         # Construct test sets
         x_wins_train = []
@@ -1151,12 +1150,11 @@ class CascadeLayer(Layer):
                            and write `ray.init(<redis-address>)` at the beginning of the main program.
         :param verbose_dis: boolean, whether print logging info that generated on different worker machines.
                             default = False.
-        :param dis_level: distributed level, or parallelization level, 0 / 1 / 2
+        :param dis_level: distributed level, or parallelization level, 0 / 1 / 2 / 3
                            0 means lowest parallelization level, parallelization is len(self.est_configs).
-                           1 means we will split the forests in some condition to making more full use of
-                            cluster resources, so the parallelization may be larger than len(self.est_configs).
-                           2 means that anyway we must split forests.
-                           Now 2 is the HIGHEST_DISLEVEL, default is 1.
+                           1 means triple-split.
+                           2 means bin-split.
+                           3 means avg split
 
         # Properties
             eval_metrics: evaluation metrics
@@ -1592,12 +1590,11 @@ class AutoGrowingCascadeLayer(Layer):
                            and write `ray.init(<redis-address>)` at the beginning of the main program.
         :param verbose_dis: boolean, whether print logging info that generated on different worker machines.
                             default = False.
-        :param dis_level: distributed level, or parallelization level, 0 / 1 / 2
+        :param dis_level: distributed level, or parallelization level, 0 / 1 / 2 / 3
                            0 means lowest parallelization level, parallelization is len(self.est_configs).
-                           1 means we will split the forests in some condition to making more full use of
-                            cluster resources, so the parallelization may be larger than len(self.est_configs).
-                           2 means that anyway we must split forests.
-                           Now 2 is the HIGHEST_DISLEVEL
+                           1 means triple-split.
+                           2 means bin-split.
+                           3 means avg split
         :param num_workers: number of workers in the cluster
         """
         self.est_configs = [] if est_configs is None else est_configs
