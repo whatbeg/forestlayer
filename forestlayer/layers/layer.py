@@ -590,19 +590,6 @@ class MultiGrainScanLayer(Layer):
             return load_disk_cache(train_path), load_disk_cache(test_path)
         if self.distribute and self.dis_level >= 0:
             return self._dis_fit_transform(x_train, y_train, x_test, y_test)
-        # Construct test sets
-        x_wins_train = []
-        x_wins_test = []
-        for win in self.windows:
-            x_wins_train.append(self.scan(win, x_train))
-        for win in self.windows:
-            x_wins_test.append(self.scan(win, x_test))
-        # Deprecated: [[win, win], [win, win], ...], len = len(test_sets)
-        # Deprecated: test_sets = [('testOfWin{}'.format(i), x, y) for i, x, y in enumerate(zip(x_wins_test, y_tests))]
-        self.LOGGER.info('X_wins of train: {}'.format([win.shape for win in x_wins_train]))
-        self.LOGGER.debug('X_wins of train size: {}'.format([(type(win), win.dtype, getmbof(win[:]))
-                                                             for win in x_wins_train]))
-        self.LOGGER.info('X_wins of  test: {}'.format([win.shape for win in x_wins_test]))
         x_win_est_train = []
         x_win_est_test = []
         machines = defaultdict(int)
@@ -614,14 +601,19 @@ class MultiGrainScanLayer(Layer):
                 ests_for_win = [ests_for_win]
             win_est_train = []
             win_est_test = []
+            x_win_train_wi = self.scan(self.windows[wi], x_train)
+            x_win_test_wi = self.scan(self.windows[wi], x_test)
+            self.LOGGER.info('X_win_train_{}: {}'.format(wi, x_win_train_wi.shape))
+            self.LOGGER.debug('X_win_train_{}: {}'.format(wi, getmbof(x_win_train_wi)))
+            self.LOGGER.info('X_win_test_{}: {}'.format(wi, x_win_test_wi.shape))
             # X_wins[wi] = (60000, 11, 11, 49)
-            _, nh, nw, _ = x_wins_train[wi].shape
+            _, nh, nw, _ = x_win_train_wi.shape
             # (60000, 121, 49)
-            x_wins_train[wi] = x_wins_train[wi].reshape((x_wins_train[wi].shape[0], -1, x_wins_train[wi].shape[-1]))
-            y_win = y_train[:, np.newaxis].repeat(x_wins_train[wi].shape[1], axis=1)
-            x_wins_test[wi] = x_wins_test[wi].reshape((x_wins_test[wi].shape[0], -1, x_wins_test[wi].shape[-1]))
-            y_win_test = None if y_test is None else y_test[:, np.newaxis].repeat(x_wins_test[wi].shape[1], axis=1)
-            test_sets = [('testOfWin{}'.format(wi), x_wins_test[wi], y_win_test)]
+            x_win_train_wi = x_win_train_wi.reshape((x_win_train_wi.shape[0], -1, x_win_train_wi.shape[-1]))
+            y_win = y_train[:, np.newaxis].repeat(x_win_train_wi.shape[1], axis=1)
+            x_win_test_wi = x_win_test_wi.reshape((x_win_test_wi.shape[0], -1, x_win_test_wi.shape[-1]))
+            y_win_test = None if y_test is None else y_test[:, np.newaxis].repeat(x_win_test_wi.shape[1], axis=1)
+            test_sets = [('testOfWin{}'.format(wi), x_win_test_wi, y_win_test)]
             # fit estimators for this window
             for ei, est in enumerate(ests_for_win):
                 if isinstance(est, EstimatorConfig):
@@ -632,10 +624,9 @@ class MultiGrainScanLayer(Layer):
                     est = self._init_estimator(est, wi, ei, win_shape=win_shape, pool=pool)
                 # if self.distribute is True, then est is an ActorHandle.
                 ests_for_win[ei] = est
-            self.LOGGER.debug('x_wins_train[{}].size = {}'.format(wi, getmbof(x_wins_train[wi])))
             self.LOGGER.debug('y_win.size = {}'.format(getmbof(y_win)))
             if self.distribute:
-                x_wins_train_obj_id = ray.put(x_wins_train[wi])
+                x_wins_train_obj_id = ray.put(x_win_train_wi)
                 y_win_obj_id = ray.put(y_win)
                 y_stratify = ray.put(y_win[:, 0])
                 test_sets_obj_id = ray.put(test_sets)
@@ -643,7 +634,7 @@ class MultiGrainScanLayer(Layer):
                                                                         y_stratify, test_sets_obj_id)
                                                for est in ests_for_win])
             else:
-                y_proba_train_tests = [est.fit_transform(x_wins_train[wi], y_win, y_win[:, 0], test_sets)
+                y_proba_train_tests = [est.fit_transform(x_win_train_wi, y_win, y_win[:, 0], test_sets)
                                        for est in ests_for_win]
             self.LOGGER.debug('got y_proba_train_tests size = {}'.format(getmbof(y_proba_train_tests)))
             for ei, y_proba_tup in enumerate(y_proba_train_tests):
@@ -681,7 +672,7 @@ class MultiGrainScanLayer(Layer):
             x_win_est_train.append(win_est_train)
             x_win_est_test.append(win_est_test)
         if len(x_win_est_train) == 0:
-            return x_wins_train, x_wins_test
+            raise EOFError("Nothing in x_win_est_train, training failed!")
         self.LOGGER.info('x_win_est_train.shape: {}'.format(list2str(x_win_est_train, 2)))
         self.LOGGER.info(' x_win_est_test.shape: {}'.format(list2str(x_win_est_test, 2)))
         if self.cache_in_disk and self.data_save_dir:
