@@ -490,6 +490,7 @@ class MultiGrainScanLayer(Layer):
         machines = defaultdict(int)
         trees = defaultdict(int)
         machine_time_max = defaultdict(float)
+        machine_time_total = defaultdict(float)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             win_est_train = []
             win_est_test = []
@@ -525,6 +526,7 @@ class MultiGrainScanLayer(Layer):
                             elif str(log).count('fit time total:'):
                                 machine_time_max[log.split(' ')[0]] = max(machine_time_max[log.split(' ')[0]],
                                                                           float(log.split(' ')[4]))
+                                machine_time_total[log.split(' ')[0]] += float(log.split(' ')[4])
                             else:
                                 self.LOGGER.info(str(log))
 
@@ -558,9 +560,10 @@ class MultiGrainScanLayer(Layer):
             self.LOGGER.info("[dis] Saving data x_win_est_test to {}".format(test_path))
         total_task = sum([v for v in machines.values()])
         for key in machines.keys():
-            self.LOGGER.info('Machine {} was assigned {}:{} / {}, max {}'.format(key, machines[key],
-                                                                                 trees[key], total_task,
-                                                                                 machine_time_max[key]))
+            self.LOGGER.info('Machine {} was assigned {}:{} / {}, max {}, total {}'.format(key, machines[key],
+                                                                                           trees[key], total_task,
+                                                                                           machine_time_max[key],
+                                                                                           machine_time_total[key]))
         return x_win_est_train, x_win_est_test
 
     def fit_transform(self, x_train, y_train, x_test=None, y_test=None):
@@ -605,6 +608,7 @@ class MultiGrainScanLayer(Layer):
         machines = defaultdict(int)
         trees = defaultdict(int)
         machine_time_max = defaultdict(float)
+        machine_time_total = defaultdict(float)
         for wi, ests_for_win in enumerate(self.est_for_windows):
             if not isinstance(ests_for_win, (list, tuple)):
                 ests_for_win = [ests_for_win]
@@ -667,6 +671,7 @@ class MultiGrainScanLayer(Layer):
                             elif str(log).count('fit time total:'):
                                 machine_time_max[log.split(' ')[0]] = max(machine_time_max[log.split(' ')[0]],
                                                                           float(log.split(' ')[4]))
+                                machine_time_total[log.split(' ')[0]] += float(log.split(' ')[4])
                             else:
                                 self.LOGGER.info(str(log))
                 win_est_train.append(y_proba_train)
@@ -690,9 +695,10 @@ class MultiGrainScanLayer(Layer):
             self.LOGGER.info("Saving data x_win_est_test to {}".format(test_path))
         total_task = sum([v for v in machines.values()])
         for key in machines.keys():
-            self.LOGGER.info('Machine {} was assigned {}:{} / {}, max {}'.format(key, machines[key],
-                                                                                 trees[key], total_task,
-                                                                                 machine_time_max[key]))
+            self.LOGGER.info('Machine {} was assigned {}:{} / {}, max {}, total {}'.format(key, machines[key],
+                                                                                           trees[key], total_task,
+                                                                                           machine_time_max[key],
+                                                                                           machine_time_total[key]))
         return x_win_est_train, x_win_est_test
 
     def transform(self, x_train):
@@ -1207,6 +1213,7 @@ class CascadeLayer(Layer):
         self.machines = defaultdict(int)
         self.trees = defaultdict(int)
         self.machine_time_max = defaultdict(float)
+        self.machine_time_total = defaultdict(float)
 
     def call(self, inputs, **kwargs):
         return inputs
@@ -1400,6 +1407,7 @@ class CascadeLayer(Layer):
                         elif str(log).count('fit time total:'):
                             self.machine_time_max[log.split(' ')[0]] = max(self.machine_time_max[log.split(' ')[0]],
                                                                            float(log.split(' ')[4]))
+                            self.machine_time_total[log.split(' ')[0]] += float(log.split(' ')[4])
 
             # if only one element on test_sets, return one test result like y_proba_train
             if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
@@ -1888,6 +1896,7 @@ class AutoGrowingCascadeLayer(Layer):
         machines = defaultdict(int)
         trees = defaultdict(int)
         machine_time_max = defaultdict(float)
+        machine_time_total = defaultdict(float)
         try:
             while True:
                 if layer_id >= self.max_layers > 0:
@@ -1963,6 +1972,7 @@ class AutoGrowingCascadeLayer(Layer):
                     machines[key] += cascade.machines[key]
                     trees[key] += cascade.trees[key]
                     machine_time_max[key] = max(machine_time_max[key], cascade.machine_time_max[key])
+                    machine_time_total[key] += cascade.machine_time_total[key]
                 layer_id += 1
             # Max Layer Reached
             # opt_data = [x_cur_train, y_train, x_cur_test, y_test]
@@ -2004,9 +2014,8 @@ class AutoGrowingCascadeLayer(Layer):
         finally:
             total_task = sum([v for v in machines.values()])
             for key in machines.keys():
-                self.LOGGER.info('[SUMMARY] Machine {} was assigned {}:{} / {}, max {}'.format(key, machines[key],
-                                                                                               trees[key], total_task,
-                                                                                               machine_time_max[key]))
+                self.LOGGER.info('[SUMMARY] Machine {} was assigned {}:{} / {}, max {}, total {}'.format(
+                    key, machines[key], trees[key], total_task, machine_time_max[key], machine_time_total[key]))
             return x_cur_train, x_cur_test
 
     def transform(self, X, y=None):
