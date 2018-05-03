@@ -14,8 +14,6 @@ from .dataset import get_dataset_dir
 from keras.utils.data_utils import get_file
 from ..utils.log_utils import get_logger, get_logging_level
 
-# LOGGER = get_logger('datasets.uci_adult')
-
 
 def load_data():
     """
@@ -23,13 +21,11 @@ def load_data():
 
     :return: X_train, y_train, X_test, y_test
     """
-    # LOGGER.setLevel(get_logging_level())
     data_path = 'iris.data'
     data_path = get_file(data_path,
                          origin='http://archive.ics.uci.edu/ml/machine-learning-databases/iris/iris.data',
                          cache_subdir='uci_iris',
                          cache_dir=get_dataset_dir())
-    # LOGGER.info('Load data from directory: {}'.format(osp.dirname(data_path)))
     df = pd.read_csv(data_path, header=None)
     class2num = {'Iris-setosa': 0, 'Iris-versicolor': 1, 'Iris-virginica': 2}
     df[4] = df[4].apply(lambda x: class2num[x])

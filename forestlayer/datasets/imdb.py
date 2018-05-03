@@ -17,8 +17,6 @@ X_train.len: min,mean,max=11,238,2494
 X_test.len: min,mean,max=7,230,2315
 """
 
-# LOGGER = get_logger('datasets.imdb')
-
 
 def load_data(feature_type='tfidf'):
     """
@@ -33,9 +31,6 @@ def load_data(feature_type='tfidf'):
         (x_train, y_train), (x_test, y_test) = imdb.load_data(num_words=max_features)
     else:
         (x_train, y_train), (x_test, y_test) = imdb.load_data(num_words=None)
-    # LOGGER.info('train, test, Average sequence length = {}, {} respectively'.format(
-    #             int(np.mean(list(map(len, x_train)))),
-    #             int(np.mean(list(map(len, x_test))))))
     if feature_type == 'origin':
         max_len = 400
         x_train = sequence.pad_sequences(x_train, maxlen=max_len)

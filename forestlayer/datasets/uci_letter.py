@@ -12,8 +12,6 @@ from keras.utils.data_utils import get_file
 from ..utils.log_utils import get_logger, get_logging_level
 import numpy as np
 
-# LOGGER = get_logger('datasets.uci_letter')
-
 
 def load_data():
     """
@@ -21,14 +19,12 @@ def load_data():
 
     :return: x_train, y_train, x_test, y_test
     """
-    # LOGGER.setLevel(get_logging_level())
     data_path = "letter-recognition.data"
     data_path = get_file(data_path,
                          origin='http://archive.ics.uci.edu/ml/machine-learning-databases/' +
                                 'letter-recognition/letter-recognition.data',
                          cache_subdir='uci_letter',
                          cache_dir=get_dataset_dir())
-    # LOGGER.info("Load data from {}".format(data_path))
     with open(data_path) as f:
         rows = [row.strip().split(',') for row in f.readlines()]
     n_datas = len(rows)
