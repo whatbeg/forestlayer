@@ -274,7 +274,7 @@ class KFoldWrapper(object):
 class DistributedKFoldWrapper(object):
     def __init__(self, name=None, n_folds=3, task='classification', est_type=None, seed=None, dtype=np.float32,
                  splitting=False, eval_metrics=None, cache_dir=None, keep_in_mem=None, est_args=None, cv_seed=None,
-                 win_shape=None, pool=None):
+                 win_shape=None, pool=None, train_start_ends=None, x_train_group_or_id=None, x_test_group_or_id=None):
         """
         Initialize a KFoldWrapper.
 
@@ -321,6 +321,10 @@ class DistributedKFoldWrapper(object):
         # win_shape and pool only belong to MGS layer.
         self.win_shape = win_shape
         self.pool = pool
+        # Lazy assemble
+        self.x_train_group_or_id = x_train_group_or_id
+        self.x_test_group_or_id = x_test_group_or_id
+        self.train_start_ends = train_start_ends
 
     def pool_shape(self, pool, win_shape):
         h, w = win_shape
@@ -433,6 +437,15 @@ class DistributedKFoldWrapper(object):
                 p.unsubscribe(key_test)
         return x_wins_train, x_wins_test
 
+    def assemble(self, x, n_xs, group_or_id):
+        if group_or_id is None:
+            return x
+        x_cur = np.zeros((n_xs, 0), dtype=self.dtype)
+        for (start, end) in self.train_start_ends:
+            x_cur = np.hstack((x_cur, group_or_id[:, start:end]))
+        x_cur = np.hstack((x_cur, x))
+        return x_cur
+
     def fit_transform_lazyscan(self, x_train, y_train, x_test, y_test, win, wi, redis_addr):
         x_wins_train, x_wins_test = self.query(x_train, x_test, win, wi, redis_addr)
         x_wins_train = x_wins_train.reshape((x_wins_train.shape[0], -1, x_wins_train.shape[-1]))
@@ -470,6 +483,16 @@ class DistributedKFoldWrapper(object):
         test_sets = test_sets if test_sets is not None else []
         # K-Fold split
         n_stratify = X.shape[0]
+        if self.x_train_group_or_id is not None:
+            before_shape = X.shape
+            X = self.assemble(X, n_stratify, self.x_train_group_or_id)
+            self.logs.append('Lazy assemble! X before shape: {}, after shape: {}'.format(before_shape, X.shape))
+        if self.x_test_group_or_id is not None:
+            new_test_sets = []
+            for tup in test_sets:
+                new_test_sets.append((tup[0], self.assemble(tup[1], tup[1].shape[0], self.x_test_group_or_id), tup[2]))
+            test_sets = new_test_sets
+            del new_test_sets
         if self.n_folds == 1:
             cv = [(range(len(X)), range(len(X)))]
         else:
@@ -945,7 +968,7 @@ class CascadeSplittingKFoldWrapper(object):
     """
     def __init__(self, dis_level=0, estimators=None, num_workers=None, seed=None, task='classification',
                  eval_metrics=None, keep_in_mem=False, cv_seed=None, dtype=np.float32,
-                 layer_id=None):
+                 layer_id=None, train_start_ends=None, x_train_group_or_id=None, x_test_group_or_id=None):
         """
         Initialize CascadeSplittingKFoldWrapper.
 
@@ -980,6 +1003,9 @@ class CascadeSplittingKFoldWrapper(object):
             # convert estimators from EstimatorConfig to dictionary.
             if isinstance(est, EstimatorConfig):
                 self.estimators[ei] = est.get_est_args().copy()
+        self.x_train_group_or_id = x_train_group_or_id
+        self.x_test_group_or_id = x_test_group_or_id
+        self.train_start_ends = train_start_ends
 
     def splitting(self, ests):
         """
@@ -1087,9 +1113,13 @@ class CascadeSplittingKFoldWrapper(object):
                                         splitting=splitting,
                                         keep_in_mem=self.keep_in_mem,
                                         est_args=est_args,
-                                        cv_seed=cv_seed)
+                                        cv_seed=cv_seed,
+                                        train_start_ends=self.train_start_ends,
+                                        x_train_group_or_id=self.x_train_group_or_id,
+                                        x_test_group_or_id=self.x_test_group_or_id)
 
     def fit(self, x_train, y_train, y_stratify):
+        # TODO: support lazy assemble later
         split_ests, split_ests_ratio, split_group = self.splitting(self.estimators)
         self.LOGGER.debug('split_group = {}'.format(split_group))
         self.LOGGER.debug('split_ests_ratio = {}'.format(split_ests_ratio))
@@ -1236,7 +1266,8 @@ def get_estimator_kfold(name, n_folds=3, task='classification', est_type='FLRF',
 
 def get_dist_estimator_kfold(name, n_folds=3, task='classification', est_type='FLRF', eval_metrics=None,
                              seed=None, dtype=np.float32, splitting=False, cache_dir=None,
-                             keep_in_mem=True, est_args=None, cv_seed=None, win_shape=None, pool=None):
+                             keep_in_mem=True, est_args=None, cv_seed=None, win_shape=None, pool=None,
+                             train_start_ends=None, x_train_group_or_id=None, x_test_group_or_id=None):
     """
     A factory method to get a distributed k-fold estimator.
 
@@ -1276,7 +1307,10 @@ def get_dist_estimator_kfold(name, n_folds=3, task='classification', est_type='F
                                           est_args=est_args,
                                           cv_seed=cv_seed,
                                           win_shape=win_shape,
-                                          pool=pool)
+                                          pool=pool,
+                                          train_start_ends=train_start_ends,
+                                          x_train_group_or_id=x_train_group_or_id,
+                                          x_test_group_or_id=x_test_group_or_id)
 
 
 def determine_split(dis_level, num_workers, ests):

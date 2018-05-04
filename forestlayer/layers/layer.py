@@ -1117,7 +1117,8 @@ class ConcatLayer(Layer):
 class CascadeLayer(Layer):
     def __init__(self, batch_size=None, dtype=None, name=None, task='classification', est_configs=None,
                  layer_id='anonymous', n_classes=None, keep_in_mem=False, data_save_dir=None, model_save_dir=None,
-                 num_workers=None, metrics=None, seed=None, distribute=False, verbose_dis=False, dis_level=1):
+                 num_workers=None, metrics=None, seed=None, distribute=False, verbose_dis=False, dis_level=1,
+                 train_start_ends=None, x_train_group_or_id=None, x_test_group_or_id=None):
         """Cascade Layer.
         A cascade layer contains several estimators, it accepts single input, go through these estimators, produces
         predicted probability by every estimators, and stacks them together for next cascade layer.
@@ -1195,6 +1196,9 @@ class CascadeLayer(Layer):
         self.larger_better = True
         self.metrics = metrics
         self.eval_metrics = get_eval_metrics(self.metrics, self.task, self.name)
+        self.x_train_group_or_id = x_train_group_or_id
+        self.x_test_group_or_id = x_test_group_or_id
+        self.train_start_ends = train_start_ends
         # whether this layer the last layer of Auto-growing cascade layer
         self.complete = False
         self.fit_estimators = [None for _ in range(self.n_estimators)]
@@ -1246,7 +1250,17 @@ class CascadeLayer(Layer):
                             est_args=est_args,
                             cv_seed=seed)
 
+    def assemble(self, x, n_xs, group_or_id):
+        if group_or_id is None:
+            return x
+        x_cur = np.zeros((n_xs, 0), dtype=self.dtype)
+        for (start, end) in self.train_start_ends:
+            x_cur = np.hstack((x_cur, group_or_id[:, start:end]))
+        x_cur = np.hstack((x_cur, x))
+        return x_cur
+
     def fit(self, x_train, y_train):
+        # TODO: support lazy assemble later
         """
         Fit and Transform datasets, return one numpy ndarray: train_output
         NOTE: Only one train set and one test set.
@@ -1364,7 +1378,10 @@ class CascadeLayer(Layer):
             splitting = CascadeSplittingKFoldWrapper(dis_level=self.dis_level, estimators=self.est_args,
                                                      num_workers=self.num_workers, seed=self.seed, task=self.task,
                                                      eval_metrics=self.eval_metrics, keep_in_mem=self.keep_in_mem,
-                                                     cv_seed=self.seed, dtype=self.dtype, layer_id=self.layer_id)
+                                                     cv_seed=self.seed, dtype=self.dtype, layer_id=self.layer_id,
+                                                     train_start_ends=self.train_start_ends,
+                                                     x_train_group_or_id=self.x_train_group_or_id,
+                                                     x_test_group_or_id=self.x_test_group_or_id)
             y_proba_train_tests, split_ests, split_group = splitting.fit_transform(x_train, y_train, y_stratify,
                                                                                    test_sets=[('test', x_test,  y_test)])
             # TODO: fill the estimators
@@ -1373,9 +1390,12 @@ class CascadeLayer(Layer):
             else:
                 estimators = None
         else:
+            assert isinstance(self.x_train_group_or_id, np.ndarray) and isinstance(self.x_test_group_or_id, np.ndarray)
             # fit estimators, get probas
             y_proba_train_tests = []
             estimators = []
+            x_train = self.assemble(x_train, n_trains, self.x_train_group_or_id)
+            x_test = self.assemble(x_test, n_tests, self.x_test_group_or_id)
             for ei in range(self.n_estimators):
                 est = self._init_estimators(self.layer_id, ei)
                 estimators.append(est)
@@ -1391,7 +1411,6 @@ class CascadeLayer(Layer):
                     elif log[0] == 'WARN' and self.verbose_dis:
                         self.LOGGER.warn("{}".format(log))
                     else:
-                        # self.LOGGER.info(str(log))
                         if str(log).count('Running on'):
                             self.machines[log.split(' ')[3]] += 1
                             self.trees[log.split(' ')[3]] += int(log.split(' ')[0].split(':')[1])
@@ -1399,6 +1418,8 @@ class CascadeLayer(Layer):
                             self.machine_time_max[log.split(' ')[0]] = max(self.machine_time_max[log.split(' ')[0]],
                                                                            float(log.split(' ')[4]))
                             self.machine_time_total[log.split(' ')[0]] += float(log.split(' ')[4])
+                        # else:
+                            # self.LOGGER.info(str(log))
 
             # if only one element on test_sets, return one test result like y_proba_train
             if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
@@ -1641,7 +1662,8 @@ class AutoGrowingCascadeLayer(Layer):
         self.keep_test_result = keep_test_result
 
     def _create_cascade_layer(self, est_configs=None, data_save_dir=None, model_save_dir=None,
-                              layer_id=None, metrics=None, seed=None):
+                              layer_id=None, metrics=None, seed=None, train_start_ends=None, x_train_group_or_id=None,
+                              x_test_group_or_id=None):
         """
         Create a cascade layer.
 
@@ -1666,7 +1688,10 @@ class AutoGrowingCascadeLayer(Layer):
                             seed=seed,
                             distribute=self.distribute,
                             verbose_dis=self.verbose_dis,
-                            dis_level=self.dis_level)
+                            dis_level=self.dis_level,
+                            train_start_ends=train_start_ends,
+                            x_train_group_or_id=x_train_group_or_id,
+                            x_test_group_or_id=x_test_group_or_id)
 
     def call(self, x_trains):
         pass
@@ -1888,18 +1913,25 @@ class AutoGrowingCascadeLayer(Layer):
         trees = defaultdict(int)
         machine_time_max = defaultdict(float)
         machine_time_total = defaultdict(float)
+        x_train_group_or_id = ray.put(x_train_group) if self.distribute else x_train_group
+        x_test_group_or_id = ray.put(x_test_group) if self.distribute else x_test_group
         try:
             while True:
                 if layer_id >= self.max_layers > 0:
                     break
-                x_cur_train = np.zeros((n_trains, 0), dtype=self.dtype)
-                x_cur_test = np.zeros((n_tests, 0), dtype=self.dtype)
+                # x_cur_train = np.zeros((n_trains, 0), dtype=self.dtype)
+                # x_cur_test = np.zeros((n_tests, 0), dtype=self.dtype)
                 train_ids = self.look_index_cycle[layer_id % len(self.look_index_cycle)]
-                for gid in train_ids:
-                    x_cur_train = np.hstack((x_cur_train, x_train_group[:, group_starts[gid]:group_ends[gid]]))
-                    x_cur_test = np.hstack((x_cur_test, x_test_group[:, group_starts[gid]:group_ends[gid]]))
-                x_cur_train = np.hstack((x_cur_train, x_proba_train))
-                x_cur_test = np.hstack((x_cur_test, x_proba_test))
+                # for gid in train_ids:
+                #     x_cur_train = np.hstack((x_cur_train, x_train_group[:, group_starts[gid]:group_ends[gid]]))
+                #     x_cur_test = np.hstack((x_cur_test, x_test_group[:, group_starts[gid]:group_ends[gid]]))
+                train_start_ends = [(group_starts[gid], group_ends[gid]) for gid in train_ids]
+                # x_cur_train = np.hstack((x_cur_train, x_proba_train))
+                # x_cur_test = np.hstack((x_cur_test, x_proba_test))
+                assert x_proba_train.dtype == self.dtype, ("x_proba_train dtype = {} != self.dtype({})".format(
+                    x_proba_train.dtype, self.dtype))
+                x_cur_train = x_proba_train
+                x_cur_test = x_proba_test
                 data_save_dir = self.data_save_dir
                 if data_save_dir is not None:
                     data_save_dir = osp.join(data_save_dir, 'cascade_layer_{}'.format(layer_id))
@@ -1911,7 +1943,10 @@ class AutoGrowingCascadeLayer(Layer):
                                                      model_save_dir=model_save_dir,
                                                      layer_id=layer_id,
                                                      metrics=self.metrics,
-                                                     seed=self.seed)
+                                                     seed=self.seed,
+                                                     train_start_ends=train_start_ends,
+                                                     x_train_group_or_id=x_train_group_or_id,
+                                                     x_test_group_or_id=x_test_group_or_id)
                 x_proba_train, x_proba_test = cascade.fit_transform(x_cur_train, y_train, x_cur_test, y_test)
                 if self.keep_in_mem:
                     self.layer_fit_cascades.append(cascade)
