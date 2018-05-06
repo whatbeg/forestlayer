@@ -1378,6 +1378,60 @@ def determine_split(dis_level, num_workers, ests):
             splits.append(split_i)
         make_span_should_split, splits = greedy_makespan_split(splits, avg_trees, denom, forest_idx_tuples)
         return should_split or make_span_should_split, splits
+    if dis_level == 4:
+        splits = []
+        for i, est in enumerate(ests):
+            num_trees = est.get('n_estimators', 500)
+            if est.get('est_type') in ['FLRF', 'FLCRF']:
+                splits.append([num_trees / 4,
+                               num_trees / 4,
+                               num_trees / 4,
+                               num_trees - (num_trees / 4) * 3])
+            else:
+                splits.append([-1])
+        return True, splits
+    if dis_level == 5:
+        splits = []
+        for i, est in enumerate(ests):
+            num_trees = est.get('n_estimators', 500)
+            if est.get('est_type') in ['FLRF', 'FLCRF']:
+                splits.append([num_trees / 5,
+                               num_trees / 5,
+                               num_trees / 5,
+                               num_trees / 5,
+                               num_trees - (num_trees / 5) * 4])
+            else:
+                splits.append([-1])
+        return True, splits
+    if dis_level == 6:
+        splits = []
+        for i, est in enumerate(ests):
+            num_trees = est.get('n_estimators', 500)
+            if est.get('est_type') in ['FLRF', 'FLCRF']:
+                splits.append([num_trees / 6,
+                               num_trees / 6,
+                               num_trees / 6,
+                               num_trees / 6,
+                               num_trees / 6,
+                               num_trees - (num_trees / 6) * 5])
+            else:
+                splits.append([-1])
+        return True, splits
+    if dis_level == 7:
+        splits = []
+        for i, est in enumerate(ests):
+            num_trees = est.get('n_estimators', 500)
+            if est.get('est_type') in ['FLRF', 'FLCRF']:
+                splits.append([num_trees / 7,
+                               num_trees / 7,
+                               num_trees / 7,
+                               num_trees / 7,
+                               num_trees / 7,
+                               num_trees / 7,
+                               num_trees - (num_trees / 7) * 6])
+            else:
+                splits.append([-1])
+        return True, splits
     return False, None
 
 
