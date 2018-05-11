@@ -603,9 +603,9 @@ class MultiGrainScanLayer(Layer):
             win_est_test = []
             x_win_train_wi = self.scan(self.windows[wi], x_train)
             x_win_test_wi = self.scan(self.windows[wi], x_test)
-            self.LOGGER.info('X_win_train_{}: {}'.format(wi, x_win_train_wi.shape))
+            self.LOGGER.info('X_win_train_{}: {}, size={}'.format(wi, x_win_train_wi.shape, getmbof(x_win_train_wi)))
             self.LOGGER.debug('X_win_train_{}: {}'.format(wi, getmbof(x_win_train_wi)))
-            self.LOGGER.info('X_win_test_{}: {}'.format(wi, x_win_test_wi.shape))
+            self.LOGGER.info('X_win_test_{}: {}, size={}'.format(wi, x_win_test_wi.shape, getmbof(x_win_test_wi)))
             # X_wins[wi] = (60000, 11, 11, 49)
             _, nh, nw, _ = x_win_train_wi.shape
             # (60000, 121, 49)
