@@ -1326,7 +1326,7 @@ def determine_split(dis_level, num_workers, ests):
     """
     if dis_level == 0:
         return False, []
-    if dis_level == 1:
+    if dis_level == 3:
         splits = []
         for i, est in enumerate(ests):
             num_trees = est.get('n_estimators', 500)
@@ -1346,7 +1346,7 @@ def determine_split(dis_level, num_workers, ests):
             else:
                 splits.append([-1])
         return True, splits
-    if dis_level == 3:
+    if dis_level == 1:
         forest_ests = [est for est in ests if est.get('est_type') in ['FLRF', 'FLCRF']]
         non_forest_estimators = len(ests) - len(forest_ests)
         num_trees = map(lambda x: x.get('n_estimators', 500), forest_ests)
