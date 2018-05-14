@@ -37,6 +37,9 @@ agc = AutoGrowingCascadeLayer(est_configs=est_configs,
                               n_classes=26,
                               data_save_dir=osp.join(get_data_save_base(), 'uci_letter', 'auto_cascade'),
                               keep_in_mem=False,
+                              distribute=False,
+                              dis_level=0,
+                              verbose_dis=False,
                               seed=0)
 
 model = Graph()

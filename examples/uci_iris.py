@@ -44,6 +44,8 @@ auto_cascade = AutoGrowingCascadeLayer(est_configs=est_configs,
                                        data_save_dir=data_save_dir,
                                        model_save_dir=model_save_dir,
                                        distribute=False,
+                                       dis_level=0,
+                                       verbose_dis=False,
                                        seed=0)
 
 model = Graph()

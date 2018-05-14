@@ -12,22 +12,30 @@ from forestlayer.datasets import uci_adult
 from forestlayer.layers import Graph, AutoGrowingCascadeLayer
 from forestlayer.utils.storage_utils import get_data_save_base
 from forestlayer.estimators.estimator_configs import ExtraRandomForestConfig, RandomForestConfig
+import forestlayer as fl
 import time
 import numpy as np
 import os.path as osp
 
-start_time = time.time()
+fl.init()
+
 (x_train, y_train, x_test, y_test) = uci_adult.load_data()
+
+start_time = time.time()
 
 print(x_train.shape[0], 'train samples')
 print(x_test.shape[0], 'test samples')
 print(x_train.shape[1], 'features')
 
 est_configs = [
-    RandomForestConfig(),
-    RandomForestConfig(),
     ExtraRandomForestConfig(),
-    ExtraRandomForestConfig()
+    ExtraRandomForestConfig(),
+    ExtraRandomForestConfig(),
+    ExtraRandomForestConfig(),
+    RandomForestConfig(),
+    RandomForestConfig(),
+    RandomForestConfig(),
+    RandomForestConfig(),
 ]
 
 agc = AutoGrowingCascadeLayer(est_configs=est_configs,
@@ -38,7 +46,11 @@ agc = AutoGrowingCascadeLayer(est_configs=est_configs,
                               data_save_rounds=0,
                               data_save_dir=osp.join(get_data_save_base(), 'uci_adult', 'auto_cascade'),
                               keep_in_mem=False,
-                              dtype=np.float32)
+                              distribute=True,
+                              dis_level=2,
+                              verbose_dis=False,
+                              dtype=np.float32,
+                              seed=0)
 
 model = Graph()
 model.add(agc)
