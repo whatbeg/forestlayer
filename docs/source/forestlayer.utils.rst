@@ -25,10 +25,10 @@ utils\.storage\_utils
     :undoc-members:
     :show-inheritance:
 
-utils\.utils
+utils\.layer\_utils
 --------------------------------
 
-.. automodule:: forestlayer.utils.utils
+.. automodule:: forestlayer.utils.layer_utils
     :members:
     :undoc-members:
     :show-inheritance:
