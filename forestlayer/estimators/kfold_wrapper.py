@@ -487,9 +487,7 @@ class DistributedKFoldWrapper(object):
         # K-Fold split
         n_stratify = X.shape[0]
         if self.x_train_group_or_id is not None:
-            before_shape = X.shape
             X = self.assemble(X, n_stratify, self.x_train_group_or_id)
-            self.logs.append('Lazy assemble! X before shape: {}, after shape: {}'.format(before_shape, X.shape))
         if self.x_test_group_or_id is not None:
             new_test_sets = []
             for tup in test_sets:
@@ -518,10 +516,8 @@ class DistributedKFoldWrapper(object):
                 train_idx, val_idx = cv[k]
             else:
                 val_idx, train_idx = cv[k]
-            start_time = time.time()
             # fit on k-fold train
             est.fit(X[train_idx].reshape((-1, self.n_dims)), y[train_idx].reshape(-1), cache_dir=self.cache_dir)
-            add_fit_time(time.time() - start_time)
             # predict on k-fold validation
             y_proba = est.predict_proba(X[val_idx].reshape((-1, self.n_dims)), cache_dir=self.cache_dir)
             if not est.is_classification:
@@ -1151,13 +1147,65 @@ class CascadeSplittingKFoldWrapper(object):
         ests_output = [est.fit_transform.remote(x_train_obj_id, y_train_obj_id, y_stratify_obj_id,
                                                 test_sets=test_sets_obj_id)
                        for est in split_ests]
+        # k = ray.get(ests_output)
+        # try:
+        #     est_group_result = local_merge_group(split_group, split_ests_ratio, k, self.dtype)
+        # except Exception, e:
+        #     print(e)
         est_group = merge_group(split_group, split_ests_ratio, ests_output, self.dtype)
-        est_group_result = ray.get(est_group)
+        try:
+            est_group_result = ray.get(est_group)
+        except Exception, e:
+            print(e)
+            raise Exception(e)
         return est_group_result, split_ests, split_group
 
 
 @ray.remote
 def merge(tup_1, ratio1, tup_2, ratio2, dtype=np.float32):
+    """
+    Merge 2 tuple of (y_proba_train, y_proba_tests, logs).
+    NOTE: Now in splitting mode, the logs will be approximate log, because we should calculate metrics after collect
+     y_proba, but now we calculate metrics on small forests, respectively, so the average of metrics of two forests
+     must be inaccurate, you should mind this and do not worry about it. After merge, the average y_proba is the true
+     proba, so the final results is absolutely right!
+
+    :param tup_1: tuple like (y_proba_train, y_proba_tests, logs)
+    :param ratio1: ratio occupied by tuple 1
+    :param tup_2: tuple like (y_proba_train, y_proba_tests, logs)
+    :param ratio2: ratio occupied by tuple 2
+    :param dtype: result data type. when we invoke merge, we must in splitting mode, in this mode, we will keep
+                   origin float-point precision (may be float64), and when we combine result of small forests, we
+                   should convert the data type to self.dtype (may be float32), which can reduce memory and
+                   communication overhead.
+    :return: tuple of results, (y_proba_train: numpy.ndarray,
+              y_proba_tests: numpy.ndarray, may be None, list of y_proba_test,
+              logs: list of tuple which contains log level, log info)
+    """
+    tests = []
+    for i in range(len(tup_1[1])):
+        tests.append((tup_1[1][i] * ratio1 + tup_2[1][i] * ratio2).astype(dtype))
+    mean_dict = defaultdict(float)
+    logs = []
+    for t1 in tup_1[2]:
+        if t1[0] == 'INFO':
+            mean_dict[','.join(t1[:2])] += t1[2] * ratio1
+        else:
+            logs.append(t1)
+    for t2 in tup_2[2]:
+        if t2[0] == 'INFO':
+            mean_dict[','.join(t2[:2])] += t2[2] * ratio2
+        else:
+            logs.append(t2)
+    for key in mean_dict.keys():
+        # mean_dict[key] = mean_dict[key]
+        key_split = key.split(',')
+        logs.append((key_split[0], key_split[1], mean_dict[key]))
+    logs.sort()
+    return (tup_1[0] * ratio1 + tup_2[0] * ratio2).astype(dtype), tests, logs
+
+
+def local_merge(tup_1, ratio1, tup_2, ratio2, dtype=np.float32):
     """
     Merge 2 tuple of (y_proba_train, y_proba_tests, logs).
     NOTE: Now in splitting mode, the logs will be approximate log, because we should calculate metrics after collect
@@ -1286,6 +1334,9 @@ def get_dist_estimator_kfold(name, n_folds=3, task='classification', est_type='F
     :param cv_seed: random seed for cross validation
     :param win_shape: None
     :param pool: None
+    :param train_start_ends: None
+    :param x_train_group_or_id: None
+    :param x_test_group_or_id: None
     :return: a KFoldWrapper instance of concrete estimator
     """
     # est_class = est_class_from_type(task, est_type)
@@ -1414,7 +1465,7 @@ def merge_group(split_group, split_ests_ratio, ests_output, self_dtype):
     est_group = []
     for gi, grp in enumerate(split_group):
         ests_ratio = split_ests_ratio[gi]
-        assert sum(ests_ratio) == 1.0, "The sum of est_ratio is not equal to 1!"
+        assert equaleps(sum(ests_ratio), 1.0), "The sum of est_ratio is not equal to 1, but {}!".format(sum(ests_ratio))
         group = [ests_output[i] for i in grp[:]]
         if len(grp) > 2:
             while len(group) > 1:
@@ -1430,6 +1481,47 @@ def merge_group(split_group, split_ests_ratio, ests_output, self_dtype):
             # tree reduce
             est_group.append(merge.remote(group[0], ests_ratio[0],
                                           group[1], ests_ratio[1], dtype=self_dtype))
+        else:
+            est_group.append(group[0])
+    return est_group
+
+
+def equaleps(a, b):
+    eps = 1e-10
+    if b + eps >= a >= b - eps:
+        return True
+    return False
+
+
+def local_merge_group(split_group, split_ests_ratio, ests_output, self_dtype):
+    """
+    Merge split estimators output.
+
+    :param split_group: [[0, 1, 2], [3, 4, 5]]
+    :param split_ests_ratio: [[0.332, 0.334, 0.334], [0.332, 0.334, 0.334]]
+    :param ests_output: [out0, out1, out2, out3, out4, out5]
+    :param self_dtype: np.float32 or np.float64
+    :return:
+    """
+    est_group = []
+    for gi, grp in enumerate(split_group):
+        ests_ratio = split_ests_ratio[gi]
+        assert equaleps(sum(ests_ratio), 1.0), "The sum of est_ratio is not equal to 1, but {}!".format(sum(ests_ratio))
+        group = [ests_output[i] for i in grp[:]]
+        if len(grp) > 2:
+            while len(group) > 1:
+                if len(group) == 2:
+                    dtype = self_dtype
+                else:
+                    dtype = np.float64
+                group = group[2:] + [local_merge(group[0], ests_ratio[0],
+                                                 group[1], ests_ratio[1], dtype=dtype)]
+                ests_ratio = ests_ratio[2:] + [np.float64(1.0)]
+            est_group.append(group[0])
+        elif len(grp) == 2:
+            # tree reduce
+            est_group.append(local_merge(group[0], ests_ratio[0],
+                                         group[1], ests_ratio[1], dtype=self_dtype))
         else:
             est_group.append(group[0])
     return est_group
