@@ -247,16 +247,27 @@ class TestKFoldWrapper(unittest.TestCase):
             # print(split_scheme)
             assert split_scheme == [[100, 100], [-1], [-1], [-1]]
 
+    def test_determine_split_uniform(self, dis_level=3):
+        ests = [
+            RandomForestConfig(n_estimators=500).get_est_args(),
+            RandomForestConfig(n_estimators=500).get_est_args(),
+            ExtraRandomForestConfig(n_estimators=500).get_est_args(),
+            ExtraRandomForestConfig(n_estimators=500).get_est_args()
+        ]
+        should_split, split_scheme = determine_split(50, 3, ests)
+        print(should_split, split_scheme)
+
     def test_determine_split(self):
-        for i in [2, 3]:
-            self.determine_split1(i)
-            self.determine_split2(i)
-            self.determine_split3(i)
-            self.determine_split4(i)
-            self.determine_split5(i)
-            self.determine_split6(i)
-            self.determine_split7(i)
-            self.determine_split8(i)
+        # for i in [2, 3]:
+        #     self.determine_split1(i)
+        #     self.determine_split2(i)
+        #     self.determine_split3(i)
+        #     self.determine_split4(i)
+        #     self.determine_split5(i)
+        #     self.determine_split6(i)
+        #     self.determine_split7(i)
+        #     self.determine_split8(i)
+        pass
 
 
 if __name__ == '__main__':
