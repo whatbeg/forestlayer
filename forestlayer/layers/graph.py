@@ -188,7 +188,8 @@ class Graph(object):
             time_cost = time.time() - layer_start_time
             if "AutoGrowingCascadeLayer" in str(layer):
                 self.LOGGER.info('{} time cost: {:.4f} s, avg layer time: {:.4f}s'.format(layer, time_cost,
-                                                                                          time_cost/layer.n_layers))
+                                                                                          time_cost/layer.n_layers
+                                                                                          if layer.n_layers > 0 else 0))
             else:
                 self.LOGGER.info('{} time cost: {:.4f} s'.format(layer, time_cost))
             time_cost_kv.append(("{}".format(layer), time_cost))
