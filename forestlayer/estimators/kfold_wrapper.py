@@ -476,6 +476,7 @@ class DistributedKFoldWrapper(object):
         """
         self.logs.append("{}:{} Running on {}".format(self.name, self.est_args.get('n_estimators', -1),
                                                       ray.services.get_node_ip_address()))
+        self.logs.append("{} start {}".format(ray.services.get_node_ip_address(), time.time()))
         if self.keep_in_mem is None:
             self.keep_in_mem = False
         assert 2 <= len(X.shape) <= 3, "X.shape should be n x k or n x n2 x k"
@@ -509,7 +510,6 @@ class DistributedKFoldWrapper(object):
         y_probas_test = []
         self.n_dims = X.shape[-1]
         inverse = False
-        fold_start_time = time.time()
         for k in range(self.n_folds):
             # fuse mechanism. Keep memory using safety.
             fuse()
@@ -564,8 +564,6 @@ class DistributedKFoldWrapper(object):
         for vi, (test_name, X_test, y_test) in enumerate(test_sets):
             if y_test is not None:
                 self.log_metrics(self.name, y_test, y_probas_test[vi], test_name)
-        add_kfold_time(time.time() - fold_start_time)
-        self.logs.append("{} fit time total: {}".format(ray.services.get_node_ip_address(), add_kfold_time(0)))
         # Advance pooling
         if self.pool is not None:
             # self.logs.append("Advance pooling in shape: {}".format(y_proba_train.shape))
@@ -601,6 +599,7 @@ class DistributedKFoldWrapper(object):
         # if not splitting, we directly let it be self.dtype to potentially save memory
         if not self.splitting and y_proba_train.dtype != self.dtype:
             y_proba_train = y_proba_train.astype(self.dtype)
+        self.logs.append("{} end {}".format(ray.services.get_node_ip_address(), time.time()))
         return y_proba_train, y_probas_test, self.logs
 
     def transform(self, x_tests):
@@ -1380,57 +1379,22 @@ def determine_split(dis_level, num_workers, ests):
             splits.append(split_i)
         make_span_should_split, splits = greedy_makespan_split(splits, avg_trees, denom, forest_idx_tuples)
         return should_split or make_span_should_split, splits
-    if dis_level == 4:
+    if 500 >= dis_level >= 4:
         splits = []
         for i, est in enumerate(ests):
             num_trees = est.get('n_estimators', 500)
+            dis_level = min(dis_level, num_trees)
             if est.get('est_type') in ['FLRF', 'FLCRF']:
-                splits.append([num_trees / 4,
-                               num_trees / 4,
-                               num_trees / 4,
-                               num_trees - (num_trees / 4) * 3])
-            else:
-                splits.append([-1])
-        return True, splits
-    if dis_level == 5:
-        splits = []
-        for i, est in enumerate(ests):
-            num_trees = est.get('n_estimators', 500)
-            if est.get('est_type') in ['FLRF', 'FLCRF']:
-                splits.append([num_trees / 5,
-                               num_trees / 5,
-                               num_trees / 5,
-                               num_trees / 5,
-                               num_trees - (num_trees / 5) * 4])
-            else:
-                splits.append([-1])
-        return True, splits
-    if dis_level == 6:
-        splits = []
-        for i, est in enumerate(ests):
-            num_trees = est.get('n_estimators', 500)
-            if est.get('est_type') in ['FLRF', 'FLCRF']:
-                splits.append([num_trees / 6,
-                               num_trees / 6,
-                               num_trees / 6,
-                               num_trees / 6,
-                               num_trees / 6,
-                               num_trees - (num_trees / 6) * 5])
-            else:
-                splits.append([-1])
-        return True, splits
-    if dis_level == 7:
-        splits = []
-        for i, est in enumerate(ests):
-            num_trees = est.get('n_estimators', 500)
-            if est.get('est_type') in ['FLRF', 'FLCRF']:
-                splits.append([num_trees / 7,
-                               num_trees / 7,
-                               num_trees / 7,
-                               num_trees / 7,
-                               num_trees / 7,
-                               num_trees / 7,
-                               num_trees - (num_trees / 7) * 6])
+                tmp = []
+                div = num_trees / dis_level
+                mod = num_trees % dis_level
+                for v in range(dis_level):
+                    if mod > 0:
+                        tmp.append(div + 1)
+                        mod -= 1
+                    else:
+                        tmp.append(div)
+                splits.append(tmp)
             else:
                 splits.append([-1])
         return True, splits
