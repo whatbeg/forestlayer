@@ -1207,8 +1207,8 @@ class CascadeLayer(Layer):
         self.eval_proba_test = None
         self.machines = defaultdict(int)
         self.trees = defaultdict(int)
-        self.machine_time_max = defaultdict(float)
-        self.machine_time_total = defaultdict(float)
+        self.machine_time_start = defaultdict(float)
+        self.machine_time_end = defaultdict(float)
 
     def call(self, inputs, **kwargs):
         return inputs
@@ -1414,12 +1414,15 @@ class CascadeLayer(Layer):
                         if str(log).count('Running on'):
                             self.machines[log.split(' ')[3]] += 1
                             self.trees[log.split(' ')[3]] += int(log.split(' ')[0].split(':')[1])
-                        elif str(log).count('fit time total:'):
-                            self.machine_time_max[log.split(' ')[0]] = max(self.machine_time_max[log.split(' ')[0]],
-                                                                           float(log.split(' ')[4]))
-                            self.machine_time_total[log.split(' ')[0]] += float(log.split(' ')[4])
-                        # else:
-                            # self.LOGGER.info(str(log))
+                        elif str(log).count('start'):
+                            if log.split(' ')[0] not in self.machine_time_start.keys():
+                                self.machine_time_start[log.split(' ')[0]] = float(log.split(' ')[2])
+                            else:
+                                self.machine_time_start[log.split(' ')[0]] = min(self.machine_time_start[log.split(' ')[0]],
+                                                                                 float(log.split(' ')[2]))
+                        elif str(log).count('end'):
+                            self.machine_time_end[log.split(' ')[0]] = max(self.machine_time_end[log.split(' ')[0]],
+                                                                           float(log.split(' ')[2]))
 
             # if only one element on test_sets, return one test result like y_proba_train
             if isinstance(y_proba_test, (list, tuple)) and len(y_proba_test) == 1:
@@ -1455,11 +1458,11 @@ class CascadeLayer(Layer):
         # if y_test is None, we need to generate test prediction, so keep eval_proba_test
         if y_test is None:
             self.eval_proba_test = eval_proba_test
-        # total_task = sum([v for v in self.machines.values()])
-        # for key in self.machines.keys():
-        #     self.LOGGER.info('Machine {} was assigned {}:{} / {}, max {}'.format(key, self.machines[key],
-        #                                                                          self.trees[key], total_task,
-        #                                                                          self.machine_time_max[key]))
+        total_task = sum([v for v in self.machines.values()])
+        for key in self.machines.keys():
+            self.LOGGER.info('Machine {} was assigned {}:{} / {}, across {},'.format(
+                key, self.machines[key], self.trees[key], total_task,
+                self.machine_time_end[key] - self.machine_time_start[key]))
         return x_proba_train, x_proba_test
 
     @property
@@ -1911,8 +1914,8 @@ class AutoGrowingCascadeLayer(Layer):
         opt_data = [None, None]
         machines = defaultdict(int)
         trees = defaultdict(int)
-        machine_time_max = defaultdict(float)
-        machine_time_total = defaultdict(float)
+        machine_time_start = defaultdict(float)
+        machine_time_end = defaultdict(float)
         x_train_group_or_id = ray.put(x_train_group) if self.distribute else x_train_group
         x_test_group_or_id = ray.put(x_test_group) if self.distribute else x_test_group
         try:
@@ -1997,8 +2000,11 @@ class AutoGrowingCascadeLayer(Layer):
                 for key in cascade.machines.keys():
                     machines[key] += cascade.machines[key]
                     trees[key] += cascade.trees[key]
-                    machine_time_max[key] = max(machine_time_max[key], cascade.machine_time_max[key])
-                    machine_time_total[key] += cascade.machine_time_total[key]
+                    if key not in machine_time_start.keys():
+                        machine_time_start[key] = cascade.machine_time_start[key]
+                    else:
+                        machine_time_start[key] = min(machine_time_start[key], cascade.machine_time_start[key])
+                    machine_time_end[key] = max(machine_time_end[key], cascade.machine_time_end[key])
                 layer_id += 1
             # Max Layer Reached
             # opt_data = [x_cur_train, y_train, x_cur_test, y_test]
@@ -2040,8 +2046,8 @@ class AutoGrowingCascadeLayer(Layer):
         finally:
             total_task = sum([v for v in machines.values()])
             for key in machines.keys():
-                self.LOGGER.info('[SUMMARY] Machine {} was assigned {}:{} / {}, max {}, total {}'.format(
-                    key, machines[key], trees[key], total_task, machine_time_max[key], machine_time_total[key]))
+                self.LOGGER.info('[SUMMARY] Machine {} was assigned {}:{} / {}, across {}'.format(
+                    key, machines[key], trees[key], total_task, machine_time_end[key] - machine_time_start[key]))
             return x_cur_train, x_cur_test
 
     def transform(self, X, y=None):
