@@ -1155,7 +1155,7 @@ class CascadeSplittingKFoldWrapper(object):
         est_group = merge_group(split_group, split_ests_ratio, ests_output, self.dtype)
         try:
             est_group_result = ray.get(est_group)
-        except Exception, e:
+        except Exception as e:
             print(e)
             raise Exception(e)
         return est_group_result, split_ests, split_group

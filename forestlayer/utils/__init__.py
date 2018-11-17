@@ -8,4 +8,4 @@ Initialize Utilities.
 # License: Apache-2.0
 
 # transform timestamp now to a string, can be used to name a file that can be created multiple times.
-from log_utils import strftime
+from .log_utils import strftime

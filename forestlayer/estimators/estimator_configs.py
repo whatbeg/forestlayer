@@ -17,7 +17,7 @@ __all__ = ['EstimatorConfig',
            'LGBMRegressorConfig',
            'Basic4x2']
 
-from ..utils.log_utils import get_logger
+from forestlayer.utils.log_utils import get_logger
 
 
 class EstimatorConfig(object):

@@ -64,7 +64,7 @@ class Layer(object):
         # Set dtype.
         if dtype is None:
             dtype = np.float32
-        elif isinstance(dtype, basestring):
+        elif isinstance(dtype, str):
             dtype = str2dtype[dtype]
         self.dtype = dtype
         # num of workers, the basis of the split, default is None, which means un-set.
@@ -2445,7 +2445,7 @@ def get_eval_metrics(metrics, task='classification', name=''):
             eval_metrics = [Accuracy(name)]
     elif isinstance(metrics, Metrics):
         eval_metrics = [metrics]
-    elif isinstance(metrics, basestring):
+    elif isinstance(metrics, str):
         if metrics == 'accuracy':
             eval_metrics = [Accuracy(name)]
         elif metrics == 'auc':
