@@ -184,7 +184,10 @@ class Graph(object):
                                 for i, t in enumerate(test):
                                     x_tests[ti][i] = t.astype(layer.dtype)
                     continue
-            x_trains, x_tests = layer.fit_transform(x_trains, y_trains, x_tests, y_tests)
+            try:
+                x_trains, x_tests = layer.fit_transform(x_trains, y_trains, x_tests, y_tests)
+            except Exception as e:
+                print(e)
             time_cost = time.time() - layer_start_time
             if "AutoGrowingCascadeLayer" in str(layer):
                 self.LOGGER.info('{} time cost: {:.4f} s, avg layer time: {:.4f}s'.format(layer, time_cost,

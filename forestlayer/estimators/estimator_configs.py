@@ -392,6 +392,20 @@ class LGBMRegressorConfig(EstimatorConfig):
         }
 
 
+class TensorForestConfig(EstimatorConfig):
+    def __init__(self, n_folds=3, num_classes=10, num_features=64, regression=False, num_trees=50, max_nodes=1000):
+        super(EstimatorConfig, self).__init__()
+        self.est_args = {
+            'est_type': 'TFRF',
+            'n_folds': n_folds,
+            'num_classes': num_classes,
+            'num_features': num_features,
+            'regression': regression,
+            'num_trees': num_trees,
+            'max_nodes': max_nodes
+        }
+
+
 def Basic4x2(n_folds=3, n_estimators=500, max_depth=100, n_jobs=-1, min_samples_leaf=1):
     crf = ExtraRandomForestConfig(n_folds=n_folds,
                                   n_estimators=n_estimators,

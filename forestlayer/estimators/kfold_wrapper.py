@@ -36,6 +36,7 @@ str2est_class = {
         'FLGBDT': FLGBDTClassifier,
         'FLXGB': FLXGBoostClassifier,
         'FLLGBM': FLLGBMClassifier,
+        'TFRF': TFRFClassifier
     },
     'regression': {
         'FLCRF': FLCRFRegressor,
@@ -105,6 +106,9 @@ class KFoldWrapper(object):
         elif self.est_type in ['FLCRF', 'FLRF', 'FLGBDT', 'FLLGBM']:
             if est_args.get('random_state', None) is None:
                 est_args['random_state'] = copy.deepcopy(self.seed)
+        elif self.est_type in ['TFRF']:
+            if est_args.get('base_random_seed', None) is None:
+                est_args['base_random_seed'] = copy.deepcopy(self.seed)
         est_class = est_class_from_type(self.task, self.est_type)
         return est_class(est_name, est_args)
 
@@ -146,17 +150,22 @@ class KFoldWrapper(object):
         y_probas_test = []
         self.n_dims = X.shape[-1]
         inverse = False
+        # print("CV_seed = {}".format(self.cv_seed))
         for k in range(self.n_folds):
             est = self._init_estimator(k)
             if not inverse:
                 train_idx, val_idx = cv[k]
             else:
                 val_idx, train_idx = cv[k]
+
+            # print("Fold {}, input_train = {}, shape={}".format(k, X[train_idx].reshape((-1, self.n_dims)),
+            #                                                    X[train_idx].reshape((-1, self.n_dims)).shape))
             # fit on k-fold train
             est.fit(X[train_idx].reshape((-1, self.n_dims)), y[train_idx].reshape(-1), cache_dir=self.cache_dir)
             # predict on k-fold validation, this y_proba.dtype is float64
             y_proba = est.predict_proba(X[val_idx].reshape((-1, self.n_dims)),
                                         cache_dir=self.cache_dir)
+            # print("y_proba = {}".format(y_proba))
             if not est.is_classification:
                 y_proba = y_proba[:, np.newaxis]  # add one dimension
             if len(X.shape) == 3:

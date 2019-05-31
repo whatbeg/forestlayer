@@ -15,6 +15,7 @@ from forestlayer.layers.factory import MeanPooling
 from forestlayer.utils.storage_utils import get_data_save_base, get_model_save_base
 from keras.datasets import cifar10
 import os.path as osp
+import numpy as np
 import time
 
 start_time = time.time()
@@ -27,10 +28,12 @@ y_test = y_test.reshape((y_test.shape[0]))
 
 x_train = x_train.reshape(50000, -1, 32, 32)
 x_test = x_test.reshape(10000, -1, 32, 32)
-x_train = x_train[:200, :, :, :]
-x_test = x_test[:100, :, :, :]
-y_train = y_train[:200]
-y_test = y_test[:100]
+x_train = x_train[:200, :, :, :].astype(np.float32)
+x_test = x_test[:100, :, :, :].astype(np.float32)
+y_train = y_train[:200].astype(np.float32)
+y_test = y_test[:100].astype(np.float32)
+
+print(x_train[:10])
 
 print(x_train.shape, y_train.shape, 'train')
 print(x_test.shape, y_test.shape, 'test')
@@ -38,13 +41,11 @@ print(x_test.shape, y_test.shape, 'test')
 rf1 = ExtraRandomForestConfig(n_folds=3, n_jobs=-1, min_samples_leaf=10, max_features='auto')
 rf2 = RandomForestConfig(n_folds=3, n_jobs=-1, min_samples_leaf=10)
 
-windows = [Window(win_x=8, win_y=8, stride_x=2, stride_y=2, pad_x=0, pad_y=0),
-           Window(11, 11, 2, 2),
-           Window(16, 16, 2, 2)]
+windows = [Window(win_x=8, win_y=8, stride_x=2, stride_y=2, pad_x=0, pad_y=0),]
+           # Window(11, 11, 2, 2),
+           # Window(16, 16, 2, 2)]
 
-est_for_windows = [[rf1, rf2],
-                   [rf1, rf2],
-                   [rf1, rf2]]
+est_for_windows = [[rf1, rf1]]
 
 data_save_dir = osp.join(get_data_save_base(), 'cifar10')
 model_save_dir = osp.join(get_model_save_base(), 'cifar10')
@@ -59,9 +60,9 @@ mgs = MultiGrainScanLayer(windows=windows,
                           cache_in_disk=False,
                           seed=0)
 
-pools = [[MeanPooling(2, 2), MeanPooling(2, 2)],
-         [MeanPooling(2, 2), MeanPooling(2, 2)],
-         [MeanPooling(2, 2), MeanPooling(2, 2)]]
+pools = [[MeanPooling(2, 2), MeanPooling(2, 2)],]
+         # [MeanPooling(2, 2), MeanPooling(2, 2)],
+         # [MeanPooling(2, 2), MeanPooling(2, 2)]]
 
 pool = PoolingLayer(pools=pools,
                     cache_in_disk=False,
@@ -72,13 +73,13 @@ concatlayer = ConcatLayer(cache_in_disk=False,
 
 est_configs = [
     ExtraRandomForestConfig(n_estimators=1000),
-    ExtraRandomForestConfig(n_estimators=1000),
-    ExtraRandomForestConfig(n_estimators=1000),
-    ExtraRandomForestConfig(n_estimators=1000),
-    RandomForestConfig(n_estimators=1000),
-    RandomForestConfig(n_estimators=1000),
-    RandomForestConfig(n_estimators=1000),
-    RandomForestConfig(n_estimators=1000)
+    # ExtraRandomForestConfig(n_estimators=1000),
+    # ExtraRandomForestConfig(n_estimators=1000),
+    # ExtraRandomForestConfig(n_estimators=1000),
+    # RandomForestConfig(n_estimators=1000),
+    # RandomForestConfig(n_estimators=1000),
+    # RandomForestConfig(n_estimators=1000),
+    # RandomForestConfig(n_estimators=10)
 ]
 
 auto_cascade = AutoGrowingCascadeLayer(name='auto-cascade',
@@ -102,7 +103,8 @@ model = Graph()
 model.add(mgs)
 model.add(pool)
 model.add(concatlayer)
-model.add(auto_cascade)
-model.fit_transform(x_train, y_train, x_test, y_test)
-
+# model.add(auto_cascade)
+res = model.fit_transform(x_train, y_train, x_test, y_test)
+print(res)
+print([r.shape for r in res])
 print('time cost: {}'.format(time.time() - start_time))

@@ -7,7 +7,7 @@ UCI_ADULT dataset loading.
 # Authors: Qiu Hu <huqiu00#163.com>
 # License: Apache-2.0
 
-from forestlayer.preprocessing import FeatureParser
+from forestlayer.preprocessing.feature_engineering import FeatureParser
 import numpy as np
 import os.path as osp
 from .dataset import get_dataset_dir

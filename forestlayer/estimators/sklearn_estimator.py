@@ -15,6 +15,8 @@ class YOURRegressor(xSKLearnBaseEstimator):
 from forestlayer.estimators.base_estimator import BaseEstimator
 from sklearn.externals import joblib
 import psutil
+import tensorflow as tf
+import numpy as np
 
 
 def forest_predict_batch_size(clf, X, task):
@@ -113,6 +115,27 @@ class FLCRFClassifier(SKLearnBaseEstimator):
 
     def _default_predict_batch_size(self, est, X, task='classification'):
         return forest_predict_batch_size(est, X,  task)
+
+
+class TFRFClassifier(SKLearnBaseEstimator):
+    def __init__(self, name, kwargs):
+        import tensorflow as tf
+        super(TFRFClassifier, self).__init__('classification',
+                                             tf.contrib.tensor_forest.client.random_forest.TensorForestEstimator,
+                                             name,
+                                             kwargs)
+
+    def _init_estimators(self):
+        params = tf.contrib.tensor_forest.python.tensor_forest.ForestHParams(**self.est_args)
+        return self.est_class(params)
+
+    def _predict(self, est, X):
+        pass
+
+    def _predict_proba(self, est, X):
+        y_out = est.predict(x=X)
+        y_prob = np.array([x['probabilities'] for x in y_out])
+        return y_prob
 
 
 class FLGBDTClassifier(SKLearnBaseEstimator):

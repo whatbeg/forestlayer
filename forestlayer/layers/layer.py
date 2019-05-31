@@ -279,6 +279,7 @@ class MultiGrainScanLayer(Layer):
         est_args.pop('est_type')
         # seed
         if self.seed is not None:
+            print("HASH[{}] = {}".format("[estimator] {}".format(est_name), hash("[estimator] {}".format(est_name))))
             seed = (self.seed + hash("[estimator] {}".format(est_name))) % 1000000007
         else:
             seed = None
@@ -625,6 +626,8 @@ class MultiGrainScanLayer(Layer):
                 # if self.distribute is True, then est is an ActorHandle.
                 ests_for_win[ei] = est
             self.LOGGER.debug('y_win.size = {}'.format(getmbof(y_win)))
+            # print("y_win[:, 0] = {}".format(y_win[:, 0]))
+            # print("y_win.shape = {}".format(y_win.shape))
             if self.distribute:
                 x_wins_train_obj_id = ray.put(x_win_train_wi)
                 y_win_obj_id = ray.put(y_win)
@@ -1225,9 +1228,11 @@ class CascadeLayer(Layer):
         :return:
         """
         est_args = self.est_args[est_id].copy()
+        assert 'n_folds' in est_args, "n_folds argument is not concluded in est_args"
         est_name = 'layer-{}-estimator-{}-{}folds'.format(layer_id, est_id, est_args['n_folds'])
         n_folds = int(est_args['n_folds'])
         est_args.pop('n_folds')
+        assert 'est_type' in est_args, "est_type argument is not concluded in est_args"
         est_type = est_args['est_type']
         est_args.pop('est_type')
         # seed
@@ -2042,7 +2047,9 @@ class AutoGrowingCascadeLayer(Layer):
                 for li in range(opt_layer_id + 1, layer_id + 1):
                     self.layer_fit_cascades[li] = None
         except KeyboardInterrupt:
-            pass
+            print("KeyBoardInterrupt")
+        except Exception as e:
+            print(e)
         finally:
             total_task = sum([v for v in machines.values()])
             for key in machines.keys():

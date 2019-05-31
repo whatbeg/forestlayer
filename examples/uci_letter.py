@@ -8,27 +8,34 @@ UCI_LETTER Example.
 # License: Apache-2.0
 
 from __future__ import print_function
+import sys
+sys.path.append("../")
+sys.path.append("../../")
 from forestlayer.datasets import uci_letter
 from forestlayer.layers import Graph, AutoGrowingCascadeLayer
 from forestlayer.utils.storage_utils import get_data_save_base
 from forestlayer.estimators.estimator_configs import ExtraRandomForestConfig, RandomForestConfig
 import time
+import forestlayer as fl
+import numpy as np
 import os.path as osp
 
+fl.init()
 start_time = time.time()
 
 (X_train, y_train, X_test, y_test) = uci_letter.load_data()
-
+y_train = y_train.astype(np.int)
+y_test = y_test.astype(np.int)
 
 est_configs = [
     ExtraRandomForestConfig(),
-    ExtraRandomForestConfig(),
-    ExtraRandomForestConfig(),
-    ExtraRandomForestConfig(),
-    RandomForestConfig(),
-    RandomForestConfig(),
-    RandomForestConfig(),
-    RandomForestConfig()
+    # ExtraRandomForestConfig(),
+    # ExtraRandomForestConfig(),
+    # ExtraRandomForestConfig(),
+    # RandomForestConfig(),
+    # RandomForestConfig(),
+    # RandomForestConfig(),
+    # RandomForestConfig()
 ]
 
 agc = AutoGrowingCascadeLayer(est_configs=est_configs,
@@ -37,9 +44,9 @@ agc = AutoGrowingCascadeLayer(est_configs=est_configs,
                               n_classes=26,
                               data_save_dir=osp.join(get_data_save_base(), 'uci_letter', 'auto_cascade'),
                               keep_in_mem=False,
-                              distribute=False,
-                              dis_level=0,
-                              verbose_dis=False,
+                              distribute=True,
+                              dis_level=2,
+                              verbose_dis=True,
                               seed=0)
 
 model = Graph()
